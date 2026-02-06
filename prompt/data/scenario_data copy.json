@@ -1,0 +1,167 @@
+{
+  "scenarios": [
+    {
+      "id": "RECRUIT_PLAN_LOAD",
+      "title": "기존 채용 불러오기",
+      "description": "이미 생성되어 있는 채용을 불러온다.",
+      "chatchatMessage": "기존 채용을 불러오고 싶어",
+      "keywords": [
+        "불러오기",
+        "복사",
+        "복제",
+        "재사용",
+        "기존 채용",
+        "이전 공고",
+        "똑같이 만들기",
+        "가져오기"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n1) \"최근에 만든 채용들을 바탕으로 새 채용을 만들어볼까요? 참고하고 싶은 채용을 하나 골라주세요!\" 라고 답변하고 화면[Type:RECRUIT_PLAN_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"선택하신 채용을 불러오겠습니다.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_LOAD_LINK][UI Param:'채용플랜 ID']을 제공한다."
+    },
+    {
+      "id": "SCHEDULED_RECRUIT_PLAN_CREATE",
+      "title": "공개 채용(공채)를 위한 채용 신규 생성",
+      "description": "공개 채용(공채)를 위한 채용 을 신규 생성한다.",
+      "chatMessage": "공채 채용을 생성하고 싶어",
+      "keywords": [
+        "채용 생성",
+        "공고 생성",
+        "채용 만들기",
+        "공고 만들기",
+        "신규 채용",
+        "새로운 채용",
+        "공채",
+        "공개 채용",
+        "정기 채용",
+        "신입 공채",
+        "채용 시작"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n1) \"공채 채용을 바로 만들어보시겠어요?\" 라고 답변하고 화면[UI Type:SCHEDULED_RECRUIT_PLAN_CREATE_LINK][UI Param:없음]을 제공한다."
+    },
+    {
+      "id": "NON_SCHEDULED_RECRUIT_PLAN_CREATE",
+      "title": "수시,상시 채용(수상시)를 위한 채용 신규 생성",
+      "description": "수시,상시 채용(수상시)를 위한 채용 신규 생성을 신규 생성한다.",
+      "chatMessage": "수상시 채용을 생성하고 싶어",
+      "keywords": [
+        "수시 채용",
+        "상시 채용",
+        "수상시",
+        "경력직 채용",
+        "수시",
+        "상시"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n1) \"수상시 채용을 바로 만들어보시겠어요?\" 라고 답변하고 화면[UI Type:NON_SCHEDULED_RECRUIT_PLAN_CREATE_LINK][UI Param:없음]을 제공한다."
+    },
+    {
+      "id": "TALENT_PERSONA_RECOMMEND",
+      "title": "인재조건 기반 채용 생성",
+      "description": "인재상 기반으로 최적의 채용 자동 생성",
+      "chatMessage": "우리 회사 인재상으로 추천받고 싶어",
+      "keywords": [
+        "인재상",
+        "인재 조건",
+        "페르소나",
+        "조건 기반",
+        "맞춤 채용",
+        "자동 추천"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n1) \"인재상 기반의 채용을 만드시고 싶으시군요!\\n인재 조건만 설정하면 자동심사 기준, 역량검사 영상면접 질문까지 모두 한번에 만들 수 있어요.\" 라고 답변하고 화면[UI Type:TALENT_PERSONA_RECOMMEND_LINK][UI Param:없음]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_CURRENT_STATUS_FIND",
+      "title": "지금 진행중인 채용의 현황을 확인해 보세요",
+      "description": "채용 현황을 확인한다. 채용인사이트(대시보드)를 확인한다.",
+      "chatMessage": "진행중인 채용의 현황을 확인하고 싶어",
+      "keywords": ["현황", "진행 상황", "채용 현황", "대시보드", "인사이트"],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"진행 중인 채용을 선택해주세요. 단계별 진행 현황 등을 한눈에 확인할 수 있어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"선택하신 채용의 상세 현황을 불러오겠습니다.\" 라고 답변하고 화면[UI Type:DASHBOARD_RECRUIT_PLAN_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_UPDATE",
+      "title": "설정중인 채용 수정",
+      "description": "설정중인 채용을 수정한다. 설정한다. 이어서 작업한다.",
+      "chatMessage": "설정중인 채용을 수정하고 싶어",
+      "keywords": [
+        "수정",
+        "변경",
+        "고치기",
+        "이어하기",
+        "이어서",
+        "설정 변경",
+        "편집"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"아래 목록에서 수정하고 싶은 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"설정중인 채용을 불러왔어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_SETTING_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_AUTO_SETTING",
+      "title": "채용의 자동 운영 설정",
+      "description": "운영 효율을 높이는 채용 자동 스케줄링",
+      "chatMessage": "채용 자동 운영 설정을 하고 싶어",
+      "keywords": ["자동 운영", "자동화", "스케줄링", "자동 진행", "운영 설정"],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"아래 목록에서 자동으로 운영할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"채용 자동운영 화면으로 바로 이동할 수 있어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_AUTO_SETTING_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_RESUME_SETTING",
+      "title": "채용의 지원서 설정",
+      "description": "채용의 지원서 항목을 자유롭게 설정한다. 커스텀한다.",
+      "chatMessage": "지원서 설정을 하고 싶어",
+      "keywords": [
+        "지원서",
+        "이력서",
+        "입사지원서",
+        "항목 설정",
+        "질문 수정",
+        "자기소개서",
+        "자소서"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"지원서를 설정할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"지원서 설정 화면을 불러왔어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_SETTING_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_JOB_DESCRIPTION_SETTING",
+      "title": "채용의 공고문 설정",
+      "description": "채용의 공고문을 설정한다. 생성한다.",
+      "chatMessage": "채용 공고문 설정을 하고 싶어",
+      "keywords": [
+        "공고문",
+        "모집 요강",
+        "공고",
+        "Job Description",
+        "공고 내용",
+        "상세 내용",
+        "모집 부문"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"공고문을 설정할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"공고문 설정 화면을 불러왔어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_JOB_DESCRIPTION_SETTING_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_DUPLICATE_APPLY_CRITERIA",
+      "title": "채용의 중복 지원 차단 설정",
+      "description": "채용의 복수 지원, 중복 지원 차단 기능을 설정한다.",
+      "chatMessage": "중복 지원 차단 설정을 하고 싶어",
+      "keywords": [
+        "중복 지원",
+        "복수 지원",
+        "재지원",
+        "두 번 지원",
+        "또 지원",
+        "지원 금지",
+        "중복 설정"
+      ],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"아래 목록에서 설정할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"설정할 채용을 불러왔어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_APPLICATION_SUBMISSION_RECRUIT_SECTOR_TAB_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_RESUME_CONFIRM_NOTIFY_METHOD",
+      "title": "채용의 지원서 접수 현황 알림 설정",
+      "description": "채용의 관리자, 지원자에게 지원서 접수 완료 알림을 설정한다.",
+      "chatMessage": "지원서 접수 현황 알림 설정을 하고 싶어",
+      "keywords": ["접수 알림", "메일 알림", "지원 알림", "알림 설정"],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"아래 목록에서 설정할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"설정할 채용을 불러왔어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_APPLICATION_SUBMISSION_POSTING_TAB_LINK][UI Param:recruitPlanId]을 제공한다."
+    },
+    {
+      "id": "RECRUIT_PLAN_RESUME_BLIND_SETTING",
+      "title": "채용의 지원서 블라인드 설정",
+      "description": "채용의 지원서 블라인드 기능을 설정한다.",
+      "chatMessage": "지원서 블라인드 설정을 하고 싶어",
+      "keywords": ["블라인드", "마스킹", "정보 숨김", "익명", "블라인드 평가"],
+      "scenarioScript": "* 시나리오 대본 *\n\n[우선 확인 조건]\n- recruitPlanId 값이 이미 존재한다면 아래 1~2번 과정을 생략하고 즉시 3번으로 이동한다.\n\n[실행 단계]\n1) \"아래 목록에서 설정할 채용을 선택해 주세요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_IN_PROGRESS_LIST_TABLE][UI Param:없음]을 제공한다.\n2) 유저는 1개의 채용플랜을 선택한다.\n3) \"지원서 블라인드 설정 화면으로 바로 이동할 수 있어요.\" 라고 답변하고 화면[UI Type:RECRUIT_PLAN_RESUME_BLIND_SETTING_LINK][UI Param:recruitPlanId]을 제공한다."
+    }
+  ]
+}

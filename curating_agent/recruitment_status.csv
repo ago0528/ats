@@ -1,0 +1,5 @@
+﻿recruitment_id,recruitment_name,recruitment_type,status,deadline,current_node,current_node_status,completed_checklists,applicant_count,pending_applicant_count,evaluator_incomplete_count,is_public_institution,blind_settings_completed,notification_sent,test_start_date,evaluation_deadline,submission_deadline,closed_date
+REC_001,2026년 상반기 해외 법인 공채,공채,채용중,2026-02-15,지원서 접수,게시 전,"CL_001,CL_007,CL_008",0,0,0,True,False,,,,,
+REC_002,2026년 상반기 공채,공채,채용중,2026-02-28,역량검사 전형,진행중,"CL_001,CL_005,CL_007,CL_008,CL_010",245,0,0,True,True,false,2026-02-03,,,
+REC_003,2026년 1월 기획자 수시 채용,수시,채용중,2026-03-15,지원서 접수,접수중,"CL_001,CL_005,CL_007,CL_008,CL_010",180,45,0,True,True,,,,2026-02-01,
+REC_004,2025년 하반기 수시채용,수시,종료,2025-12-31,최종합격,완료,"CL_001,CL_005,CL_007,CL_008,CL_010,CL_012,CL_016,CL_018,CL_021,CL_028,CL_029",87,0,0,True,True,true,,,,2026-01-15

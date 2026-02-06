@@ -1,0 +1,9 @@
+﻿log_id,created_at,user_id,page,recruitment_id,recruitment_name,node_name,action,action_type
+LOG_001,2026-01-29 14:00:00,USER_001,flow,REC_002,2026년 상반기 공채,역량검사 전형,전형상세조회,view
+LOG_002,2026-01-29 10:30:00,USER_001,flow,REC_001,2026년 상반기 공채,지원서 접수,공고설정저장,save
+LOG_003,2026-01-29 10:25:00,USER_001,flow,REC_001,2026년 상반기 공채,지원서 접수,접수기간설정,edit
+LOG_004,2026-01-29 09:00:00,USER_001,home,,,,대시보드조회,view
+LOG_005,2026-01-28 17:00:00,USER_001,flow,REC_002,2026년 상반기 공채,지원서 접수,지원자이동,move
+LOG_006,2026-01-28 15:00:00,USER_001,flow,REC_001,2026년 상반기 공채,,채용생성,create
+LOG_007,2026-01-28 11:00:00,USER_001,flow,REC_002,2026년 상반기 공채,지원서 접수,접수마감,update
+LOG_008,2026-01-27 09:00:00,USER_001,home,,,,대시보드조회,view

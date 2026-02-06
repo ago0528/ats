@@ -1,0 +1,42 @@
+
+- url: https://track.hdot.kr-dv-jainwon.com
+- API path: /api/v1/kb/search
+- API Description:
+"""
+Knowledge Base 아티클 검색
+
+HubSpot Knowledge Base에서 아티클을 검색하고 태그로 필터링합니다.
+
+q: 검색어 (필수)
+tag: 필터링할 태그 (null이면 필터링 건너뜀)
+fetch_limit: HubSpot에서 가져올 최대 결과 수 (기본값: 99)
+limit: 반환할 최대 결과 수 (기본값: 5)
+body: true이면 각 아티클의 본문 내용을 가져옴 (기본값: false)
+"""
+- Request URL: https://track.hdot.kr-dv-jainwon.com/api/v1/kb/search?q={사용자 질의}&tag={사용자 질의 태그}&fetch_limit=99&limit=5&body=true
+- Reponse sample:
+"""
+{
+  "query": "전형 안내 메일 '참석여부 회신'",
+  "filter_tag": "채용전형관리",
+  "total_from_hubspot": 73,
+  "total_after_filter": 1,
+  "results": [
+    {
+      "id": 276885128933,
+      "score": 1937.4982,
+      "type": "KNOWLEDGE_ARTICLE",
+      "domain": "contents.h.place",
+      "url": "https://contents.h.place/h.servicedesk/knowledgebase/전형-안내-메일에서-참석여부-회신-결과는-어디에서-확인하나요",
+      "title": "전형 안내 메일에서 ‘참석여부 회신’ 결과는 어디에서 확인하나요?",
+      "description": "전형 안내 메일에서 참석여부 회신을 요청한 경우, 지원자의 참석·불참 회신 결과를 확인하는 위치를 안내합니다. 채용전형관리의 면접 전형 STEP 3에서 확인 가능합니다.",
+      "tags": [
+        "채용전형관리",
+        "전형 안내 메일",
+        "참석여부 회신"
+      ],
+      "body": "2025년 12월 16일 (화) 전형 안내 메일에서 ‘참석여부 회신’ 결과는 어디에서 확인하나요? 전형 안내 메일에서 참석여부 회신을 요청했을 때, 관리자가 회신 결과를 확인하는 위치를 안내합니다. 요약 면접 전형 안내 시 ‘참석여부 회신’ 옵션을 사용한 경우, 지원자가 회신한 참석/불참 여부는 채용전형관리 메뉴에서 확인할 수 있습니다. 전형 진행 현황의 면접 전형 단계에서 확인이 가능합니다. 현상 전형 안내 메일 발송 시 ‘참석여부 회신’ 옵션을 체크함 메일 발송 주소는 noreply@회사도메인.recruiter.co.kr 사용 중 지원자가 회신한 참석 여부를 어디에서 확인해야 하는지 혼동됨 응시자 목록에서 확인 가능한지 문의 발생 원인 참석여부 회신 결과는 이메일 수신함이나 응시자 목록에 직접 표시되지 않음 회신 결과는 면접 전형 관리 단계 내 전용 메뉴에서 확인 가능함 해결 방법 (단계형) 관리자 사이트 접속 채용전형관리 > 전형진행 현황 메뉴 이동 참석여부 회신을 요청한 해당 면접 전형 선택 STEP 3. 면접 전형 시간 배정 단계에서 지원자별 참석 회신 여부 확인"
+    }
+  ]
+}
+"""

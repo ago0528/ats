@@ -1,0 +1,32 @@
+{
+  "지원서 제출 여부": [
+    {
+      "filterType": "RESUME_PERIOD",
+      "count": 1
+    },
+    {
+      "filterType": "RESUME_SUBMIT",
+      "count": 1
+    }
+  ],
+  "지원서 등록 구분": [
+    {
+      "filterType": "RESUME_CREATE_CODE",
+      "count": 1
+    },
+    {
+      "filterType": "RESUME_PERIOD",
+      "count": 1
+    }
+  ],
+  "과거 지원 이력": [
+    {
+      "filterType": "RESUME_APPLY_COUNT",
+      "count": 1
+    },
+    {
+      "filterType": "RESUME_PERIOD",
+      "count": 1
+    }
+  ]
+}

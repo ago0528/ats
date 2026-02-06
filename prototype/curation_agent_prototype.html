@@ -1,0 +1,2354 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>채용에이전트 - 플랜 모드 프로토타입</title>
+    <link
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont, system-ui,
+          sans-serif;
+        background-color: #09090b;
+        color: #fafafa;
+        overflow: hidden;
+      }
+
+      /* 애니메이션 */
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+
+      @keyframes bounce {
+        0%,
+        80%,
+        100% {
+          transform: translateY(0);
+        }
+        40% {
+          transform: translateY(-6px);
+        }
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+
+      @keyframes slideInLeft {
+        from {
+          width: 0;
+        }
+        to {
+          width: 520px;
+        }
+      }
+
+      /* 스크롤바 */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      /* 레이아웃 */
+      .app-container {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+      }
+
+      /* 사이드바 */
+      .sidebar {
+        width: 260px;
+        background-color: #0f0f12;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+      }
+
+      .sidebar-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .logo-container {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        font-weight: 700;
+        color: white;
+      }
+
+      .logo-text {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .logo-subtext {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-top: 2px;
+      }
+
+      .sidebar-nav {
+        padding: 16px 12px;
+        flex: 1;
+      }
+
+      .nav-item {
+        padding: 10px 12px;
+        border-radius: 8px;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        margin-bottom: 4px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .nav-item.active {
+        background-color: rgba(59, 130, 246, 0.15);
+        color: #93c5fd;
+        font-weight: 500;
+      }
+
+      .sidebar-footer {
+        padding: 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px;
+      }
+
+      .user-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background-color: #27272a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+
+      .user-name {
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .user-role {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      /* 메인 영역 */
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        position: relative;
+      }
+
+      /* 큐레이팅 배너 */
+      .curation-banner {
+        padding: 12px 24px;
+        background: linear-gradient(
+          90deg,
+          rgba(59, 130, 246, 0.1) 0%,
+          rgba(139, 92, 246, 0.1) 100%
+        );
+        border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+        display: none;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .curation-banner.active {
+        display: flex;
+      }
+
+      .banner-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: #22c55e;
+        box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        animation: pulse 2s infinite;
+      }
+
+      .banner-label {
+        font-size: 13px;
+        color: #93c5fd;
+        font-weight: 500;
+      }
+
+      .banner-divider {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .banner-info {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      /* 채팅 영역 */
+      .chat-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+        padding-bottom: 120px;
+      }
+
+      .chat-messages {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+
+      /* 메시지 버블 */
+      .message {
+        margin-bottom: 20px;
+        animation: fadeInUp 0.3s ease;
+      }
+
+      .message.user {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .message.assistant {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .assistant-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        flex-shrink: 0;
+      }
+
+      .message-content {
+        flex: 1;
+        max-width: calc(100% - 44px);
+      }
+
+      .user-bubble {
+        padding: 14px 18px;
+        background-color: #3b82f6;
+        border-radius: 18px;
+        border-bottom-right-radius: 4px;
+        font-size: 14px;
+        line-height: 1.6;
+        color: white;
+        max-width: 75%;
+      }
+
+      .assistant-bubble {
+        padding: 14px 18px;
+        background-color: #18181b;
+        border-radius: 18px;
+        border-top-left-radius: 4px;
+        font-size: 14px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+      }
+
+      .plan-mode-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        background-color: rgba(34, 197, 94, 0.15);
+        border-radius: 4px;
+        margin-bottom: 8px;
+      }
+
+      .plan-mode-badge span:first-child {
+        font-size: 12px;
+      }
+
+      .plan-mode-badge span:last-child {
+        font-size: 11px;
+        color: #4ade80;
+        font-weight: 500;
+      }
+
+      /* 타이핑 인디케이터 */
+      .typing-indicator {
+        display: none;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .typing-indicator.active {
+        display: flex;
+      }
+
+      .typing-dots {
+        padding: 14px 18px;
+        background-color: #18181b;
+        border-radius: 18px;
+        border-top-left-radius: 4px;
+        display: flex;
+        gap: 4px;
+      }
+
+      .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.4);
+        animation: bounce 1.4s ease-in-out infinite;
+      }
+
+      .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      /* 인풋 영역 */
+      .input-area {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 20px 24px;
+        background: linear-gradient(to top, #09090b 80%, transparent);
+      }
+
+      .input-wrapper {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+
+      .next-message-btn {
+        width: 100%;
+        padding: 16px 20px;
+        border-radius: 16px;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        background-color: rgba(59, 130, 246, 0.1);
+        color: #93c5fd;
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-family: inherit;
+      }
+
+      .next-message-btn:hover {
+        background-color: rgba(59, 130, 246, 0.2);
+        border-color: rgba(59, 130, 246, 0.5);
+      }
+
+      .next-message-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-hint {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .demo-complete {
+        padding: 16px 20px;
+        border-radius: 16px;
+        background-color: #18181b;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        text-align: center;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 14px;
+      }
+
+      /* 우측 패널 */
+      .plan-panel {
+        width: 0;
+        background-color: #0f0f12;
+        border-left: none;
+        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow: hidden;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .plan-panel.active {
+        width: 520px;
+        border-left: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .panel-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .panel-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .panel-title span:first-child {
+        font-size: 18px;
+      }
+
+      .panel-title span:last-child {
+        font-size: 16px;
+        font-weight: 600;
+      }
+
+      .panel-status {
+        padding: 4px 10px;
+        background-color: rgba(34, 197, 94, 0.15);
+        border-radius: 4px;
+        font-size: 11px;
+        color: #4ade80;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .panel-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: #4ade80;
+        animation: pulse 2s infinite;
+      }
+
+      .panel-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      .panel-footer {
+        padding: 16px 20px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: none;
+        gap: 10px;
+      }
+
+      .panel-footer.active {
+        display: flex;
+      }
+
+      .panel-btn {
+        flex: 1;
+        padding: 12px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      .panel-btn.secondary {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background-color: transparent;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .panel-btn.primary {
+        border: none;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        color: white;
+        font-weight: 600;
+      }
+
+      /* 패널 섹션 */
+      .panel-section {
+        margin-bottom: 20px;
+        animation: slideInRight 0.4s ease;
+        display: none;
+      }
+
+      .panel-section.active {
+        display: block;
+      }
+
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255, 255, 255, 0.4);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 12px;
+      }
+
+      .section-title.highlight {
+        color: #4ade80;
+      }
+
+      /* 기본 정보 그리드 */
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .info-item {
+        padding: 10px 12px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+      }
+
+      .info-item.full-width {
+        grid-column: 1 / -1;
+      }
+
+      .info-label {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-bottom: 4px;
+      }
+
+      .info-value {
+        font-size: 13px;
+        font-weight: 500;
+        color: #fafafa;
+      }
+
+      .info-value.pending {
+        color: rgba(255, 255, 255, 0.2);
+      }
+
+      .info-value.highlight {
+        color: #4ade80;
+      }
+
+      /* 포지션 아이템 */
+      .position-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .position-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        background-color: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 10px;
+      }
+
+      .position-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .position-icon {
+        font-size: 16px;
+      }
+
+      .position-name {
+        font-size: 13px;
+        font-weight: 500;
+      }
+
+      .position-count {
+        padding: 4px 10px;
+        background-color: rgba(59, 130, 246, 0.2);
+        border-radius: 4px;
+        font-size: 12px;
+        color: #93c5fd;
+        font-weight: 600;
+      }
+
+      /* 진단 박스 */
+      .diagnosis-box {
+        padding: 14px;
+        background-color: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.15);
+        border-radius: 10px;
+        margin-bottom: 12px;
+      }
+
+      .diagnosis-header {
+        font-size: 12px;
+        font-weight: 600;
+        color: #fca5a5;
+        margin-bottom: 10px;
+      }
+
+      .diagnosis-content {
+        font-size: 12px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .diagnosis-content strong {
+        color: #fafafa;
+      }
+
+      .diagnosis-content .sub {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .diagnosis-item {
+        margin-bottom: 8px;
+      }
+
+      .diagnosis-insight {
+        padding: 12px 14px;
+        background-color: rgba(34, 197, 94, 0.1);
+        border-radius: 8px;
+        font-size: 12px;
+        color: #4ade80;
+      }
+
+      /* 역량 테이블 */
+      .competency-box {
+        padding: 14px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 10px;
+        margin-bottom: 12px;
+      }
+
+      .competency-header {
+        font-size: 13px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      .competency-header.dev {
+        color: #93c5fd;
+      }
+      .competency-header.pm {
+        color: #c4b5fd;
+      }
+
+      .competency-row {
+        display: grid;
+        grid-template-columns: 70px 80px 60px 1fr;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        font-size: 11px;
+      }
+
+      .competency-row:last-child {
+        border-bottom: none;
+      }
+
+      .comp-name {
+        font-weight: 600;
+        color: #fafafa;
+      }
+
+      .comp-method {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .comp-criteria {
+        color: #4ade80;
+        font-weight: 600;
+      }
+
+      .comp-reason {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 10px;
+      }
+
+      /* 프로세스 플로우 */
+      .process-flow {
+        position: relative;
+      }
+
+      .process-line {
+        position: absolute;
+        left: 11px;
+        top: 24px;
+        bottom: 24px;
+        width: 2px;
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+
+      .process-step {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+        position: relative;
+      }
+
+      .step-number {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        z-index: 1;
+      }
+
+      .step-number.new {
+        background-color: #3b82f6;
+      }
+
+      .step-label {
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .step-label.new {
+        color: #93c5fd;
+      }
+
+      .step-badge {
+        margin-left: 6px;
+        font-size: 10px;
+        color: #4ade80;
+      }
+
+      /* 효과 그리드 */
+      .effect-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .effect-item {
+        padding: 12px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        text-align: center;
+      }
+
+      .effect-label {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+        margin-bottom: 8px;
+      }
+
+      .effect-values {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .effect-before {
+        font-size: 13px;
+        color: #fca5a5;
+        text-decoration: line-through;
+      }
+
+      .effect-arrow {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .effect-after {
+        font-size: 15px;
+        font-weight: 700;
+        color: #4ade80;
+      }
+
+      /* 설정 리스트 */
+      .setting-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .setting-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+      }
+
+      .setting-checkbox {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background-color: #3b82f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        color: white;
+        flex-shrink: 0;
+      }
+
+      .setting-label {
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+
+      .setting-reason {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      /* 카드 스타일 */
+      .card {
+        margin-top: 12px;
+        padding: 20px;
+        border-radius: 16px;
+        animation: fadeInUp 0.4s ease;
+      }
+
+      .card.diagnosis {
+        background-color: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+      }
+
+      .card.proposal {
+        background-color: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+      }
+
+      .card.competency {
+        background-color: rgba(139, 92, 246, 0.08);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+      }
+
+      .card.evidence {
+        background-color: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+      }
+
+      .card.summary {
+        background-color: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+      }
+
+      .card.tips {
+        background-color: rgba(251, 191, 36, 0.08);
+        border: 1px solid rgba(251, 191, 36, 0.2);
+      }
+
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .card-icon {
+        font-size: 18px;
+      }
+
+      .card-title {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .card-title.red {
+        color: #fca5a5;
+      }
+      .card-title.blue {
+        color: #93c5fd;
+      }
+      .card-title.purple {
+        color: #c4b5fd;
+      }
+      .card-title.green {
+        color: #4ade80;
+      }
+      .card-title.yellow {
+        color: #fcd34d;
+      }
+
+      .card-subtitle {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-bottom: 20px;
+      }
+
+      /* 메트릭 박스 */
+      .metrics-box {
+        padding: 16px;
+        background-color: rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+
+      .metrics-label {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-bottom: 12px;
+      }
+
+      .metrics-flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: rgba(255, 255, 255, 0.7);
+        flex-wrap: wrap;
+      }
+
+      .metrics-flow strong {
+        color: #fafafa;
+      }
+
+      .metrics-flow .arrow {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .metrics-stats {
+        display: flex;
+        gap: 16px;
+        margin-top: 12px;
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .metrics-stats strong {
+        color: #fca5a5;
+      }
+
+      /* Findings */
+      .findings-section {
+        margin-bottom: 16px;
+      }
+
+      .findings-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: #fafafa;
+        margin-bottom: 12px;
+      }
+
+      .finding-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        margin-bottom: 6px;
+        font-size: 13px;
+      }
+
+      .finding-item.highlight {
+        background-color: rgba(34, 197, 94, 0.15);
+      }
+
+      .finding-key {
+        color: rgba(255, 255, 255, 0.5);
+        min-width: 60px;
+      }
+
+      .finding-value {
+        color: #fafafa;
+      }
+
+      .finding-badge {
+        padding: 2px 8px;
+        background-color: rgba(251, 191, 36, 0.2);
+        border-radius: 4px;
+        font-size: 11px;
+        color: #fbbf24;
+        margin-left: auto;
+      }
+
+      /* Insight box */
+      .insight-box {
+        padding: 14px 16px;
+        background-color: rgba(251, 191, 36, 0.1);
+        border: 1px solid rgba(251, 191, 36, 0.2);
+        border-radius: 10px;
+        margin-bottom: 12px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.8);
+        white-space: pre-wrap;
+      }
+
+      .conclusion-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        background-color: rgba(239, 68, 68, 0.15);
+        border-radius: 10px;
+      }
+
+      .conclusion-icon {
+        font-size: 16px;
+      }
+
+      .conclusion-text {
+        font-size: 14px;
+        font-weight: 600;
+        color: #fca5a5;
+      }
+
+      /* Comparison */
+      .comparison-box {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .comparison-item {
+        padding: 16px;
+        border-radius: 12px;
+      }
+
+      .comparison-item.before {
+        background-color: rgba(239, 68, 68, 0.08);
+        border: 1px solid rgba(239, 68, 68, 0.15);
+      }
+
+      .comparison-item.after {
+        background-color: rgba(34, 197, 94, 0.08);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+      }
+
+      .comparison-label {
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+
+      .comparison-label.before {
+        color: #fca5a5;
+      }
+      .comparison-label.after {
+        color: #4ade80;
+      }
+
+      .comparison-flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .flow-step {
+        padding: 6px 12px;
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+        font-size: 13px;
+      }
+
+      .flow-step.highlight {
+        background-color: rgba(34, 197, 94, 0.2);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        color: #4ade80;
+      }
+
+      .flow-arrow {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .comparison-note {
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .comparison-note.before {
+        color: #fca5a5;
+      }
+      .comparison-note.after {
+        color: #4ade80;
+      }
+
+      /* Position competency */
+      .position-competency {
+        padding: 16px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+
+      .position-comp-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .position-comp-note {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      .competency-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background-color: rgba(139, 92, 246, 0.1);
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+
+      .competency-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .comp-item-name {
+        font-weight: 600;
+        color: #c4b5fd;
+        font-size: 13px;
+        min-width: 80px;
+      }
+
+      .comp-item-desc {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .comp-note {
+        padding: 14px 16px;
+        background-color: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.8);
+        white-space: pre-wrap;
+      }
+
+      /* Evidence case */
+      .evidence-case {
+        padding: 16px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+
+      .case-company {
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+
+      .case-context {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-bottom: 16px;
+      }
+
+      .case-metrics {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+      }
+
+      .case-metric {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-radius: 8px;
+        font-size: 13px;
+      }
+
+      .case-metric-label {
+        color: rgba(255, 255, 255, 0.6);
+        flex: 1;
+      }
+
+      .case-metric-before {
+        color: #fca5a5;
+      }
+
+      .case-metric-arrow {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .case-metric-after {
+        color: #4ade80;
+        font-weight: 600;
+      }
+
+      .case-change {
+        padding: 12px 14px;
+        background-color: rgba(59, 130, 246, 0.1);
+        border-radius: 8px;
+        font-size: 12px;
+        line-height: 1.5;
+        color: rgba(255, 255, 255, 0.7);
+        white-space: pre-wrap;
+      }
+
+      .case-change strong {
+        color: #93c5fd;
+      }
+
+      /* Testimonial */
+      .testimonial {
+        padding: 16px;
+        background-color: rgba(255, 255, 255, 0.03);
+        border-left: 3px solid rgba(139, 92, 246, 0.5);
+        border-radius: 0 12px 12px 0;
+        margin-bottom: 20px;
+      }
+
+      .testimonial-quote {
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.8);
+        font-style: italic;
+        margin-bottom: 8px;
+      }
+
+      .testimonial-source {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      /* Prediction */
+      .prediction-box {
+        padding: 16px;
+        background-color: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+        border-radius: 12px;
+      }
+
+      .prediction-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #4ade80;
+        margin-bottom: 16px;
+      }
+
+      .prediction-items {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .prediction-item {
+        flex: 1;
+        padding: 14px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        text-align: center;
+      }
+
+      .prediction-icon {
+        font-size: 20px;
+        margin-bottom: 8px;
+      }
+
+      .prediction-label {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        margin-bottom: 4px;
+      }
+
+      .prediction-value {
+        font-size: 16px;
+        font-weight: 700;
+        color: #4ade80;
+      }
+
+      .prediction-note {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.4);
+      }
+
+      /* Summary changes */
+      .summary-changes {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .summary-change {
+        padding: 14px 16px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+      }
+
+      .change-category {
+        font-size: 13px;
+        font-weight: 600;
+        color: #93c5fd;
+        margin-bottom: 10px;
+      }
+
+      .change-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        font-size: 13px;
+      }
+
+      .change-before {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .change-before .tag {
+        color: #fca5a5;
+      }
+
+      .change-arrow {
+        color: rgba(255, 255, 255, 0.3);
+      }
+
+      .change-after {
+        color: #fafafa;
+        white-space: pre-wrap;
+      }
+
+      .change-after .tag {
+        color: #4ade80;
+      }
+
+      /* Tips */
+      .tips-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .tip-item {
+        padding: 12px 14px;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.8);
+        white-space: pre-wrap;
+      }
+
+      /* Confirm button */
+      .confirm-btn {
+        width: 100%;
+        padding: 16px 24px;
+        border-radius: 12px;
+        border: none;
+        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+        color: white;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+        font-family: inherit;
+        margin-top: 16px;
+      }
+
+      .confirm-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- 사이드바 -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <div class="logo-container">
+            <div class="logo-icon">H</div>
+            <div>
+              <div class="logo-text">채용에이전트</div>
+              <div class="logo-subtext">역량 중심 채용</div>
+            </div>
+          </div>
+        </div>
+        <div class="sidebar-nav">
+          <div class="nav-item active"><span>💬</span> 새 대화</div>
+          <div class="nav-item"><span>📋</span> 진행중인 채용</div>
+          <div class="nav-item"><span>👥</span> 인재풀</div>
+          <div class="nav-item"><span>📊</span> 분석</div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="user-profile">
+            <div class="user-avatar">👤</div>
+            <div>
+              <div class="user-name">김가온</div>
+              <div class="user-role">채용담당자</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 메인 콘텐츠 -->
+      <div class="main-content">
+        <!-- 큐레이팅 배너 -->
+        <div class="curation-banner" id="curationBanner">
+          <div class="banner-left">
+            <div class="status-dot"></div>
+            <span class="banner-label">플랜 모드 활성화</span>
+            <span class="banner-divider">|</span>
+            <span class="banner-info">개발자 2~3명, 기획자 1명 채용</span>
+          </div>
+        </div>
+
+        <!-- 채팅 영역 -->
+        <div class="chat-container">
+          <div class="chat-messages" id="chatMessages">
+            <!-- 메시지들이 여기에 추가됨 -->
+          </div>
+
+          <!-- 타이핑 인디케이터 -->
+          <div class="typing-indicator" id="typingIndicator">
+            <div class="assistant-avatar">🤖</div>
+            <div class="typing-dots">
+              <div class="typing-dot"></div>
+              <div class="typing-dot"></div>
+              <div class="typing-dot"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 입력 영역 -->
+        <div class="input-area">
+          <div class="input-wrapper">
+            <button
+              class="next-message-btn"
+              id="nextMessageBtn"
+              onclick="handleNextMessage()"
+            >
+              <span id="nextMessageText"
+                >💬 "2026년 1월 3주부터 2개월 동안 기획자, 개발자 상시 채용할
+                계획이야"</span
+              >
+              <span class="btn-hint">클릭하여 전송</span>
+            </button>
+            <div class="demo-complete" id="demoComplete" style="display: none">
+              ✅ 데모 시나리오가 완료되었습니다
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 우측 패널 -->
+      <div class="plan-panel" id="planPanel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📋</span>
+            <span>채용 계획서</span>
+          </div>
+          <div class="panel-status">
+            <div class="panel-status-dot"></div>
+            실시간 업데이트 중
+          </div>
+        </div>
+
+        <div class="panel-content" id="panelContent">
+          <!-- 기본 정보 -->
+          <div class="panel-section" id="section-basic">
+            <div class="section-title">기본 정보</div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">채용형태</div>
+                <div class="info-value" id="info-type">수시 채용</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">경력조건</div>
+                <div class="info-value pending" id="info-career">—</div>
+              </div>
+              <div class="info-item full-width">
+                <div class="info-label">채용기간</div>
+                <div class="info-value" id="info-period">
+                  2026.01.3주 ~ 03.중순
+                </div>
+              </div>
+              <div class="info-item full-width">
+                <div class="info-label">채용목적</div>
+                <div class="info-value pending" id="info-purpose">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 채용 포지션 -->
+          <div class="panel-section" id="section-positions">
+            <div class="section-title">채용 포지션</div>
+            <div class="position-list">
+              <div class="position-item">
+                <div class="position-left">
+                  <span class="position-icon">👨‍💻</span>
+                  <span class="position-name">개발자</span>
+                </div>
+                <span class="position-count">2~3명</span>
+              </div>
+              <div class="position-item">
+                <div class="position-left">
+                  <span class="position-icon">📊</span>
+                  <span class="position-name">기획자</span>
+                </div>
+                <span class="position-count">1명</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 채용 현황 진단 -->
+          <div class="panel-section" id="section-diagnosis">
+            <div class="section-title highlight">🔍 채용 현황 진단</div>
+            <div class="diagnosis-box">
+              <div class="diagnosis-header">⚠️ 발견된 이슈</div>
+              <div class="diagnosis-content">
+                <div class="diagnosis-item">
+                  <strong>1. 경력 연차 과의존</strong><br />
+                  <span class="sub"
+                    >→ 2년 이하 일괄 탈락, 고성과자 40%가 3년 미만</span
+                  >
+                </div>
+                <div class="diagnosis-item">
+                  <strong>2. 학력과 성과 무관</strong><br />
+                  <span class="sub">→ 상관계수 0.12 (무의미)</span>
+                </div>
+                <div class="diagnosis-item">
+                  <strong>3. 역량 미검증</strong><br />
+                  <span class="sub">→ 조기 이탈자 공통: 협업↓, 적응력↓</span>
+                </div>
+              </div>
+            </div>
+            <div class="diagnosis-insight">
+              💡 그래서 역량검사 선행, 경력 기준 완화, 학력 블라인드를
+              제안드려요
+            </div>
+          </div>
+
+          <!-- 역량 스크리닝 기준 -->
+          <div class="panel-section" id="section-competencies">
+            <div class="section-title">🎯 역량 스크리닝 기준</div>
+
+            <!-- 개발자 -->
+            <div class="competency-box">
+              <div class="competency-header dev">👨‍💻 개발자</div>
+              <div class="competency-row">
+                <span class="comp-name">문제해결력</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 30%</span>
+                <span class="comp-reason">💡 고성과자 평균 상위 28%</span>
+              </div>
+              <div class="competency-row">
+                <span class="comp-name">학습민첩성</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 40%</span>
+                <span class="comp-reason">💡 신규서비스=새기술 습득 필수</span>
+              </div>
+              <div class="competency-row">
+                <span class="comp-name">협업역량</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 50%</span>
+                <span class="comp-reason">💡 조기이탈자 공통 약점</span>
+              </div>
+              <div class="competency-row">
+                <span class="comp-name">기술적합도</span>
+                <span class="comp-method">서류검토</span>
+                <span class="comp-criteria">2개+</span>
+                <span class="comp-reason">💡 Python, AWS 필수</span>
+              </div>
+            </div>
+
+            <!-- 기획자 -->
+            <div class="competency-box">
+              <div class="competency-header pm">📊 기획자</div>
+              <div class="competency-row">
+                <span class="comp-name">분석적사고</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 25%</span>
+                <span class="comp-reason">💡 데이터 의사결정 필수</span>
+              </div>
+              <div class="competency-row">
+                <span class="comp-name">커뮤니케이션</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 35%</span>
+                <span class="comp-reason">💡 이해관계자 설득 빈도↑</span>
+              </div>
+              <div class="competency-row">
+                <span class="comp-name">실행력</span>
+                <span class="comp-method">H.역량검사</span>
+                <span class="comp-criteria">상위 40%</span>
+                <span class="comp-reason">💡 0→1 경험자 우대</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 전형 프로세스 -->
+          <div class="panel-section" id="section-process">
+            <div class="section-title">🔄 전형 프로세스</div>
+            <div class="process-flow">
+              <div class="process-line"></div>
+              <div class="process-step">
+                <div class="step-number">1</div>
+                <span class="step-label">지원접수</span>
+              </div>
+              <div class="process-step">
+                <div class="step-number new">2</div>
+                <span class="step-label new"
+                  >역량검사 (자동발송)<span class="step-badge">NEW</span></span
+                >
+              </div>
+              <div class="process-step">
+                <div class="step-number new">3</div>
+                <span class="step-label new"
+                  >자동 스크리닝<span class="step-badge">NEW</span></span
+                >
+              </div>
+              <div class="process-step">
+                <div class="step-number">4</div>
+                <span class="step-label">서류검토 (역량 기반)</span>
+              </div>
+              <div class="process-step">
+                <div class="step-number">5</div>
+                <span class="step-label">1차 면접</span>
+              </div>
+              <div class="process-step">
+                <div class="step-number">6</div>
+                <span class="step-label">최종 면접</span>
+              </div>
+              <div class="process-step">
+                <div class="step-number">7</div>
+                <span class="step-label">최종 합격</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 예상 효과 -->
+          <div class="panel-section" id="section-effects">
+            <div class="section-title highlight">📈 예상 효과</div>
+            <div class="effect-grid">
+              <div class="effect-item">
+                <div class="effect-label">서류검토 대상</div>
+                <div class="effect-values">
+                  <span class="effect-before">100%</span>
+                  <span class="effect-arrow">→</span>
+                  <span class="effect-after">40%</span>
+                </div>
+              </div>
+              <div class="effect-item">
+                <div class="effect-label">서류검토 시간</div>
+                <div class="effect-values">
+                  <span class="effect-before">10시간</span>
+                  <span class="effect-arrow">→</span>
+                  <span class="effect-after">4시간</span>
+                </div>
+              </div>
+              <div class="effect-item">
+                <div class="effect-label">적합인재 발굴률</div>
+                <div class="effect-values">
+                  <span class="effect-before">12%</span>
+                  <span class="effect-arrow">→</span>
+                  <span class="effect-after">25%</span>
+                </div>
+              </div>
+              <div class="effect-item">
+                <div class="effect-label">입사후 조기이탈</div>
+                <div class="effect-values">
+                  <span class="effect-before">18%</span>
+                  <span class="effect-arrow">→</span>
+                  <span class="effect-after">7%</span>
+                </div>
+              </div>
+            </div>
+            <div class="diagnosis-insight">
+              💡 스펙 기준 탈락자 중 역량 우수자 8명 → 이번엔 면접 기회 제공
+            </div>
+          </div>
+
+          <!-- 채용 설정 -->
+          <div class="panel-section" id="section-settings">
+            <div class="section-title">⚙️ 채용 설정</div>
+            <div class="setting-list">
+              <div class="setting-item">
+                <div class="setting-checkbox">✓</div>
+                <div>
+                  <div class="setting-label">출신학교 블라인드</div>
+                  <div class="setting-reason">
+                    💡 학력-성과 상관없음 (r=0.12)
+                  </div>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-checkbox">✓</div>
+                <div>
+                  <div class="setting-label">사진 블라인드</div>
+                  <div class="setting-reason">💡 외모 편향 제거</div>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-checkbox">✓</div>
+                <div>
+                  <div class="setting-label">역량검사 자동 발송</div>
+                  <div class="setting-reason">💡 지원 직후 24시간 내 발송</div>
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="setting-checkbox">✓</div>
+                <div>
+                  <div class="setting-label">자동 스크리닝</div>
+                  <div class="setting-reason">
+                    💡 역량 기준 미달 시 자동 분류
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 패널 푸터 -->
+        <div class="panel-footer" id="panelFooter">
+          <button class="panel-btn secondary">수정하기</button>
+          <button class="panel-btn primary">✨ 시작하기</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 대화 시나리오 정의
+      const scenario = [
+        {
+          type: "assistant",
+          content:
+            "안녕하세요! 채용 계획을 함께 세워볼게요.\n\n새로운 채용을 준비 중이시라면, 어떤 포지션을 뽑으실 계획인지 편하게 말씀해주세요.",
+        },
+        {
+          type: "user",
+          content:
+            "2026년 1월 3주부터 2개월 동안 기획자, 개발자 상시 채용할 계획이야",
+          nextUserMsg: "기획자 1명, 개발자는 2~3명. 경력직 위주로",
+        },
+        {
+          type: "assistant",
+          content:
+            "기획자, 개발자 채용이시군요. 1월 3주 시작해서 3월 중순까지로 잡아둘게요.\n\n혹시 각 포지션별로 몇 명 정도 생각하고 계세요?\n신입/경력 선호도 있으시면 같이 말씀해주세요.",
+          panelUpdate: { sections: ["section-basic", "section-positions"] },
+        },
+        {
+          type: "user",
+          content: "기획자 1명, 개발자는 2~3명. 경력직 위주로",
+          nextUserMsg: "신규 서비스 론칭 때문에 팀 확장하는 거야",
+        },
+        {
+          type: "assistant",
+          content:
+            "네, 경력직 중심으로 기획자 1명, 개발자 2~3명이요.\n\n이번 채용이 기존 인원 충원인가요, 아니면 새로운 프로젝트 때문인가요?\n→ 어떤 '역량'이 중요한지 파악하는 데 도움이 돼서요.",
+          panelUpdate: { infoCareer: "경력직 중심" },
+        },
+        {
+          type: "user",
+          content: "신규 서비스 론칭 때문에 팀 확장하는 거야",
+          nextUserMsg: "음... 경력 연차랑 학력? 그리고 이전 회사 보는 편이야",
+        },
+        {
+          type: "assistant",
+          content:
+            '신규 서비스 론칭이시구나요.\n그러면 "0에서 1을 만들어본 경험"이 핵심 역량이 되겠네요.\n\n한 가지 여쭤볼게요.\n개발자분들 뽑으실 때 보통 어떤 기준으로 서류 검토하세요?',
+          panelUpdate: { infoPurpose: "신규 서비스 팀 확장" },
+        },
+        {
+          type: "user",
+          content: "음... 경력 연차랑 학력? 그리고 이전 회사 보는 편이야",
+          nextUserMsg: "헐 그래? 그럼 어떻게 해야 돼?",
+        },
+        {
+          type: "assistant",
+          content:
+            "솔직하게 말씀해주셔서 감사해요.\n사실 많은 분들이 그렇게 하시는데, 한번 같이 살펴볼 게 있어요.",
+          isPlanModeStart: true,
+        },
+        {
+          type: "assistant",
+          content: null,
+          cardType: "diagnosis",
+        },
+        {
+          type: "user",
+          content: "헐 그래? 그럼 어떻게 해야 돼?",
+          nextUserMsg: "오... 근데 이렇게 하면 실제로 효과가 있어?",
+        },
+        {
+          type: "assistant",
+          content: null,
+          cardType: "proposal",
+          panelUpdate: { sections: ["section-diagnosis"] },
+        },
+        {
+          type: "assistant",
+          content: null,
+          cardType: "competency",
+          panelUpdate: {
+            sections: ["section-competencies", "section-process"],
+            infoCareer: "경력 1년 이상 (완화)",
+            careerHighlight: true,
+          },
+        },
+        {
+          type: "user",
+          content: "오... 근데 이렇게 하면 실제로 효과가 있어?",
+          nextUserMsg: "좋아. 이 방식으로 해보자",
+        },
+        {
+          type: "assistant",
+          content: null,
+          cardType: "evidence",
+          panelUpdate: { sections: ["section-effects"] },
+        },
+        {
+          type: "user",
+          content: "좋아. 이 방식으로 해보자",
+          nextUserMsg: null,
+        },
+        {
+          type: "assistant",
+          content:
+            "좋아요! 지금까지 나눈 내용으로 채용 계획서를 만들었어요.\n우측 패널에서 확인해보세요.",
+          panelUpdate: { sections: ["section-settings"], showFooter: true },
+        },
+        {
+          type: "assistant",
+          content: null,
+          cardType: "summary",
+        },
+      ];
+
+      // 카드 HTML 템플릿
+      const cardTemplates = {
+        diagnosis: `
+        <div class="card diagnosis">
+          <div class="card-header">
+            <span class="card-icon">📊</span>
+            <span class="card-title red">과거 채용 데이터를 분석해봤어요</span>
+          </div>
+          <div class="metrics-box">
+            <div class="metrics-label">작년 9월 개발자 채용 결과</div>
+            <div class="metrics-flow">
+              <span>지원자 <strong>82명</strong></span>
+              <span class="arrow">→</span>
+              <span>서류 통과 <strong>10명</strong></span>
+              <span class="arrow">→</span>
+              <span>합격 <strong>2명</strong></span>
+            </div>
+            <div class="metrics-stats">
+              <span>서류 통과율 <strong>12%</strong></span>
+              <span>최종 합격률 <strong>2.4%</strong></span>
+            </div>
+          </div>
+          <div class="findings-section">
+            <div class="findings-label">그런데 흥미로운 점이 있어요</div>
+            <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">합격한 2명의 공통점</div>
+            <div class="finding-item">
+              <span class="finding-key">학력</span>
+              <span class="finding-value">1명 4년제, 1명 전문대</span>
+              <span class="finding-badge">학력 무관</span>
+            </div>
+            <div class="finding-item">
+              <span class="finding-key">경력</span>
+              <span class="finding-value">2년, 4년</span>
+              <span class="finding-badge">연차 무관</span>
+            </div>
+            <div class="finding-item highlight">
+              <span class="finding-key">공통 역량</span>
+              <span class="finding-value">문제해결력 상위 15%, 협업 역량 상위 20%</span>
+            </div>
+          </div>
+          <div class="insight-box">서류에서 탈락한 72명 중
+역량검사 기준으로 보면 "합격자와 비슷한 역량"을 가진 분이
+최소 8명은 있었을 거예요.</div>
+          <div class="conclusion-box">
+            <span class="conclusion-icon">💡</span>
+            <span class="conclusion-text">즉, 스펙 기준으로 좋은 사람을 놓쳤을 가능성이 있어요.</span>
+          </div>
+        </div>
+      `,
+        proposal: `
+        <div class="card proposal">
+          <div class="card-header">
+            <span class="card-icon">🔄</span>
+            <span class="card-title blue">이번 채용에서 한 가지 실험을 제안드려요</span>
+          </div>
+          <div class="comparison-box">
+            <div class="comparison-item before">
+              <div class="comparison-label before">[기존]</div>
+              <div class="comparison-flow">
+                <span class="flow-step">지원</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">서류(스펙)</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">면접</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">합격</span>
+              </div>
+              <div class="comparison-note before">↓ 72명 탈락 (좋은 인재 포함 가능성)</div>
+            </div>
+            <div class="comparison-item after">
+              <div class="comparison-label after">[제안]</div>
+              <div class="comparison-flow">
+                <span class="flow-step">지원</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step highlight">역량검사 ⭐</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">서류(역량 기반)</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">면접</span>
+                <span class="flow-arrow">→</span>
+                <span class="flow-step">합격</span>
+              </div>
+              <div class="comparison-note after">→ 스펙에 가려진 인재 발굴</div>
+            </div>
+          </div>
+        </div>
+      `,
+        competency: `
+        <div class="card competency">
+          <div class="card-header">
+            <span class="card-icon">🎯</span>
+            <span class="card-title purple">이번 채용에 적용하면?</span>
+          </div>
+          <div class="position-competency">
+            <div class="position-comp-header">
+              <span>👨‍💻</span>
+              <span>개발자 포지션 핵심 역량</span>
+              <span class="position-comp-note">(신규 서비스 기준)</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">문제해결력</span>
+              <span class="comp-item-desc">— 정의되지 않은 문제를 스스로 구조화</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">학습민첩성</span>
+              <span class="comp-item-desc">— 새로운 기술 스택 빠르게 습득</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">협업 역량</span>
+              <span class="comp-item-desc">— 기획/디자인과 긴밀한 소통</span>
+            </div>
+          </div>
+          <div class="position-competency">
+            <div class="position-comp-header">
+              <span>📊</span>
+              <span>기획자 포지션 핵심 역량</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">분석적 사고</span>
+              <span class="comp-item-desc">— 데이터 기반 의사결정</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">커뮤니케이션</span>
+              <span class="comp-item-desc">— 이해관계자 설득 및 조율</span>
+            </div>
+            <div class="competency-item">
+              <span class="comp-item-name">실행력</span>
+              <span class="comp-item-desc">— 불확실한 상황에서 빠른 실행</span>
+            </div>
+          </div>
+          <div class="comp-note">💡 이 역량들을 1차 스크리닝 기준으로 쓰면,
+"경력 2년이지만 역량 뛰어난 사람"도 면접까지 올라와요.</div>
+        </div>
+      `,
+        evidence: `
+        <div class="card evidence">
+          <div class="card-header">
+            <span class="card-icon">📈</span>
+            <span class="card-title green">역량 중심 채용 도입 효과</span>
+          </div>
+          <div class="card-subtitle">실제 사례</div>
+          <div class="evidence-case">
+            <div class="case-company">B사</div>
+            <div class="case-context">개발자 채용 (2025년 상반기)</div>
+            <div class="case-metrics">
+              <div class="case-metric">
+                <span class="case-metric-label">서류 통과율</span>
+                <span class="case-metric-before">15%</span>
+                <span class="case-metric-arrow">→</span>
+                <span class="case-metric-after">28%</span>
+              </div>
+              <div class="case-metric">
+                <span class="case-metric-label">입사 후 3개월 이탈률</span>
+                <span class="case-metric-before">18%</span>
+                <span class="case-metric-arrow">→</span>
+                <span class="case-metric-after">6%</span>
+              </div>
+              <div class="case-metric">
+                <span class="case-metric-label">채용 소요 기간</span>
+                <span class="case-metric-before">52일</span>
+                <span class="case-metric-arrow">→</span>
+                <span class="case-metric-after">38일</span>
+              </div>
+            </div>
+            <div class="case-change"><strong>핵심 변화:</strong> "학력/경력 기준"에서 "역량검사 + 포트폴리오 기준"으로 전환
+→ 지원자 풀 다양화, 실제 업무 적합도 향상</div>
+          </div>
+          <div class="testimonial">
+            <div class="testimonial-quote">"채용 담당자가 서류 보는 시간이 절반으로 줄었어요. 역량검사 결과로 1차 필터링하니까 '봐야 할 사람'만 집중해서 볼 수 있더라고요."</div>
+            <div class="testimonial-source">— C사 인사팀장</div>
+          </div>
+          <div class="prediction-box">
+            <div class="prediction-title">🎯 귀사에 적용 시 예상 효과</div>
+            <div class="prediction-items">
+              <div class="prediction-item">
+                <div class="prediction-icon">⏱️</div>
+                <div class="prediction-label">서류 검토 시간</div>
+                <div class="prediction-value">50% 단축</div>
+              </div>
+              <div class="prediction-item">
+                <div class="prediction-icon">🎯</div>
+                <div class="prediction-label">적합 인재 발굴률</div>
+                <div class="prediction-value">2배 향상</div>
+              </div>
+              <div class="prediction-item">
+                <div class="prediction-icon">📉</div>
+                <div class="prediction-label">입사 후 조기 이탈</div>
+                <div class="prediction-value">60% 감소</div>
+              </div>
+            </div>
+            <div class="prediction-note">* 과거 데이터 + 업계 평균 기반 추정치예요. 실제 결과는 달라질 수 있어요.</div>
+          </div>
+        </div>
+      `,
+        summary: `
+        <div class="card summary" style="margin-bottom: 12px;">
+          <div class="card-header">
+            <span class="card-icon">✅</span>
+            <span class="card-title blue">이번 채용에서 달라지는 것</span>
+          </div>
+          <div class="summary-changes">
+            <div class="summary-change">
+              <div class="change-category">1. 전형 순서 변경</div>
+              <div class="change-content">
+                <div class="change-before"><span class="tag">[기존]</span> 서류 → 면접</div>
+                <span class="change-arrow">→</span>
+                <div class="change-after"><span class="tag">[변경]</span> 역량검사 → 서류 → 면접</div>
+              </div>
+            </div>
+            <div class="summary-change">
+              <div class="change-category">2. 서류 평가 기준 변경</div>
+              <div class="change-content">
+                <div class="change-before"><span class="tag">[기존]</span> 학력, 경력 연차, 이전 회사</div>
+                <span class="change-arrow">→</span>
+                <div class="change-after"><span class="tag">[변경]</span> 역량검사 결과 + 프로젝트 경험 + 기술스택 적합도</div>
+              </div>
+            </div>
+            <div class="summary-change">
+              <div class="change-category">3. 블라인드 옵션 적용</div>
+              <div class="change-content">
+                <div class="change-after"><span class="tag">[변경]</span> 출신학교, 사진 블라인드 ON
+→ 역량에만 집중할 수 있는 환경</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card tips">
+          <div class="card-header">
+            <span class="card-icon">💡</span>
+            <span class="card-title yellow">추가 제안</span>
+          </div>
+          <div class="tips-list">
+            <div class="tip-item">• 공고에 "역량 중심 채용" 문구를 넣으면 지원자들도 '스펙보다 실력으로 평가받겠구나' 기대하고 지원해요.
+→ 다양한 배경의 우수 인재 유입 효과</div>
+            <div class="tip-item">• 역량검사는 지원 직후 자동 발송되도록 설정할게요. 응시 완료된 분들만 서류 검토 대상이 돼서 효율적이에요.</div>
+          </div>
+        </div>
+        <button class="confirm-btn">
+          <span>✨</span>
+          <span>이대로 시작하기</span>
+          <span>→</span>
+        </button>
+      `,
+      };
+
+      // 상태 관리
+      let currentIndex = 0;
+      let isTyping = false;
+
+      // DOM 요소
+      const chatMessages = document.getElementById("chatMessages");
+      const typingIndicator = document.getElementById("typingIndicator");
+      const nextMessageBtn = document.getElementById("nextMessageBtn");
+      const nextMessageText = document.getElementById("nextMessageText");
+      const demoComplete = document.getElementById("demoComplete");
+      const curationBanner = document.getElementById("curationBanner");
+      const planPanel = document.getElementById("planPanel");
+      const panelFooter = document.getElementById("panelFooter");
+
+      // 초기화
+      function init() {
+        // 첫 assistant 메시지 표시
+        addMessage(scenario[0]);
+        currentIndex = 1;
+        updateNextButton();
+      }
+
+      // 메시지 추가
+      function addMessage(msg) {
+        const messageEl = document.createElement("div");
+        messageEl.className = `message ${msg.type}`;
+
+        if (msg.type === "user") {
+          messageEl.innerHTML = `<div class="user-bubble">${msg.content}</div>`;
+        } else {
+          let contentHtml = "";
+
+          if (msg.isPlanModeStart) {
+            contentHtml += `
+            <div class="plan-mode-badge">
+              <span>✨</span>
+              <span>플랜 모드 시작</span>
+            </div>
+          `;
+          }
+
+          if (msg.content) {
+            contentHtml += `<div class="assistant-bubble">${msg.content}</div>`;
+          }
+
+          if (msg.cardType && cardTemplates[msg.cardType]) {
+            contentHtml += cardTemplates[msg.cardType];
+          }
+
+          messageEl.innerHTML = `
+          <div class="assistant-avatar">🤖</div>
+          <div class="message-content">${contentHtml}</div>
+        `;
+        }
+
+        chatMessages.appendChild(messageEl);
+        scrollToBottom();
+
+        // 패널 업데이트
+        if (msg.panelUpdate) {
+          updatePanel(msg.panelUpdate);
+        }
+
+        // 플랜 모드 시작
+        if (msg.isPlanModeStart) {
+          curationBanner.classList.add("active");
+          planPanel.classList.add("active");
+        }
+      }
+
+      // 패널 업데이트
+      function updatePanel(update) {
+        if (update.sections) {
+          update.sections.forEach((sectionId) => {
+            const section = document.getElementById(sectionId);
+            if (section) {
+              section.classList.add("active");
+            }
+          });
+        }
+
+        if (update.infoCareer) {
+          const infoCareer = document.getElementById("info-career");
+          infoCareer.textContent = update.infoCareer;
+          infoCareer.classList.remove("pending");
+          if (update.careerHighlight) {
+            infoCareer.classList.add("highlight");
+          }
+        }
+
+        if (update.infoPurpose) {
+          const infoPurpose = document.getElementById("info-purpose");
+          infoPurpose.textContent = update.infoPurpose;
+          infoPurpose.classList.remove("pending");
+        }
+
+        if (update.showFooter) {
+          panelFooter.classList.add("active");
+        }
+      }
+
+      // 다음 버튼 업데이트
+      function updateNextButton() {
+        if (currentIndex >= scenario.length) {
+          nextMessageBtn.style.display = "none";
+          demoComplete.style.display = "block";
+          return;
+        }
+
+        // 다음 user 메시지 찾기
+        let nextUserIndex = currentIndex;
+        while (
+          nextUserIndex < scenario.length &&
+          scenario[nextUserIndex].type !== "user"
+        ) {
+          nextUserIndex++;
+        }
+
+        if (nextUserIndex < scenario.length) {
+          nextMessageText.textContent = `💬 "${scenario[nextUserIndex].content}"`;
+          nextMessageBtn.style.display = "flex";
+          demoComplete.style.display = "none";
+        } else {
+          nextMessageBtn.style.display = "none";
+          demoComplete.style.display = "block";
+        }
+      }
+
+      // 타이핑 표시
+      function showTyping() {
+        typingIndicator.classList.add("active");
+        scrollToBottom();
+      }
+
+      function hideTyping() {
+        typingIndicator.classList.remove("active");
+      }
+
+      // 스크롤
+      function scrollToBottom() {
+        const container = document.querySelector(".chat-container");
+        container.scrollTop = container.scrollHeight;
+      }
+
+      // 다음 메시지 처리
+      function handleNextMessage() {
+        if (isTyping || currentIndex >= scenario.length) return;
+
+        const currentMsg = scenario[currentIndex];
+
+        // user 메시지인 경우
+        if (currentMsg.type === "user") {
+          addMessage(currentMsg);
+          currentIndex++;
+
+          // 다음 assistant 메시지들 자동 재생
+          isTyping = true;
+          nextMessageBtn.disabled = true;
+          playAssistantMessages();
+        }
+      }
+
+      // assistant 메시지 연속 재생
+      function playAssistantMessages() {
+        if (currentIndex >= scenario.length) {
+          isTyping = false;
+          nextMessageBtn.disabled = false;
+          updateNextButton();
+          return;
+        }
+
+        const msg = scenario[currentIndex];
+
+        if (msg.type !== "assistant") {
+          isTyping = false;
+          nextMessageBtn.disabled = false;
+          updateNextButton();
+          return;
+        }
+
+        showTyping();
+
+        setTimeout(() => {
+          hideTyping();
+          addMessage(msg);
+          currentIndex++;
+
+          // 다음 메시지도 assistant면 계속
+          if (
+            currentIndex < scenario.length &&
+            scenario[currentIndex].type === "assistant"
+          ) {
+            setTimeout(playAssistantMessages, 600);
+          } else {
+            isTyping = false;
+            nextMessageBtn.disabled = false;
+            updateNextButton();
+          }
+        }, 1200);
+      }
+
+      // 시작
+      init();
+    </script>
+  </body>
+</html>

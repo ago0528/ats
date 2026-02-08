@@ -1,6 +1,6 @@
 
 """
-채용 에이전트 검증 백오피스 (Streamlit)
+채용 에이전트 검증 백오피스 / 업데이트일자: 260205
 - 목적:
   1) CSV(질의/기대필터)를 업로드해서 지원자 관리 에이전트를 1차/2차(동일 세션)로 호출
   2) "지원자 관리 에이전트 평가 프롬프트" 프레임워크에 맞춰 ChatGPT(OpenAI API)로 자동 평가(JSON)
@@ -8,7 +8,7 @@
   4) 필요 시 'URL Agent(이동/버튼URL)' 벌크 테스트도 같은 화면에서 실행
 
 실행:
-  streamlit run backoffice_app_v2.py
+  streamlit run backoffice_app_v3.1.0.py
 
 .env (이 파일과 같은 폴더 권장):
   # ATS(채용솔루션) 토큰

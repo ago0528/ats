@@ -1,41 +1,119 @@
+# ============================================
 # Python
+# ============================================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
 
+# ============================================
 # Virtual environments
+# ============================================
 .venv/
 venv/
 ENV/
+env/
 
-# Environment variables / secrets
+# ============================================
+# Environment / Secrets (배포 시 반드시 제외)
+# ============================================
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+secrets/
 
+# ============================================
+# Distribution / Packaging / Build
+# ============================================
+dist/
+build/
+*.egg-info/
+*.egg
+wheels/
+*.whl
+
+# ============================================
+# Testing / Coverage / QA 산출물
+# ============================================
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+*.cover
+*.py,cover
+.hypothesis/
+# 테스트/검증 산출물 (로컬 재현 가능한 결과물)
+test_result_*/
+*_export.csv
+out.xlsx
+out_rule_suggestions.json
+# query/ 내 CSV는 입력 데이터이므로 추적 유지 (필요 시 예외 추가)
+
+# ============================================
+# Logs / Temp / Cache
+# ============================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+.cache/
+
+# ============================================
 # IDE / Editor
+# ============================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+*.sublime-*
 
-# Claude Code
+# ============================================
+# Cursor / AI
+# ============================================
+.cursor/
 .claude/
+.chat_history/
 
+# ============================================
 # OS
+# ============================================
+.DS_Store
 Thumbs.db
 Desktop.ini
-.DS_Store
 
+# ============================================
 # Jupyter
+# ============================================
 .ipynb_checkpoints/
+*.ipynb_checkpoints
 
-# Distribution / packaging
-dist/
-build/
-*.egg-info/
+# ============================================
+# Node (프로토타입/정적 자원 있을 경우)
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Chat history
-.chat_history/
+# ============================================
+# 기타 배포 시 제외할 로컬/개인 산출물
+# ============================================
+*.bak
+*_backup*
+*_autosave*
+*.local

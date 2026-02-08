@@ -1,0 +1,13 @@
+# agent_qa 백오피스 및 API 클라이언트 실행용 의존성
+# 사용처: backoffice_app_v3.1.0.py, prompt_api.py, curl_parsing.py (표준 라이브러리만 사용)
+
+# Streamlit 앱
+streamlit>=1.28.0
+
+# HTTP 클라이언트
+aiohttp>=3.9.0
+httpx>=0.25.0
+
+# 데이터 처리 및 Excel 내보내기
+pandas>=2.0.0
+openpyxl>=3.1.0

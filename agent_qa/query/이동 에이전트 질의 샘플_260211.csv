@@ -1,0 +1,21 @@
+카테고리,ID,매치,질의,기대 URL,비고,사용 여부,노트
+채용 관리,CM-01,기존 채용 불러오기,이전에 했던 채용을 복사해서 새로 만들고 싶어,/agent/flow/create?copy={planId},planId 필요,예,기존
+채용 관리,CM-01-1,기존 채용 불러오기,작년 신입 채용 그대로 다시 쓰고 싶어,/agent/flow/create?copy={planId},planId 필요,예,확장-작업목적
+채용 관리,CM-01-2,기존 채용 불러오기,예전 공고 복사할 수 있어?,/agent/flow/create?copy={planId},planId 필요,예,확장-탐색
+채용 관리,CM-01-3,기존 채용 불러오기,이전 채용 템플릿 가져올게,/agent/flow/create?copy={planId},planId 필요,예,확장-직접실행
+채용 관리,CM-01-4,기존 채용 불러오기,과거 채용 복제하는 거 어디서 해?,/agent/flow/create?copy={planId},planId 필요,예,확장-기능찾기
+채용 관리,CM-03,설정중 채용 수정,작성하던 채용 이어서 수정하고 싶어,/agent/flow/process/{planId},planId 필요,예,기존
+채용 관리,CM-03-1,설정중 채용 수정,저장해둔 채용 계속 작성하기,/agent/flow/process/{planId},planId 필요,예,확장-작업목적
+채용 관리,CM-03-2,설정중 채용 수정,임시보관함 어디 있어?,/agent/flow/process/{planId},planId 필요,예,확장-기능찾기
+채용 관리,CM-03-3,설정중 채용 수정,작업중인 채용 불러올래,/agent/flow/process/{planId},planId 필요,예,확장-직접실행
+채용 관리,CM-03-4,설정중 채용 수정,채용 설정 다 끝내지 못했는데 어디 갔지?,/agent/flow/process/{planId},planId 필요,예,확장-문제상황
+메시지 관리,MSG-01,메시지 현황,안내 및 발표 메시지를 보고 싶어,/agent/mrs/communication/message,,예,기존
+메시지 관리,MSG-01-1,메시지 현황,발송한 메시지 목록 보여줘,/agent/mrs/communication/message,,예,확장-직접실행
+메시지 관리,MSG-01-2,메시지 현황,누구한테 메일 보냈더라?,/agent/mrs/communication/message,,예,확장-확인
+메시지 관리,MSG-01-3,메시지 현황,메시지 전송 기록 확인할게,/agent/mrs/communication/message,,예,확장-작업목적
+메시지 관리,MSG-01-4,메시지 현황,합격자한테 메일 나갔는지 확인하고 싶어,/agent/mrs/communication/message,,예,확장-상황구체화
+메시지 관리,MSG-04,메시지 템플릿,합격 안내 메일 템플릿 수정할래,/agent/mrs/communication/message-template,,예,기존
+메시지 관리,MSG-04-1,메시지 템플릿,불합격 안내 문구 바꾸고 싶어,/agent/mrs/communication/message-template,,예,확장-작업목적
+메시지 관리,MSG-04-2,메시지 템플릿,메일 양식 편집하는 거 어디야?,/agent/mrs/communication/message-template,,예,확장-기능찾기
+메시지 관리,MSG-04-3,메시지 템플릿,저장된 메시지 템플릿 수정할게,/agent/mrs/communication/message-template,,예,확장-직접실행
+메시지 관리,MSG-04-4,메시지 템플릿,면접 안내 메일 내용 변경해야 돼,/agent/mrs/communication/message-template,,예,확장-긴급상황

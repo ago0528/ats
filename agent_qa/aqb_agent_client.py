@@ -98,6 +98,147 @@ class ApplicantAgentClient:
         except Exception as e:
             return None, f"{type(e).__name__}: {str(e)[:120]}"
 
+    async def test_orchestrator_sync(
+        self,
+        session: aiohttp.ClientSession,
+        message: str,
+        conversation_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        target_assistant: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        동기식 테스트 API 호출:
+        POST /api/v1/ai/prompt/orchestrator/test
+
+        반환값:
+        {
+          "conversation_id": str,
+          "assistant_message": str,
+          "data_ui_list": list,
+          "guide_list": list,
+          "execution_processes": list[{"messageSummary": str, "workerType": str, "ms": float}],
+          "workers": list,
+          "worker_ms_map": dict[str, float],  # ex) {"ORCHESTRATOR_WORKER_V3#0": 1446.7}
+          "response_time_sec": float,
+          "error": str
+        }
+        """
+        url = f"{self.base_url}/api/v1/ai/prompt/orchestrator/test"
+        payload: Dict[str, Any] = {
+            "conversationId": conversation_id or "",
+            "userMessage": message,
+            "context": context or {},
+        }
+        if target_assistant:
+            payload["targetAssistant"] = target_assistant
+
+        try:
+            timeout = aiohttp.ClientTimeout(total=120)
+            async with session.post(url, headers=self.headers(), json=payload, timeout=timeout) as resp:
+                if resp.status != 200:
+                    return {
+                        "conversation_id": "",
+                        "assistant_message": "",
+                        "data_ui_list": [],
+                        "guide_list": [],
+                        "execution_processes": [],
+                        "workers": [],
+                        "worker_ms_map": {},
+                        "response_time_sec": None,
+                        "error": f"HTTP {resp.status}: {(await resp.text())[:200]}",
+                    }
+
+                data = await resp.json()
+                workers = data.get("worker", []) or []
+                conversation_id_out = str(data.get("conversationId", "") or "")
+
+                # 체인 마지막에서 assistantMessage/dataUIList/guideList를 우선 탐색
+                assistant_message = ""
+                data_ui_list: List[Dict[str, Any]] = []
+                guide_list: List[Dict[str, Any]] = []
+
+                execution_processes: List[Dict[str, Any]] = []
+                worker_ms_map: Dict[str, float] = {}
+                total_ms = 0.0
+                worker_type_count: Dict[str, int] = {}
+
+                for w in workers:
+                    worker_type = str((w or {}).get("type", "") or "")
+                    output = (w or {}).get("output", {}) or {}
+                    ms_val = (w or {}).get("ms", 0)
+                    try:
+                        ms_float = float(ms_val)
+                    except Exception:
+                        ms_float = 0.0
+
+                    total_ms += ms_float
+
+                    seq = worker_type_count.get(worker_type, 0)
+                    worker_type_count[worker_type] = seq + 1
+                    worker_key = f"{worker_type}#{seq}"
+                    worker_ms_map[worker_key] = ms_float
+
+                    summary = worker_type
+                    sub_worker = output.get("subWorker") if isinstance(output, dict) else None
+                    if sub_worker:
+                        summary = f"{worker_type} -> {sub_worker}"
+
+                    execution_processes.append(
+                        {
+                            "messageSummary": summary,
+                            "workerType": worker_type,
+                            "ms": ms_float,
+                            "index": len(execution_processes),
+                        }
+                    )
+
+                for w in reversed(workers):
+                    output = (w or {}).get("output", {}) or {}
+                    if not isinstance(output, dict):
+                        continue
+                    msg = output.get("assistantMessage")
+                    if msg:
+                        assistant_message = str(msg)
+                        data_ui_list = output.get("dataUIList", []) or []
+                        guide_list = output.get("guideList", []) or []
+                        break
+
+                return {
+                    "conversation_id": conversation_id_out,
+                    "assistant_message": assistant_message,
+                    "data_ui_list": data_ui_list,
+                    "guide_list": guide_list,
+                    "execution_processes": execution_processes,
+                    "workers": workers,
+                    "worker_ms_map": worker_ms_map,
+                    "response_time_sec": round(total_ms / 1000.0, 4),
+                    "error": "",
+                }
+        except asyncio.TimeoutError:
+            return {
+                "conversation_id": "",
+                "assistant_message": "",
+                "data_ui_list": [],
+                "guide_list": [],
+                "execution_processes": [],
+                "workers": [],
+                "worker_ms_map": {},
+                "response_time_sec": None,
+                "error": "timeout(120s)",
+            }
+        except Exception as e:
+            return {
+                "conversation_id": "",
+                "assistant_message": "",
+                "data_ui_list": [],
+                "guide_list": [],
+                "execution_processes": [],
+                "workers": [],
+                "worker_ms_map": {},
+                "response_time_sec": None,
+                "error": f"{type(e).__name__}: {str(e)[:120]}",
+            }
+
     async def subscribe_sse(self, session: aiohttp.ClientSession, conversation_id: str) -> AgentResponse:
         url = f"{self.base_url}/api/v1/ai/orchestrator/chat-room/sse/subscribe"
         params = {"conversationId": conversation_id}
@@ -351,7 +492,8 @@ class ApplicantAgentClient:
         n_calls: int = 1,
         max_retries: int = 2,
         context: Optional[Dict[str, Any]] = None,
-        target_assistant: Optional[str] = None
+        target_assistant: Optional[str] = None,
+        independent_sessions: bool = False,
     ) -> Tuple[List[Optional[AgentResponse]], str]:
         """
         동일 conversationId에서 N번 호출을 수행하며, 실패 시 자동 재시도.
@@ -359,6 +501,7 @@ class ApplicantAgentClient:
         - max_retries: 각 단계별 최대 재시도 횟수 (기본 2회)
         - context: API 호출 시 전달할 context 객체
         - target_assistant: 특정 어시스턴트 지정 (예: RECRUIT_PLAN_ASSISTANT)
+        - independent_sessions: True면 매 호출마다 새 채팅방(conversationId=None)으로 실행
         """
         retry_delay = 2.0
         responses: List[Optional[AgentResponse]] = []
@@ -369,9 +512,10 @@ class ApplicantAgentClient:
             resp: Optional[AgentResponse] = None
 
             for attempt in range(max_retries + 1):
+                cid_in = None if independent_sessions else conv_id
                 cid, err = await self.send_query(
                     session, query,
-                    conversation_id=conv_id,
+                    conversation_id=cid_in,
                     context=context,
                     target_assistant=target_assistant
                 )
@@ -382,7 +526,7 @@ class ApplicantAgentClient:
                     continue
 
                 # 첫 호출에서 conversationId 획득
-                if conv_id is None:
+                if conv_id is None and not independent_sessions:
                     conv_id = cid
 
                 resp = await self.subscribe_sse(session, cid)

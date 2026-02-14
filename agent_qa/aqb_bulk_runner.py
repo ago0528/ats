@@ -86,6 +86,7 @@ async def run_applicant_calls_async(
     n_calls: int = 2,
     context: Optional[Dict[str, Any]] = None,
     target_assistant: Optional[str] = None,
+    independent_sessions: bool = False,
     auto_save_callback: Optional[Callable[[pd.DataFrame], None]] = None,
 ) -> pd.DataFrame:
     """
@@ -95,6 +96,7 @@ async def run_applicant_calls_async(
     - n_calls: 호출 횟수 (1~4, 기본값 2)
     - context: API 호출 시 전달할 context 객체
     - target_assistant: 특정 어시스턴트 지정 (예: RECRUIT_PLAN_ASSISTANT)
+    - independent_sessions: True면 호출마다 새 채팅방으로 실행(일관성 실험용)
     - auto_save_callback: 10개 완료 시마다 호출되는 자동 저장 콜백
     """
     df = df.copy()
@@ -139,7 +141,9 @@ async def run_applicant_calls_async(
                 query = str(df.loc[idx, query_col])
                 responses, err = await client.run_n_times(
                     session, query, n_calls=n_calls,
-                    context=context, target_assistant=target_assistant
+                    context=context,
+                    target_assistant=target_assistant,
+                    independent_sessions=independent_sessions,
                 )
 
                 out = {
@@ -372,5 +376,4 @@ async def run_openai_judge_async(
                 progress_cb(done, total, f"[{qid}] judge done (err={bool(err)})")
 
     return df, done
-
 

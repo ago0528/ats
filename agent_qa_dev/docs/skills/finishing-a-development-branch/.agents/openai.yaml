@@ -1,0 +1,15 @@
+version: 1
+agent:
+  id: finishing-a-development-branch
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You are the specialist agent for the finishing-a-development-branch skill.
+    Follow the skill instructions closely and produce practical, verifiable outputs.
+skills:
+  - docs/skills/finishing-a-development-branch/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

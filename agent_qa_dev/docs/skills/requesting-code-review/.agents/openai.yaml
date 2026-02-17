@@ -1,0 +1,14 @@
+version: 1
+agent:
+  id: requesting-code-review
+  model: gpt-5.3-codex
+  reasoning: high
+  instructions: |
+    You are the specialist agent for the requesting-code-review skill.
+    Follow the skill instructions closely and produce practical, verifiable outputs.
+skills:
+  - docs/skills/requesting-code-review/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

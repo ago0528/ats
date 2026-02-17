@@ -1,0 +1,14 @@
+version: 1
+agent:
+  id: writing-skills
+  model: gpt-5.3-high
+  reasoning: high
+  instructions: |
+    You are the specialist agent for the writing-skills skill.
+    Follow the skill instructions closely and produce practical, verifiable outputs.
+skills:
+  - docs/skills/writing-skills/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

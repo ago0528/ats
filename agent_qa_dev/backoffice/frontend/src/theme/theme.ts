@@ -1,0 +1,86 @@
+export const appTheme = {
+    token: {
+    // Backoffice brand / status tokens (purple family, light theme only)
+    colorPrimary: '#7B5CF2',
+    colorPrimaryHover: '#9274ff',
+    colorPrimaryActive: '#6849db',
+    colorInfo: '#8A7CFF',
+    colorText: '#161a22',
+    colorTextSecondary: '#4e5968',
+    colorTextTertiary: '#6b7280',
+    colorTextDisabled: '#a1a8b3',
+    colorTextLightSolid: '#ffffff',
+    colorSuccess: '#52C41A',
+    colorWarning: '#FAAD14',
+    colorError: '#FF4D4F',
+    colorBgLayout: '#f4f6fb',
+    colorBgContainer: '#ffffff',
+    colorBgElevated: '#ffffff',
+    colorBorder: '#e5e8ef',
+    colorBorderSecondary: '#edf1f7',
+    colorBgSpotlight: 'rgba(0, 0, 0, 0.85)',
+    fontSize: 14,
+    fontSizeSM: 12,
+    lineHeight: 1.45,
+    borderRadius: 12,
+    fontFamily: "'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    },
+  components: {
+    Layout: {
+      headerHeight: 56,
+      headerBg: '#ffffff',
+      bodyBg: '#f4f6fb',
+      colorSplit: '#edf1f7',
+      colorText: '#161a22',
+    },
+    Card: {
+      headerBg: 'transparent',
+      colorBorderSecondary: '#edf1f7',
+      borderRadiusLG: 12,
+      paddingLG: 16,
+      paddingContentHorizontalLG: 16,
+      paddingContentVerticalLG: 16,
+    },
+    Table: {
+      colorBgContainer: '#ffffff',
+      rowHoverBg: '#fafbff',
+      colorTextHeading: '#334155',
+      borderColor: '#e5e8ef',
+      headerBg: '#f8f8ff',
+    },
+    Modal: {
+      titleColor: '#161a22',
+    },
+    Select: {
+      borderRadius: 10,
+    },
+    Input: {
+      borderRadius: 10,
+    },
+    Button: {
+      borderRadius: 10,
+      // Backoffice는 모든 버튼 높이를 32px로 통일
+      controlHeight: 32,
+      controlHeightLG: 40,
+      controlHeightSM: 24,
+      // Primary filled (type="primary" + variant="filled"/filled default) 색상/상태를 스펙 고정
+      primaryColor: '#ffffff',
+      colorPrimaryBg: '#7B5CF2',
+      colorPrimaryBgHover: '#9274ff',
+      colorPrimaryBgActive: '#6849db',
+      colorPrimaryBorder: '#6849db',
+      colorPrimaryText: '#ffffff',
+      colorPrimaryTextHover: '#ffffff',
+      colorPrimaryTextActive: '#ffffff',
+    },
+    Steps: {
+      customIconSize: 16,
+      colorPrimary: '#7B5CF2',
+      colorPrimaryHover: '#9274ff',
+      colorText: '#4e5968',
+    },
+    Upload: {
+      colorBorder: '#e5e8ef',
+    },
+  },
+};

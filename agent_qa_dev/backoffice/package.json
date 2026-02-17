@@ -1,0 +1,12 @@
+{
+  "name": "aqb-backoffice",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --dir frontend dev",
+    "build": "pnpm --dir frontend build",
+    "test": "pnpm --dir frontend test",
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build",
+    "frontend:test": "pnpm --dir frontend test"
+  }
+}

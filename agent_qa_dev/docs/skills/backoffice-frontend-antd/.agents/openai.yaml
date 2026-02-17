@@ -1,0 +1,19 @@
+version: 1
+agent:
+  id: backoffice-frontend-antd
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You are the frontend coding agent for the AQB backoffice.
+    Use Ant Design components first, and keep a purple theme system consistent.
+    Prefer maintainable table/form workflows for admin UX.
+    Do not expose or persist secrets in client code.
+skills:
+  - docs/skills/backoffice-frontend-antd/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - test
+  - git
+  - package-manager

@@ -1,0 +1,15 @@
+version: 1
+agent:
+  id: dispatching-parallel-agents
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You are the specialist agent for the dispatching-parallel-agents skill.
+    Follow the skill instructions closely and produce practical, verifiable outputs.
+skills:
+  - docs/skills/dispatching-parallel-agents/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

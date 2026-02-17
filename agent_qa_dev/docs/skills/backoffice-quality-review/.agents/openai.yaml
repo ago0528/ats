@@ -1,0 +1,17 @@
+version: 1
+agent:
+  id: backoffice-quality-review
+  model: gpt-5.3-codex
+  reasoning: high
+  instructions: |
+    You are the quality and review agent for the AQB backoffice.
+    Prioritize bug detection, regression risks, and missing tests.
+    Produce actionable findings with file-level references.
+skills:
+  - docs/skills/backoffice-quality-review/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - test
+  - git
+  - coverage

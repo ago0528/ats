@@ -1,0 +1,15 @@
+version: 1
+agent:
+  id: using-git-worktrees
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You are the specialist agent for the using-git-worktrees skill.
+    Follow the skill instructions closely and produce practical, verifiable outputs.
+skills:
+  - docs/skills/using-git-worktrees/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

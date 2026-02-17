@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import json
+from collections import defaultdict
+from typing import Optional
+
+import aiohttp
+
+from app.adapters.agent_client_adapter import AgentClientAdapter
+from app.core.db import SessionLocal
+from app.core.enums import RunStatus
+from app.repositories.validation_runs import ValidationRunRepository
+
+
+def _parse_context_json(raw: str) -> Optional[dict]:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return None
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
+async def execute_validation_run(
+    run_id: str,
+    base_url: str,
+    origin: str,
+    referer: str,
+    bearer: str,
+    cms: str,
+    mrs: str,
+    default_context: Optional[dict],
+    default_target_assistant: Optional[str],
+    max_parallel: int,
+    timeout_ms: int,
+):
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    repo.set_status(run_id, RunStatus.RUNNING)
+    db.commit()
+
+    try:
+        run_items = repo.list_items(run_id, limit=100000)
+        if not run_items:
+            repo.set_status(run_id, RunStatus.DONE)
+            db.commit()
+            return
+
+        grouped_items: dict[int, list] = defaultdict(list)
+        for item in run_items:
+            grouped_items[int(item.conversation_room_index or 1)].append(item)
+        for room_index in grouped_items:
+            grouped_items[room_index].sort(key=lambda x: x.ordinal)
+
+        adapter = AgentClientAdapter(
+            base_url,
+            bearer,
+            cms,
+            mrs,
+            origin,
+            referer,
+            max_parallel=max_parallel,
+        )
+        sem = asyncio.Semaphore(max(1, int(max_parallel or 1)))
+        call_timeout = max(1.0, float(timeout_ms or 1000) / 1000.0)
+        timeout = aiohttp.ClientTimeout(total=max(call_timeout + 5.0, 5.0))
+        connector = aiohttp.TCPConnector(limit=max(5, int(max_parallel or 1) * 4), ssl=False)
+
+        async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
+            async def _execute_room(items: list) -> None:
+                room_conversation_id = ""
+                for item in items:
+                    error = ""
+                    result = {}
+                    item_context = _parse_context_json(item.context_json_snapshot) or default_context
+                    item_target_assistant = (item.target_assistant_snapshot or "").strip() or default_target_assistant
+                    try:
+                        async with sem:
+                            result = await asyncio.wait_for(
+                                adapter.test_orchestrator_sync(
+                                    session,
+                                    item.query_text_snapshot,
+                                    conversation_id=room_conversation_id or None,
+                                    context=item_context,
+                                    target_assistant=item_target_assistant,
+                                ),
+                                timeout=call_timeout,
+                            )
+                    except asyncio.TimeoutError:
+                        error = f"timeout({int(call_timeout * 1000)}ms)"
+                    except Exception as exc:
+                        error = f"{type(exc).__name__}: {exc}"
+
+                    if not error and result.get("error"):
+                        error = str(result.get("error"))
+
+                    next_conversation_id = str(result.get("conversation_id", "") or room_conversation_id or "")
+                    if next_conversation_id:
+                        room_conversation_id = next_conversation_id
+
+                    response_text = str(result.get("assistant_message", "") or "")
+                    response_time_sec = result.get("response_time_sec")
+                    latency_ms = None
+                    if isinstance(response_time_sec, (int, float)):
+                        latency_ms = int(float(response_time_sec) * 1000)
+
+                    raw_json = ""
+                    try:
+                        raw_json = json.dumps(
+                            {
+                                "assistantMessage": result.get("assistant_message"),
+                                "dataUIList": result.get("data_ui_list"),
+                                "guideList": result.get("guide_list"),
+                                "executionProcesses": result.get("execution_processes", []),
+                                "worker": result.get("workers", []),
+                                "workerMsMap": result.get("worker_ms_map", {}),
+                                "conversationId": result.get("conversation_id", ""),
+                                "responseTimeSec": result.get("response_time_sec"),
+                                "error": error,
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        )
+                    except Exception:
+                        raw_json = ""
+
+                    repo.update_item_execution(
+                        item.id,
+                        conversation_id=next_conversation_id,
+                        raw_response=response_text,
+                        latency_ms=latency_ms,
+                        error=error,
+                        raw_json=raw_json,
+                        executed_at=dt.datetime.utcnow(),
+                    )
+                    db.commit()
+
+            await asyncio.gather(*[_execute_room(items) for items in grouped_items.values()])
+
+        repo.set_status(run_id, RunStatus.DONE)
+        db.commit()
+    except Exception:
+        repo.set_status(run_id, RunStatus.FAILED)
+        db.commit()
+        raise
+    finally:
+        db.close()

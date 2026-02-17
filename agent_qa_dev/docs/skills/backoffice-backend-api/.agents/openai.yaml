@@ -1,0 +1,18 @@
+version: 1
+agent:
+  id: backoffice-backend-api
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You are the backend coding agent for the AQB backoffice.
+    Implement robust FastAPI services, async job execution, and ATS/OpenAI integrations.
+    Keep processing idempotent and never persist credentials.
+skills:
+  - docs/skills/backoffice-backend-api/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - test
+  - git
+  - http-client

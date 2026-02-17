@@ -1,0 +1,17 @@
+version: 1
+agent:
+  id: aqb-scoring
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    You implement AQB v1.2.0 scoring and reporting.
+    Keep scoring rubric and weighted totals faithful to Python references.
+    Focus on deterministic, auditable calculations.
+skills:
+  - docs/skills/aqb-scoring/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - test
+  - git

@@ -10,6 +10,7 @@ def test_validation_settings_get_and_patch():
     assert get_resp.status_code == 200
     assert get_resp.json()["environment"] == "dev"
     assert get_resp.json()["repeatInConversationDefault"] == 1
+    assert get_resp.json()["paginationPageSizeLimitDefault"] == 100
 
     patch_resp = client.patch(
         "/api/v1/validation-settings/dev",
@@ -20,6 +21,7 @@ def test_validation_settings_get_and_patch():
             "timeoutMsDefault": 90000,
             "testModelDefault": "gpt-4o",
             "evalModelDefault": "gpt-5.2",
+            "paginationPageSizeLimitDefault": 180,
         },
     )
     assert patch_resp.status_code == 200
@@ -29,3 +31,4 @@ def test_validation_settings_get_and_patch():
     assert body["agentParallelCallsDefault"] == 4
     assert body["timeoutMsDefault"] == 90000
     assert body["testModelDefault"] == "gpt-4o"
+    assert body["paginationPageSizeLimitDefault"] == 180

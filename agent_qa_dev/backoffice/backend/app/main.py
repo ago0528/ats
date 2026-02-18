@@ -48,6 +48,11 @@ def startup() -> None:
     _ensure_sqlite_column("validation_run_items", "context_json_snapshot", "context_json_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_run_items", "target_assistant_snapshot", "target_assistant_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_runs", "test_set_id", "test_set_id TEXT")
+    _ensure_sqlite_column(
+        "validation_settings",
+        "pagination_page_size_limit_default",
+        "pagination_page_size_limit_default INTEGER NOT NULL DEFAULT 100",
+    )
 
 
 @app.get("/healthz")

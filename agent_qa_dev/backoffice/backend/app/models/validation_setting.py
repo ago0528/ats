@@ -21,6 +21,7 @@ class ValidationSetting(Base):
     timeout_ms_default: Mapped[int] = mapped_column(Integer, nullable=False, default=120000)
     test_model_default: Mapped[str] = mapped_column(String(120), nullable=False, default="gpt-5.2")
     eval_model_default: Mapped[str] = mapped_column(String(120), nullable=False, default="gpt-5.2")
+    pagination_page_size_limit_default: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime,
         nullable=False,

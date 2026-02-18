@@ -4,6 +4,10 @@ import { App, Button, Form, Input, InputNumber, Select, Typography } from 'antd'
 import { ENV_OPTIONS, type Environment } from '../../app/EnvironmentScope';
 import { getValidationSettings, updateValidationSettings } from '../../api/validation';
 import type { RuntimeSecrets } from '../../app/types';
+import {
+  STANDARD_PAGE_SIZE_LIMIT_MIN,
+  normalizeStandardPageSizeLimit,
+} from '../../components/common/standardPaginationConfig';
 
 type ValidationSettingsValues = {
   repeatInConversationDefault: number;
@@ -12,6 +16,7 @@ type ValidationSettingsValues = {
   timeoutMsDefault: number;
   testModelDefault: string;
   evalModelDefault: string;
+  paginationPageSizeLimitDefault: number;
 };
 
 function areValidationSettingsEqual(left: ValidationSettingsValues, right: ValidationSettingsValues) {
@@ -22,10 +27,19 @@ function areValidationSettingsEqual(left: ValidationSettingsValues, right: Valid
     && left.timeoutMsDefault === right.timeoutMsDefault
     && left.testModelDefault === right.testModelDefault
     && left.evalModelDefault === right.evalModelDefault
+    && left.paginationPageSizeLimitDefault === right.paginationPageSizeLimitDefault
   );
 }
 
-export function ValidationSettingsPage({ environment, tokens }: { environment: Environment; tokens: RuntimeSecrets }) {
+export function ValidationSettingsPage({
+  environment,
+  tokens,
+  onPaginationPageSizeLimitChange,
+}: {
+  environment: Environment;
+  tokens: RuntimeSecrets;
+  onPaginationPageSizeLimitChange?: (value: number) => void;
+}) {
   const { message } = App.useApp();
   const [targetEnvironment, setTargetEnvironment] = useState<Environment>(environment);
   const [loading, setLoading] = useState(false);
@@ -45,10 +59,12 @@ export function ValidationSettingsPage({ environment, tokens }: { environment: E
         timeoutMsDefault: data.timeoutMsDefault,
         testModelDefault: data.testModelDefault,
         evalModelDefault: data.evalModelDefault,
+        paginationPageSizeLimitDefault: normalizeStandardPageSizeLimit(data.paginationPageSizeLimitDefault),
       };
       form.setFieldsValue(nextValues);
       setSavedValues(nextValues);
       setIsDirty(false);
+      onPaginationPageSizeLimitChange?.(nextValues.paginationPageSizeLimitDefault);
     } catch (error) {
       console.error(error);
       message.error('환경설정을 불러오지 못했습니다.');
@@ -78,6 +94,7 @@ export function ValidationSettingsPage({ environment, tokens }: { environment: E
       await updateValidationSettings(targetEnvironment, values);
       setSavedValues(values);
       setIsDirty(false);
+      onPaginationPageSizeLimitChange?.(values.paginationPageSizeLimitDefault);
       message.success({
         content: '저장되었습니다.',
         duration: 2.5,
@@ -151,6 +168,14 @@ export function ValidationSettingsPage({ environment, tokens }: { environment: E
         </Form.Item>
         <Form.Item className="settings-field-block" label="평가 모델" name="evalModelDefault" rules={[{ required: true }]}>
           <Input />
+        </Form.Item>
+        <Form.Item
+          className="settings-field-block"
+          label="페이지네이션 > OO개 보기 제한 개수"
+          name="paginationPageSizeLimitDefault"
+          rules={[{ required: true, message: '제한 개수를 입력해 주세요.' }]}
+        >
+          <InputNumber min={STANDARD_PAGE_SIZE_LIMIT_MIN} precision={0} step={10} />
         </Form.Item>
       </Form>
 

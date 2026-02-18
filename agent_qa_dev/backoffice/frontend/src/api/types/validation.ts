@@ -105,6 +105,7 @@ export type ValidationSettings = {
   timeoutMsDefault: number;
   testModelDefault: string;
   evalModelDefault: string;
+  paginationPageSizeLimitDefault: number;
   updatedAt?: string;
 };
 

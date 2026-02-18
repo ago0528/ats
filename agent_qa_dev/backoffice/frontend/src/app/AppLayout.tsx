@@ -13,8 +13,14 @@ import { TestSetManagementPage } from '../features/test-sets/TestSetManagementPa
 import { AgentValidationManagementPage } from '../features/validations/AgentValidationManagementPage';
 import { ValidationSettingsPage } from '../features/validation-settings/ValidationSettingsPage';
 import { api } from '../api/client';
+import { getValidationSettings } from '../api/validation';
 import { RuntimeSecrets } from './types';
 import { StandardModal, StandardModalMetaBlock } from '../components/common/StandardModal';
+import {
+  StandardPaginationConfigContext,
+  STANDARD_PAGE_SIZE_LIMIT_DEFAULT,
+  normalizeStandardPageSizeLimit,
+} from '../components/common/standardPaginationConfig';
 import {
   MENU_KEYS,
   MENU_PATHS,
@@ -72,6 +78,7 @@ export function AppLayout() {
   const [parsedCurlPreview, setParsedCurlPreview] = useState<RuntimeSecrets>({ bearer: '', cms: '', mrs: '' });
   const [curlParseError, setCurlParseError] = useState('');
   const [isCheckingCurlStatus, setIsCheckingCurlStatus] = useState(false);
+  const [paginationPageSizeLimit, setPaginationPageSizeLimit] = useState(STANDARD_PAGE_SIZE_LIMIT_DEFAULT);
 
   useEffect(() => {
     const loadVersion = async () => {
@@ -105,6 +112,25 @@ export function AppLayout() {
       navigate('/validation/run', { replace: true });
     }
   }, [pathname, navigate]);
+
+  useEffect(() => {
+    let active = true;
+    const loadPaginationPageSizeLimit = async () => {
+      try {
+        const data = await getValidationSettings(environment);
+        if (!active) return;
+        setPaginationPageSizeLimit(normalizeStandardPageSizeLimit(data.paginationPageSizeLimitDefault));
+      } catch (error) {
+        if (!active) return;
+        console.error(error);
+        setPaginationPageSizeLimit(STANDARD_PAGE_SIZE_LIMIT_DEFAULT);
+      }
+    };
+    void loadPaginationPageSizeLimit();
+    return () => {
+      active = false;
+    };
+  }, [environment]);
 
   const resetCurlModalState = () => {
     setCurlText('');
@@ -253,7 +279,13 @@ export function AppLayout() {
       );
     }
     if (menu === 'validation-settings') {
-      return <ValidationSettingsPage environment={environment} tokens={runtimeSecrets} />;
+      return (
+        <ValidationSettingsPage
+          environment={environment}
+          tokens={runtimeSecrets}
+          onPaginationPageSizeLimitChange={(value) => setPaginationPageSizeLimit(normalizeStandardPageSizeLimit(value))}
+        />
+      );
     }
     if (menu === 'prompt') {
       return <PromptManagementPage environment={environment} tokens={runtimeSecrets} />;
@@ -289,192 +321,194 @@ export function AppLayout() {
   ]);
 
   return (
-    <Layout className="backoffice-shell">
-      <Header className="backoffice-header">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
-          <Space align="center" size="small">
-            <Typography.Title level={4} className="backoffice-gnb-logo" style={{ margin: 0 }}>
-              <span className="backoffice-gnb-logo-mark">AQB</span>
-              <span className="backoffice-gnb-logo-text">Backoffice</span>
-            </Typography.Title>
-            <Tooltip title="현재 백오피스 버전">
-              <Tag color="purple">v{appVersion}</Tag>
-            </Tooltip>
-          </Space>
-          <Space align="center" size="small">
-            <EnvironmentScope value={environment} onChange={setEnvironment} controlHeight={antdToken.controlHeight} />
-            <Button
-              type="default"
-              size="middle"
-              loading={isCheckingCurlStatus}
-              onClick={handleCurlStatusCheck}
-              icon={<SyncOutlined />}
-            >
-              토큰 상태 체크
-            </Button>
-            <Button
-              type="default"
-              size="middle"
-              onClick={openCurlModal}
-              icon={<SafetyOutlined />}
-            >
-              로그인
-            </Button>
-          </Space>
-        </div>
-      </Header>
+    <StandardPaginationConfigContext.Provider value={{ pageSizeLimit: paginationPageSizeLimit }}>
+      <Layout className="backoffice-shell">
+        <Header className="backoffice-header">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: '100%' }}>
+            <Space align="center" size="small">
+              <Typography.Title level={4} className="backoffice-gnb-logo" style={{ margin: 0 }}>
+                <span className="backoffice-gnb-logo-mark">AQB</span>
+                <span className="backoffice-gnb-logo-text">Backoffice</span>
+              </Typography.Title>
+              <Tooltip title="현재 백오피스 버전">
+                <Tag color="purple">v{appVersion}</Tag>
+              </Tooltip>
+            </Space>
+            <Space align="center" size="small">
+              <EnvironmentScope value={environment} onChange={setEnvironment} controlHeight={antdToken.controlHeight} />
+              <Button
+                type="default"
+                size="middle"
+                loading={isCheckingCurlStatus}
+                onClick={handleCurlStatusCheck}
+                icon={<SyncOutlined />}
+              >
+                토큰 상태 체크
+              </Button>
+              <Button
+                type="default"
+                size="middle"
+                onClick={openCurlModal}
+                icon={<SafetyOutlined />}
+              >
+                로그인
+              </Button>
+            </Space>
+          </div>
+        </Header>
 
-      <StandardModal
-        title="cURL 토큰 파싱"
-        open={isCurlOpen}
-        width={760}
-        destroyOnHidden
-        onCancel={closeCurlModal}
-        footer={
-          <Space>
-            <Button onClick={closeCurlModal}>취소</Button>
-            <Button type="primary" loading={isParsingCurl} onClick={handleParseCurl}>
-              완료
-            </Button>
-          </Space>
-        }
+        <StandardModal
+          title="cURL 토큰 파싱"
+          open={isCurlOpen}
+          width={760}
+          destroyOnHidden
+          onCancel={closeCurlModal}
+          footer={
+            <Space>
+              <Button onClick={closeCurlModal}>취소</Button>
+              <Button type="primary" loading={isParsingCurl} onClick={handleParseCurl}>
+                완료
+              </Button>
+            </Space>
+          }
 
-      >
-        <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
-          <Typography.Text type="secondary">
-            브라우저에서 복사한 전체 cURL 명령어를 넣어 주세요. 토큰은 이 본문에서 추출됩니다.
-          </Typography.Text>
-        </StandardModalMetaBlock>
-        <Form layout="vertical" className="standard-modal-field-stack">
-          <Form.Item
-            label="요청 전문 붙여넣기"
-            required
-            validateStatus={curlParseError ? 'error' : ''}
-            extra={curlParseError || undefined}
-          >
-            <Input.TextArea
-              autoSize={{ minRows: 4, maxRows: 6 }}
-              value={curlText}
-              onChange={(e) => setCurlText(e.target.value)}
-              placeholder="curl -X GET 'https://.../...' -H 'Authorization: Bearer ...' -H 'cms-access-token: ...' -H 'mrs-session: ...'"
+        >
+          <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
+            <Typography.Text type="secondary">
+              브라우저에서 복사한 전체 cURL 명령어를 넣어 주세요. 토큰은 이 본문에서 추출됩니다.
+            </Typography.Text>
+          </StandardModalMetaBlock>
+          <Form layout="vertical" className="standard-modal-field-stack">
+            <Form.Item
+              label="요청 전문 붙여넣기"
+              required
+              validateStatus={curlParseError ? 'error' : ''}
+              extra={curlParseError || undefined}
+            >
+              <Input.TextArea
+                autoSize={{ minRows: 4, maxRows: 6 }}
+                value={curlText}
+                onChange={(e) => setCurlText(e.target.value)}
+                placeholder="curl -X GET 'https://.../...' -H 'Authorization: Bearer ...' -H 'cms-access-token: ...' -H 'mrs-session: ...'"
+              />
+            </Form.Item>
+
+            <Form.Item
+              label="Bearer 토큰"
+            >
+              <Input.Password value={parsedCurlPreview.bearer} readOnly />
+            </Form.Item>
+            <Form.Item
+              label="CMS Access Token"
+            >
+              <Input.Password value={parsedCurlPreview.cms} readOnly />
+            </Form.Item>
+            <Form.Item
+              label="MRS Session"
+            >
+              <Input.Password value={parsedCurlPreview.mrs} readOnly />
+            </Form.Item>
+          </Form>
+        </StandardModal>
+
+        <Layout className="backoffice-main">
+          <Sider width={240} className="backoffice-main-sider" theme="light">
+            <Menu
+              mode="inline"
+              selectedKeys={[menu]}
+              defaultOpenKeys={['validation-root', 'validation-data-root']}
+              onClick={(e) => {
+                const nextMenu = e.key as MenuKey;
+                if (!MENU_KEYS.includes(nextMenu)) return;
+                const targetPath = MENU_PATHS[nextMenu];
+                if (targetPath === pathname) return;
+                navigate(targetPath);
+              }}
+              items={[
+                {
+                  key: 'validation-root',
+                  icon: <RobotOutlined />,
+                  label: (
+                    <Space size={8} align="center">
+                      에이전트 검증 운영
+                    </Space>
+                  ),
+                  children: [
+                    {
+                      key: 'validation-run',
+                      label: '검증 실행',
+                    },
+                    {
+                      key: 'validation-history',
+                      label: '검증 이력',
+                    },
+                    {
+                      key: 'validation-dashboard',
+                      label: '대시보드',
+                    },
+                  ],
+                },
+                {
+                  key: 'validation-data-root',
+                  icon: <FileTextOutlined />,
+                  label: (
+                    <Space size={8} align="center">
+                      검증 데이터 관리
+                    </Space>
+                  ),
+                  children: [
+                    {
+                      key: 'validation-data-queries',
+                      label: '질의 관리',
+                    },
+                    {
+                      key: 'validation-data-query-groups',
+                      label: '질의 그룹',
+                    },
+                    {
+                      key: 'validation-data-test-sets',
+                      label: '테스트 세트',
+                    },
+                  ],
+                },
+                {
+                  key: 'validation-settings',
+                  icon: <SafetyOutlined />,
+                  label: (
+                    <Space size={8} align="center">
+                      환경설정
+                    </Space>
+                  ),
+                },
+                {
+                  key: 'prompt',
+                  icon: <FileTextOutlined />,
+                  label: (
+                    <Space size={8} align="center">
+                      프롬프트 관리
+                    </Space>
+                  ),
+                },
+                {
+                  key: 'generic-legacy',
+                  icon: <RobotOutlined />,
+                  label: (
+                    <Space size={8} align="center">
+                      레거시 검증
+                    </Space>
+                  ),
+                },
+              ]}
+              style={{ borderRight: 0 }}
             />
-          </Form.Item>
-
-          <Form.Item
-            label="Bearer 토큰"
-          >
-            <Input.Password value={parsedCurlPreview.bearer} readOnly />
-          </Form.Item>
-          <Form.Item
-            label="CMS Access Token"
-          >
-            <Input.Password value={parsedCurlPreview.cms} readOnly />
-          </Form.Item>
-          <Form.Item
-            label="MRS Session"
-          >
-            <Input.Password value={parsedCurlPreview.mrs} readOnly />
-          </Form.Item>
-        </Form>
-      </StandardModal>
-
-      <Layout className="backoffice-main">
-        <Sider width={240} className="backoffice-main-sider" theme="light">
-          <Menu
-            mode="inline"
-            selectedKeys={[menu]}
-            defaultOpenKeys={['validation-root', 'validation-data-root']}
-            onClick={(e) => {
-              const nextMenu = e.key as MenuKey;
-              if (!MENU_KEYS.includes(nextMenu)) return;
-              const targetPath = MENU_PATHS[nextMenu];
-              if (targetPath === pathname) return;
-              navigate(targetPath);
-            }}
-            items={[
-              {
-                key: 'validation-root',
-                icon: <RobotOutlined />,
-                label: (
-                  <Space size={8} align="center">
-                    에이전트 검증 운영
-                  </Space>
-                ),
-                children: [
-                  {
-                    key: 'validation-run',
-                    label: '검증 실행',
-                  },
-                  {
-                    key: 'validation-history',
-                    label: '검증 이력',
-                  },
-                  {
-                    key: 'validation-dashboard',
-                    label: '대시보드',
-                  },
-                ],
-              },
-              {
-                key: 'validation-data-root',
-                icon: <FileTextOutlined />,
-                label: (
-                  <Space size={8} align="center">
-                    검증 데이터 관리
-                  </Space>
-                ),
-                children: [
-                  {
-                    key: 'validation-data-queries',
-                    label: '질의 관리',
-                  },
-                  {
-                    key: 'validation-data-query-groups',
-                    label: '질의 그룹',
-                  },
-                  {
-                    key: 'validation-data-test-sets',
-                    label: '테스트 세트',
-                  },
-                ],
-              },
-              {
-                key: 'validation-settings',
-                icon: <SafetyOutlined />,
-                label: (
-                  <Space size={8} align="center">
-                    환경설정
-                  </Space>
-                ),
-              },
-              {
-                key: 'prompt',
-                icon: <FileTextOutlined />,
-                label: (
-                  <Space size={8} align="center">
-                    프롬프트 관리
-                  </Space>
-                ),
-              },
-              {
-                key: 'generic-legacy',
-                icon: <RobotOutlined />,
-                label: (
-                  <Space size={8} align="center">
-                    레거시 검증
-                  </Space>
-                ),
-              },
-            ]}
-            style={{ borderRight: 0 }}
-          />
-        </Sider>
-        <Content className="backoffice-content">
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {content}
-          </Space>
-        </Content>
+          </Sider>
+          <Content className="backoffice-content">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              {content}
+            </Space>
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
+    </StandardPaginationConfigContext.Provider>
   );
 }

@@ -15,6 +15,7 @@ DEFAULT_VALIDATION_SETTINGS = {
     "timeout_ms_default": 120000,
     "test_model_default": "gpt-5.2",
     "eval_model_default": "gpt-5.2",
+    "pagination_page_size_limit_default": 100,
 }
 
 
@@ -44,6 +45,7 @@ class ValidationSettingsRepository:
         timeout_ms_default: Optional[int] = None,
         test_model_default: Optional[str] = None,
         eval_model_default: Optional[str] = None,
+        pagination_page_size_limit_default: Optional[int] = None,
     ) -> ValidationSetting:
         setting = self.get_or_create(environment)
 
@@ -59,6 +61,8 @@ class ValidationSettingsRepository:
             setting.test_model_default = test_model_default.strip() or setting.test_model_default
         if eval_model_default is not None:
             setting.eval_model_default = eval_model_default.strip() or setting.eval_model_default
+        if pagination_page_size_limit_default is not None:
+            setting.pagination_page_size_limit_default = max(50, int(pagination_page_size_limit_default))
         self.db.flush()
         return setting
 

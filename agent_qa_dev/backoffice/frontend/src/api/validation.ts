@@ -296,6 +296,7 @@ export async function updateValidationSettings(
     timeoutMsDefault: number;
     testModelDefault: string;
     evalModelDefault: string;
+    paginationPageSizeLimitDefault: number;
   }>,
 ) {
   const { data } = await api.patch<ValidationSettings>(`/validation-settings/${environment}`, payload);

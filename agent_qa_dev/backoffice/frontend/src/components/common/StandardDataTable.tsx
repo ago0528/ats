@@ -12,9 +12,10 @@ import {
 
 import { Table } from 'antd';
 import type { ColumnGroupType, ColumnsType, ColumnType, TablePaginationConfig, TableProps } from 'antd/es/table';
+import { useStandardPaginationConfig } from './standardPaginationConfig';
 
 const STANDARD_DEFAULT_PAGE_SIZE = 50;
-const STANDARD_PAGE_SIZE_OPTIONS = ['20', '50', '100'];
+const STANDARD_PAGE_SIZE_OPTIONS = [20, 50, 100];
 const DEFAULT_RESIZABLE_COLUMN_WIDTH = 180;
 const DEFAULT_MIN_COLUMN_WIDTH = 120;
 
@@ -151,16 +152,65 @@ function ResizableHeaderCell({
 function buildStandardPagination(
   pagination: TableProps<unknown>['pagination'],
   useStandardPagination: boolean,
+  pageSizeLimit: number,
 ): TableProps<unknown>['pagination'] {
   if (!useStandardPagination) return pagination;
   if (pagination === false) return false;
 
+  const normalizePositiveInt = (value: unknown) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) return null;
+    return Math.trunc(parsed);
+  };
+
+  const normalizePageSizeOptions = (rawOptions: TablePaginationConfig['pageSizeOptions'], limit: number) => {
+    const source = rawOptions ?? STANDARD_PAGE_SIZE_OPTIONS;
+    const normalized = new Set<number>();
+    source.forEach((option) => {
+      const parsed = normalizePositiveInt(option);
+      if (!parsed || parsed > limit) return;
+      normalized.add(parsed);
+    });
+    normalized.add(limit);
+    return Array.from(normalized).sort((left, right) => left - right);
+  };
+
+  const normalizePageSize = (value: unknown, limit: number) => {
+    const parsed = normalizePositiveInt(value);
+    if (!parsed) return undefined;
+    return Math.min(parsed, limit);
+  };
+
+  const resolveAllViewPageSize = (total: unknown, limit: number) => {
+    const parsedTotal = normalizePositiveInt(total);
+    if (!parsedTotal) return limit;
+    return Math.min(parsedTotal, limit);
+  };
+
   const raw: TablePaginationConfig = pagination ?? {};
+  const normalizedPageSizeLimit = Math.max(1, Math.trunc(pageSizeLimit));
+  const normalizedPageSizeOptions = normalizePageSizeOptions(raw.pageSizeOptions, normalizedPageSizeLimit);
+  const allViewPageSize = resolveAllViewPageSize(raw.total, normalizedPageSizeLimit);
+  const selectOptions = [
+    ...normalizedPageSizeOptions
+      .filter((option) => option !== allViewPageSize)
+      .map((option) => ({ label: `${option}개 보기`, value: option })),
+    { label: '전체 보기', value: allViewPageSize },
+  ];
+  const showSizeChanger = raw.showSizeChanger ?? true;
+  const mergedShowSizeChanger =
+    showSizeChanger === false
+      ? false
+      : ({
+        ...(typeof showSizeChanger === 'object' ? showSizeChanger : {}),
+        options: selectOptions,
+      } as NonNullable<TablePaginationConfig['showSizeChanger']>);
+
   const merged: TablePaginationConfig = {
     ...raw,
     position: raw.position ?? ['bottomCenter'],
-    showSizeChanger: raw.showSizeChanger ?? true,
-    pageSizeOptions: raw.pageSizeOptions ?? STANDARD_PAGE_SIZE_OPTIONS,
+    showSizeChanger: mergedShowSizeChanger,
+    pageSizeOptions: selectOptions.map((option) => String(option.value)),
     showTotal:
       raw.showTotal ??
       ((total, range) => {
@@ -169,9 +219,20 @@ function buildStandardPagination(
       }),
   };
 
-  if (raw.pageSize === undefined && raw.defaultPageSize === undefined) {
-    merged.defaultPageSize = STANDARD_DEFAULT_PAGE_SIZE;
+  const normalizedPageSize = normalizePageSize(raw.pageSize, normalizedPageSizeLimit);
+  if (normalizedPageSize !== undefined) {
+    merged.pageSize = normalizedPageSize;
   }
+
+  const normalizedDefaultPageSize = normalizePageSize(raw.defaultPageSize, normalizedPageSizeLimit);
+  if (normalizedDefaultPageSize !== undefined) {
+    merged.defaultPageSize = normalizedDefaultPageSize;
+  }
+
+  if (raw.pageSize === undefined && raw.defaultPageSize === undefined) {
+    merged.defaultPageSize = Math.min(STANDARD_DEFAULT_PAGE_SIZE, normalizedPageSizeLimit);
+  }
+
   return merged;
 }
 
@@ -193,6 +254,7 @@ export function StandardDataTable<RecordType extends object = Record<string, unk
   scroll,
   ...tableProps
 }: StandardDataTableProps<RecordType>) {
+  const { pageSizeLimit } = useStandardPaginationConfig();
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [resizeState, setResizeState] = useState<ResizeState>(null);
   const loadedStorageKeyRef = useRef<string | null>(null);
@@ -408,8 +470,8 @@ export function StandardDataTable<RecordType extends object = Record<string, unk
   }, [enableResizable, scroll, tableWidth, scrollXPadding]);
 
   const mergedPagination = useMemo(
-    () => buildStandardPagination(pagination as TableProps<unknown>['pagination'], useStandardPagination),
-    [pagination, useStandardPagination],
+    () => buildStandardPagination(pagination as TableProps<unknown>['pagination'], useStandardPagination, pageSizeLimit),
+    [pagination, useStandardPagination, pageSizeLimit],
   );
 
   return (

@@ -20,6 +20,7 @@ class ValidationSettingPatchRequest(BaseModel):
     timeoutMsDefault: Optional[int] = None
     testModelDefault: Optional[str] = None
     evalModelDefault: Optional[str] = None
+    paginationPageSizeLimitDefault: Optional[int] = None
 
 
 def _serialize(entity):
@@ -31,6 +32,7 @@ def _serialize(entity):
         "timeoutMsDefault": entity.timeout_ms_default,
         "testModelDefault": entity.test_model_default,
         "evalModelDefault": entity.eval_model_default,
+        "paginationPageSizeLimitDefault": entity.pagination_page_size_limit_default,
         "updatedAt": entity.updated_at,
     }
 
@@ -54,6 +56,7 @@ def update_validation_setting(environment: Environment, body: ValidationSettingP
         timeout_ms_default=body.timeoutMsDefault,
         test_model_default=body.testModelDefault,
         eval_model_default=body.evalModelDefault,
+        pagination_page_size_limit_default=body.paginationPageSizeLimitDefault,
     )
     db.commit()
     return _serialize(entity)

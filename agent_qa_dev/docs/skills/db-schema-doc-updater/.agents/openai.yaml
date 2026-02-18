@@ -1,0 +1,15 @@
+version: 1
+agent:
+  id: db-schema-doc-updater
+  model: gpt-5.3-codex
+  profile: spark
+  reasoning: high
+  instructions: |
+    Keep backoffice DB schema documentation in sync whenever schema-related code changes.
+    Prioritize schema accuracy, PM-friendly language, and explicit change summaries.
+skills:
+  - docs/skills/db-schema-doc-updater/SKILL.md
+tools:
+  - filesystem
+  - shell
+  - git

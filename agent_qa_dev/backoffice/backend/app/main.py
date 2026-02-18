@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI
@@ -14,10 +15,11 @@ from app.api.routes.utils import router as utils_router
 from app.api.routes.validation_runs import router as validation_runs_router
 from app.api.routes.validation_settings import router as validation_settings_router
 from app.api.routes.validation_test_sets import router as validation_test_sets_router
-from app.core.db import Base, _ENGINE
+from app.core.db import Base, _ENGINE, get_db_path
 
 app = FastAPI(title="AQB Backoffice API", version="0.1.0")
 APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.1.0")
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -41,6 +43,7 @@ def _ensure_sqlite_column(table_name: str, column_name: str, column_definition: 
 
 @app.on_event("startup")
 def startup() -> None:
+    logger.info("Resolved BACKOFFICE_DB_PATH=%s", get_db_path())
     Base.metadata.create_all(_ENGINE)
     _ensure_sqlite_column("validation_query_groups", "default_target_assistant", "default_target_assistant TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_queries", "context_json", "context_json TEXT NOT NULL DEFAULT ''")

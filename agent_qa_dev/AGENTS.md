@@ -8,7 +8,7 @@
 
 - 전체 구조: `docs/architecture/project-structure.md`
 - 프론트 IA: `docs/architecture/backoffice-frontend-information-architecture.md`
-- 스킬 인덱스: `AGENTS.md`의 `4) @skills 인덱스 (docs/skills)` 섹션
+- 스킬 인덱스: `docs/skills/AGENTS.md`
 
 구조가 실제 코드와 다르면 먼저 위 문서를 갱신한 뒤 개발을 진행한다.
 
@@ -36,31 +36,19 @@
 - `ant-design-icons`
 - `langfuse`
 
-## 4) @skills 인덱스 (docs/skills)
+## 4) docs 스킬 활용 가이드
 
 문서/설계/구현 전, 작업 목적에 맞는 스킬을 `docs/skills/*/SKILL.md`에서 먼저 선택해 사용한다.
 
-사용 가능한 스킬 목록:
+자주 쓰는 스킬 매핑:
 
-- `docs/skills/aqb-scoring/SKILL.md`
-- `docs/skills/backoffice-backend-api/SKILL.md`
-- `docs/skills/backoffice-frontend-antd/SKILL.md`
-- `docs/skills/backoffice-quality-review/SKILL.md`
-- `docs/skills/brainstorming/SKILL.md`
-- `docs/skills/dispatching-parallel-agents/SKILL.md`
-- `docs/skills/executing-plans/SKILL.md`
-- `docs/skills/finishing-a-development-branch/SKILL.md`
-- `docs/skills/receiving-code-review/SKILL.md`
-- `docs/skills/requesting-code-review/SKILL.md`
-- `docs/skills/subagent-driven-development/SKILL.md`
-- `docs/skills/systematic-debugging/SKILL.md`
-- `docs/skills/test-driven-development/SKILL.md`
-- `docs/skills/using-git-worktrees/SKILL.md`
-- `docs/skills/using-superpowers/SKILL.md`
-- `docs/skills/verification-before-completion/SKILL.md`
-- `docs/skills/writing-plans/SKILL.md`
-- `docs/skills/writing-skills/SKILL.md`
-- `docs/skills/worktree-merge-release/SKILL.md`
+- 프론트 구현: `docs/skills/backoffice-frontend-antd/SKILL.md`
+- 백엔드 API 구현: `docs/skills/backoffice-backend-api/SKILL.md`
+- AQB 규칙/점수 로직: `docs/skills/aqb-scoring/SKILL.md`
+- 코드 품질 점검: `docs/skills/backoffice-quality-review/SKILL.md`
+- 기획/문서 작성: `docs/skills/backoffice-ideation-writing/SKILL.md`
+- DB 정의서 갱신: `docs/skills/db-schema-doc-updater/SKILL.md`
+- 개발 완료 전 검증: `docs/skills/verification-before-completion/SKILL.md`
 
 선택 규칙:
 
@@ -76,3 +64,21 @@
 - `pnpm -C backoffice/frontend build`
 
 백엔드 로직 변경 시 관련 테스트를 반드시 실행하고, 실패 시 원인/조치 내용을 `docs/troubleshooting/incidents/`에 남긴다.
+
+백엔드 테스트/초기화 데이터 보호 규칙:
+
+- 테스트 실행 시 DB는 반드시 `*_test` suffix 경로만 사용한다. (예: `BACKOFFICE_DB_PATH=./backoffice_test.db`)
+- `drop_all`, `truncate`, reset 스크립트 같은 파괴적 초기화는 `BACKOFFICE_ALLOW_DB_RESET=1` 또는 동등한 명시 플래그가 없으면 실행하지 않는다.
+- 관리/운영 데이터 DB(`*_test`가 아닌 경로)는 어떤 테스트/초기화 작업에서도 대상으로 사용하지 않는다.
+
+## 6) DB 스키마 문서화 가드레일
+
+- DB/스키마 변경 PR에는 반드시 `docs/skills/db-schema-doc-updater/SKILL.md`를 실행한다.
+- DB 변경(테이블/컬럼/관계/인덱스/제약) 커밋/PR에는 `architecture/data/*` 문서(저장소 기준 `docs/architecture/data/*`) 변경이 반드시 동반되어야 한다.
+- 위 동반 변경이 없으면 리뷰에서 실패로 간주한다.
+
+리뷰 체크리스트(스키마 변경 PR 필수):
+
+- [ ] `schema.md`가 최신 스키마 사실(PK/FK/nullable/default/index/enum)을 반영했는가
+- [ ] `relations.mmd`가 최신 관계를 반영했는가
+- [ ] `sqlite-metrics.md` 쿼리가 실제 테이블/컬럼명과 일치하는가

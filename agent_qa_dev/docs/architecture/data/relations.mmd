@@ -1,0 +1,159 @@
+erDiagram
+  GENERIC_RUNS {
+    varchar_36 id PK
+    environment_enum environment
+    run_status_enum status
+    varchar_36 base_run_id FK
+    text options_json
+    datetime created_at
+    datetime started_at
+    datetime finished_at
+  }
+
+  GENERIC_RUN_ROWS {
+    text id PK
+    varchar_36 run_id FK
+    integer ordinal
+    text query_id
+    text query
+    text response_text
+    float response_time_sec
+    text llm_eval_status
+  }
+
+  PROMPT_AUDIT_LOGS {
+    text id PK
+    environment_enum environment
+    text worker_type
+    text action
+    integer before_len
+    integer after_len
+    text actor
+    datetime created_at
+  }
+
+  VALIDATION_QUERY_GROUPS {
+    varchar_36 id PK
+    varchar_140 group_name UK
+    text default_target_assistant
+    text llm_eval_criteria_default_json
+    datetime created_at
+    datetime updated_at
+  }
+
+  VALIDATION_QUERIES {
+    varchar_36 id PK
+    varchar_36 group_id FK
+    text query_text
+    text expected_result
+    varchar_40 category
+    text llm_eval_criteria_json
+    text logic_field_path
+    text logic_expected_value
+    text context_json
+    text target_assistant
+    datetime created_at
+    datetime updated_at
+  }
+
+  VALIDATION_SETTINGS {
+    varchar_36 id PK
+    environment_enum environment UK
+    integer repeat_in_conversation_default
+    integer conversation_room_count_default
+    integer agent_parallel_calls_default
+    integer timeout_ms_default
+    varchar_120 test_model_default
+    varchar_120 eval_model_default
+    integer pagination_page_size_limit_default
+    datetime updated_at
+  }
+
+  VALIDATION_TEST_SETS {
+    varchar_36 id PK
+    varchar_120 name
+    text description
+    text config_json
+    datetime created_at
+    datetime updated_at
+  }
+
+  VALIDATION_TEST_SET_ITEMS {
+    varchar_36 id PK
+    varchar_36 test_set_id FK
+    varchar_36 query_id FK
+    integer ordinal
+    datetime created_at
+  }
+
+  VALIDATION_RUNS {
+    varchar_36 id PK
+    varchar_20 mode
+    environment_enum environment
+    run_status_enum status
+    varchar_36 base_run_id FK
+    varchar_36 test_set_id FK
+    varchar_120 agent_id
+    varchar_120 test_model
+    varchar_120 eval_model
+    integer repeat_in_conversation
+    integer conversation_room_count
+    integer agent_parallel_calls
+    integer timeout_ms
+    text options_json
+    datetime created_at
+    datetime started_at
+    datetime finished_at
+  }
+
+  VALIDATION_RUN_ITEMS {
+    varchar_36 id PK
+    varchar_36 run_id FK
+    varchar_36 query_id FK
+    integer ordinal
+    text query_text_snapshot
+    text expected_result_snapshot
+    varchar_40 category_snapshot
+    integer conversation_room_index
+    integer repeat_index
+    text raw_response
+    integer latency_ms
+    text error
+    datetime executed_at
+  }
+
+  VALIDATION_LLM_EVALUATIONS {
+    varchar_36 id PK
+    varchar_36 run_item_id FK UK
+    varchar_120 eval_model
+    text metric_scores_json
+    float total_score
+    varchar_40 status
+    datetime evaluated_at
+  }
+
+  VALIDATION_LOGIC_EVALUATIONS {
+    varchar_36 id PK
+    varchar_36 run_item_id FK UK
+    text eval_items_json
+    varchar_20 result
+    text fail_reason
+    datetime evaluated_at
+  }
+
+  GENERIC_RUNS ||--o{ GENERIC_RUN_ROWS : "has rows"
+  GENERIC_RUNS ||--o{ GENERIC_RUNS : "base_run_id"
+
+  VALIDATION_QUERY_GROUPS ||--o{ VALIDATION_QUERIES : "contains"
+
+  VALIDATION_TEST_SETS ||--o{ VALIDATION_TEST_SET_ITEMS : "has items"
+  VALIDATION_QUERIES ||--o{ VALIDATION_TEST_SET_ITEMS : "included in"
+
+  VALIDATION_TEST_SETS ||--o{ VALIDATION_RUNS : "creates runs"
+  VALIDATION_RUNS ||--o{ VALIDATION_RUNS : "base_run_id"
+
+  VALIDATION_RUNS ||--o{ VALIDATION_RUN_ITEMS : "executes"
+  VALIDATION_QUERIES ||--o{ VALIDATION_RUN_ITEMS : "source query"
+
+  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LLM_EVALUATIONS : "llm eval"
+  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval"

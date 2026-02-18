@@ -70,14 +70,14 @@ from aqb_aqb_scoring import (
 )
 
 def main():
-    st.set_page_config(page_title="채용 에이전트 검증 백오피스", page_icon="🧪", layout="wide")
+    st.set_page_config(page_title="채용에이전트 검증 백오피스", page_icon="🧪", layout="wide")
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
     # .env 자동 로드
     loaded_env = load_dotenv(os.path.join(script_dir, ".env"))
 
-    st.title("🧪 채용 에이전트 검증 백오피스")
+    st.title("🧪 채용에이전트 검증 백오피스")
 
     with st.sidebar:
         st.header("설정")

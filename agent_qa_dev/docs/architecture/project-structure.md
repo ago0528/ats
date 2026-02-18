@@ -8,13 +8,12 @@
 ```text
 agent_qa_dev/
 ├─ AGENTS.md
-├─ scripts/
-│  └─ worktree_release.sh
 ├─ backoffice/
 │  ├─ backend/
 │  └─ frontend/
 ├─ docs/
 │  ├─ architecture/
+│  │  └─ data/
 │  ├─ design-system/
 │  ├─ feedback/
 │  ├─ plans/
@@ -45,15 +44,18 @@ agent_qa_dev/
 - 저장소 계층: `backoffice/backend/app/repositories`
 - 테스트세트 저장소: `backoffice/backend/app/repositories/validation_test_sets.py`
 - 배치/잡: `backoffice/backend/app/jobs`
+- 운영 스크립트: `backoffice/backend/scripts`
 - 테스트: `backoffice/backend/tests`
 
 ### Documentation
 
 - 운영 규칙: `AGENTS.md`
 - 프론트 정보구조: `docs/architecture/backoffice-frontend-information-architecture.md`
-- 스킬 인덱스: `AGENTS.md`의 `4) @skills 인덱스 (docs/skills)` 섹션
+- 데이터 테이블 정의서: `docs/architecture/data/schema.md`
+- 데이터 관계도(ERD): `docs/architecture/data/relations.mmd`
+- SQLite 운영 SQL 모음: `docs/architecture/data/sqlite-metrics.md`
+- 스킬 인덱스: `docs/skills/AGENTS.md`
 - 장애/재발방지 기록: `docs/troubleshooting/incidents`
-- 작업 병합 자동화: `scripts/worktree_release.sh`, `docs/skills/worktree-merge-release/SKILL.md`
 
 ## 3) 유지보수 규칙
 

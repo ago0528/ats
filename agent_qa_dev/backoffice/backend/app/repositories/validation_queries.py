@@ -63,6 +63,33 @@ class ValidationQueryRepository:
         by_id = {row.id: row for row in rows}
         return [by_id[qid] for qid in query_ids if qid in by_id]
 
+    def list_ids(
+        self,
+        *,
+        q: Optional[str] = None,
+        categories: Optional[list[str]] = None,
+        group_ids: Optional[list[str]] = None,
+        excluded_ids: Optional[list[str]] = None,
+        offset: int = 0,
+        limit: int = 100,
+    ) -> list[str]:
+        query = self.db.query(ValidationQuery.id)
+        if q:
+            query = query.filter(ValidationQuery.query_text.contains(q))
+        if categories:
+            query = query.filter(ValidationQuery.category.in_(categories))
+        if group_ids:
+            query = query.filter(ValidationQuery.group_id.in_(group_ids))
+        if excluded_ids:
+            query = query.filter(~ValidationQuery.id.in_(excluded_ids))
+        rows = (
+            query.order_by(ValidationQuery.created_at.desc(), ValidationQuery.id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return [str(row[0]) for row in rows]
+
     def create(
         self,
         *,

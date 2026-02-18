@@ -92,9 +92,9 @@ flowchart LR
 ### 4.1 질의 -> 테스트세트 설계 흐름
 
 1. `질의 관리`에서 질의를 등록/정비
-2. 질의를 선택하고 `테스트 세트 만들기` 클릭
-3. `/validation-data/test-sets?mode=create&queryIds=...`로 이동
-4. 테스트세트 생성 모달에서 질의/기본 파라미터 저장
+2. 질의를 선택하거나 `전체 선택(필터 결과)`로 선택 집합 구성
+3. `테스트 세트 만들기` 또는 `테스트 세트에 추가`를 질의 관리 화면에서 바로 수행
+4. 생성 시 이름/설명을 입력하고, 추가 시 대상 테스트세트를 선택해 저장
 
 ### 4.2 검증 실행 워크벤치 흐름
 
@@ -121,18 +121,15 @@ flowchart LR
 
 ## 5. 화면 간 상태 전달 전략
 
-페이지 간 전달은 query param 기준으로 통일:
+페이지 간 전달은 query param 기준을 기본으로 사용한다.
 
-1. `mode=create`
-2. `queryIds`
-3. `testSetId`
-4. `runId`
+1. `testSetId`
+2. `runId`
 
 예시:
 
-1. `질의 관리` -> `테스트 세트`: `/validation-data/test-sets?mode=create&queryIds=q1,q2`
-2. `테스트 세트` -> `검증 실행`: `/validation/run?testSetId=ts1`
-3. `검증 이력 상세` -> `검증 실행`: `/validation/run?runId=r1&testSetId=ts1`
+1. `테스트 세트` -> `검증 실행`: `/validation/run?testSetId=ts1`
+2. `검증 이력 상세` -> `검증 실행`: `/validation/run?runId=r1&testSetId=ts1`
 
 ## 6. 도메인 용어 정리 (Mermaid)
 
@@ -167,7 +164,7 @@ flowchart LR
 ### 8.1 메뉴/라우팅
 
 1. `/queries`, `/query-groups` 레거시 URL이 신규 경로로 리다이렉트되는지
-2. 테스트세트 생성 파라미터(`mode=create`, `queryIds`)가 정상 반영되는지
+2. `질의 관리`에서 선택 집합(수동/필터 전체)으로 테스트세트 생성/추가가 정상 동작하는지
 3. 이력 상세 -> 실행 링크(`runId`, `testSetId`)가 정상 반영되는지
 
 ### 8.2 실행 워크벤치

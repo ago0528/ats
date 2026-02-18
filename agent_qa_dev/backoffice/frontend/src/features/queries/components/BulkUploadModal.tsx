@@ -98,7 +98,7 @@ export function BulkUploadModal({
                   dataSource={previewRows}
                   tableLayout="fixed"
                   pagination={false}
-                  scroll={{ x: 780, y: 280 }}
+                  scroll={{ x: 1810, y: 280 }}
                   locale={{ emptyText: previewEmptyText }}
                 />
                 {previewTotal > BULK_UPLOAD_PREVIEW_LIMIT ? (
@@ -106,6 +106,9 @@ export function BulkUploadModal({
                     총 {previewTotal}건 중 {BULK_UPLOAD_PREVIEW_LIMIT}건만 표시됩니다.
                   </Typography.Text>
                 ) : null}
+                <Typography.Text type="secondary">
+                  기대 결과/LLM 평가기준(JSON)/Logic 검증 필드/Logic 기대값은 비워도 업로드됩니다.
+                </Typography.Text>
                 <Typography.Text type="secondary">CSV의 그룹 값이 비어 있으면 그룹 미지정으로 등록됩니다.</Typography.Text>
               </Space>
             )}

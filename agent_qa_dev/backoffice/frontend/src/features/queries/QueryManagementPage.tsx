@@ -1,4 +1,4 @@
-import { App, Button, Card, Popconfirm, Space } from 'antd';
+import { App, Button, Card, Popconfirm, Space, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
 
@@ -9,9 +9,11 @@ import { QueryCategoryTag } from '../../components/common/QueryCategoryTag';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
 import { formatDateTime, formatShortDate } from '../../shared/utils/dateTime';
 import { DEFAULT_COLUMN_WIDTHS, TABLE_ROW_SELECTION_WIDTH } from './constants';
+import { AppendToTestSetModal } from './components/AppendToTestSetModal';
 import { BulkDeleteModal } from './components/BulkDeleteModal';
 import { BulkUploadGroupConfirmModal } from './components/BulkUploadGroupConfirmModal';
 import { BulkUploadModal } from './components/BulkUploadModal';
+import { CreateTestSetFromSelectionModal } from './components/CreateTestSetFromSelectionModal';
 import { QueryFilters } from './components/QueryFilters';
 import { QueryFormModal } from './components/QueryFormModal';
 import { useQueryManagement } from './hooks/useQueryManagement';
@@ -19,11 +21,9 @@ import { useQueryManagement } from './hooks/useQueryManagement';
 export function QueryManagementPage({
   environment,
   tokens,
-  onCreateTestSetFromQueries,
 }: {
   environment: Environment;
   tokens: RuntimeSecrets;
-  onCreateTestSetFromQueries?: (queryIds: string[]) => void;
 }) {
   const { message } = App.useApp();
   const {
@@ -33,8 +33,13 @@ export function QueryManagementPage({
     loading,
     category,
     groupId,
-    selectedRowKeys,
-    setSelectedRowKeys,
+    selectionMode,
+    isFilteredSelectionLocked,
+    selectedCount,
+    filteredSelectionTotal,
+    filteredDeselectedCount,
+    tableSelectedRowKeys,
+    canBulkDelete,
     modalOpen,
     setModalOpen,
     editing,
@@ -52,6 +57,12 @@ export function QueryManagementPage({
     bulkDeleteModalOpen,
     setBulkDeleteModalOpen,
     bulkDeleting,
+    createTestSetModalOpen,
+    creatingTestSet,
+    appendToTestSetModalOpen,
+    appendingToTestSet,
+    testSetOptionsLoading,
+    testSetOptions,
     currentPage,
     pageSize,
     setCurrentPage,
@@ -70,6 +81,15 @@ export function QueryManagementPage({
     handleSearch,
     handleCategoryChange,
     handleGroupChange,
+    handleRowSelectionChange,
+    handleSelectAllFiltered,
+    clearQuerySelection,
+    handleOpenCreateTestSetModal,
+    handleOpenAppendToTestSetModal,
+    handleCreateTestSetFromSelection,
+    handleAppendToTestSet,
+    closeCreateTestSetModal,
+    closeAppendToTestSetModal,
   } = useQueryManagement({ environment, tokens, message });
 
   const columns = useMemo<ColumnsType<ValidationQuery>>(
@@ -158,17 +178,31 @@ export function QueryManagementPage({
         <Space wrap>
           <Button onClick={openBulkUploadModal}>대규모 업로드</Button>
           <Button onClick={openCreate}>질의 등록</Button>
-          <Button danger disabled={selectedRowKeys.length === 0} onClick={() => setBulkDeleteModalOpen(true)}>
+          <Button onClick={handleSelectAllFiltered} disabled={total === 0}>
+            전체 선택(필터 결과 {total}건)
+          </Button>
+          <Button onClick={clearQuerySelection} disabled={selectedCount === 0}>
+            선택 해제
+          </Button>
+          <Button danger disabled={!canBulkDelete} onClick={() => setBulkDeleteModalOpen(true)}>
             삭제
           </Button>
-          <Button
-            type="primary"
-            onClick={() => onCreateTestSetFromQueries?.(selectedRowKeys.map(String))}
-            disabled={selectedRowKeys.length === 0}
-          >
+          <Button type="primary" onClick={handleOpenCreateTestSetModal} disabled={selectedCount === 0}>
             테스트 세트 만들기
           </Button>
+          <Button onClick={handleOpenAppendToTestSetModal} disabled={selectedCount === 0}>
+            테스트 세트에 추가
+          </Button>
         </Space>
+
+        {selectedCount > 0 ? (
+          <Typography.Text type={isFilteredSelectionLocked ? 'warning' : 'secondary'}>
+            {selectionMode === 'filtered'
+              ? `필터 결과 전체 선택 ${filteredSelectionTotal}건 (제외 ${filteredDeselectedCount}건, 현재 ${selectedCount}건)`
+              : `선택된 질의 ${selectedCount}건`}
+            {isFilteredSelectionLocked ? ' · 필터가 변경되어 선택 컨텍스트가 잠겼습니다. 선택 해제 후 다시 선택해 주세요.' : ''}
+          </Typography.Text>
+        ) : null}
 
         <StandardDataTable
           tableId="query-management-main"
@@ -178,8 +212,10 @@ export function QueryManagementPage({
           className="query-management-table"
           rowSelection={{
             preserveSelectedRowKeys: true,
-            selectedRowKeys,
-            onChange: (keys) => setSelectedRowKeys(keys.map(String)),
+            selectedRowKeys: tableSelectedRowKeys,
+            hideSelectAll: isFilteredSelectionLocked,
+            getCheckboxProps: () => ({ disabled: isFilteredSelectionLocked }),
+            onChange: handleRowSelectionChange,
           }}
           rowKey="id"
           size="small"
@@ -232,7 +268,7 @@ export function QueryManagementPage({
 
       <BulkDeleteModal
         open={bulkDeleteModalOpen}
-        selectedCount={selectedRowKeys.length}
+        selectedCount={tableSelectedRowKeys.length}
         deleting={bulkDeleting}
         onClose={() => setBulkDeleteModalOpen(false)}
         onConfirm={() => {
@@ -249,6 +285,28 @@ export function QueryManagementPage({
         onClose={() => setModalOpen(false)}
         onSave={() => {
           void handleSave();
+        }}
+      />
+
+      <CreateTestSetFromSelectionModal
+        open={createTestSetModalOpen}
+        loading={creatingTestSet}
+        selectedCount={selectedCount}
+        onClose={closeCreateTestSetModal}
+        onSubmit={(values) => {
+          void handleCreateTestSetFromSelection(values);
+        }}
+      />
+
+      <AppendToTestSetModal
+        open={appendToTestSetModalOpen}
+        loading={appendingToTestSet}
+        optionsLoading={testSetOptionsLoading}
+        selectedCount={selectedCount}
+        options={testSetOptions}
+        onClose={closeAppendToTestSetModal}
+        onSubmit={(values) => {
+          void handleAppendToTestSet(values);
         }}
       />
     </Card>

@@ -93,12 +93,15 @@ def _parse_bulk_upload_rows(
             missing_query_rows.append(idx)
             continue
 
-        expected_result = _extract_cell(series, ["expected_result", "expected", "기대결과", "기대값"])
+        expected_result = _extract_cell(series, ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"])
         category = _normalize_category(_extract_cell(series, ["category", "카테고리"], default="Happy path"))
         group_value = _extract_cell(series, ["group_id", "groupId", "group", "group_name", "그룹"]).strip()
-        llm_eval_criteria = _extract_cell(series, ["llm_eval_criteria", "LLM 평가기준"])
-        logic_field_path = _extract_cell(series, ["logic_field_path", "검증 필드", "field_path"])
-        logic_expected_value = _extract_cell(series, ["logic_expected_value", "검증 기대값", "logic_expected", "expected_value"])
+        llm_eval_criteria = _extract_cell(series, ["llm_eval_criteria", "llmEvalCriteria", "LLM 평가기준", "LLM 평가기준(JSON)"])
+        logic_field_path = _extract_cell(series, ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"])
+        logic_expected_value = _extract_cell(
+            series,
+            ["logic_expected_value", "logicExpectedValue", "검증 기대값", "Logic 기대값", "logic_expected", "expected_value"],
+        )
         target_assistant = _extract_cell(series, ["target_assistant", "targetAssistant", "대상어시스턴트"])
         context_json = _extract_cell(series, ["context_json", "contextJson", "context", "컨텍스트"])
 
@@ -262,9 +265,9 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
 @router.get("/queries/template")
 def download_query_template():
     csv_text = (
-        '질의,카테고리,그룹,targetAssistant,contextJson\n'
-        '리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,\n'
-        '미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,\n'
+        '질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n'
+        '리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,"채용 플랜이 단계별로 제시됨","{""정확성"": 5}",assistantMessage,역량검사\n'
+        '미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,,,,\n'
     )
     csv_bytes = ("\ufeff" + csv_text).encode("utf-8")
     return StreamingResponse(

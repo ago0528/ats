@@ -211,7 +211,7 @@ export function TestSetManagementPage({
       await loadTestSets();
     } catch (error) {
       console.error(error);
-      message.error('테스트 세트 저장에 실패했습니다.');
+      message.error('테스트 세트 저장을 실패했습니다.');
     } finally {
       setSaving(false);
     }
@@ -242,10 +242,6 @@ export function TestSetManagementPage({
   return (
     <Card className="backoffice-content-card" title="테스트 세트">
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
-        <Typography.Text type="secondary">
-          테스트 세트는 환경 비귀속 설계 자산입니다. 실행 시 현재 선택된 환경({environment})이 적용됩니다.
-        </Typography.Text>
-
         <Space wrap>
           <Input.Search
             allowClear
@@ -254,11 +250,11 @@ export function TestSetManagementPage({
             style={{ width: 320 }}
             enterButton
           />
-          <Button type="primary" onClick={openCreate}>테스트 세트 생성</Button>
+          <Button onClick={openCreate}>테스트 세트 생성</Button>
+          <Button onClick={onOpenValidationHistory}>검증 이력으로 이동</Button>
           <Button type="primary" disabled={!selectedTestSetId} onClick={() => onOpenValidationRun?.(selectedTestSetId)}>
             검증 실행으로 이동
           </Button>
-          <Button onClick={onOpenValidationHistory}>검증 이력으로 이동</Button>
         </Space>
 
         <StandardDataTable
@@ -356,27 +352,27 @@ export function TestSetManagementPage({
               optionFilterProp="label"
             />
           </Form.Item>
-          <Typography.Text strong>기본 실행 파라미터</Typography.Text>
+          <Typography.Text>기본 실행 파라미터</Typography.Text>
           <Space style={{ width: '100%' }} wrap>
-            <Form.Item label="Agent ID" name="agentId" style={{ minWidth: 220 }}>
+            <Form.Item label="Agent ID" name="agentId" style={{ flex: 1 }}>
               <Input placeholder="ORCHESTRATOR_WORKER_V3" />
             </Form.Item>
-            <Form.Item label="Test Model" name="testModel" style={{ minWidth: 180 }}>
+            <Form.Item label="Test Model" name="testModel" style={{ flex: 1 }}>
               <Input placeholder="gpt-5.2" />
             </Form.Item>
-            <Form.Item label="Eval Model" name="evalModel" style={{ minWidth: 180 }}>
+            <Form.Item label="Eval Model" name="evalModel" style={{ flex: 1 }}>
               <Input placeholder="gpt-5.2" />
             </Form.Item>
-            <Form.Item label="반복 수" name="repeatInConversation" style={{ minWidth: 120 }}>
+            <Form.Item label="반복 수" name="repeatInConversation" style={{ flex: 1 }}>
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="대화 방 수" name="conversationRoomCount" style={{ minWidth: 120 }}>
+            <Form.Item label="대화 방 수" name="conversationRoomCount" style={{ flex: 1 }}>
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="병렬 호출 수" name="agentParallelCalls" style={{ minWidth: 120 }}>
+            <Form.Item label="병렬 호출 수" name="agentParallelCalls" style={{ flex: 1 }}>
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="타임아웃(ms)" name="timeoutMs" style={{ minWidth: 140 }}>
+            <Form.Item label="타임아웃(ms)" name="timeoutMs" style={{  flex: 1 }}>
               <InputNumber min={1000} />
             </Form.Item>
           </Space>

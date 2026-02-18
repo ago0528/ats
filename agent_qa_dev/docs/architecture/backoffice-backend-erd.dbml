@@ -1,0 +1,240 @@
+Enum environment_enum {
+  dev
+  st2
+  st
+  pr
+}
+
+Enum run_status_enum {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+Table generic_runs {
+  id varchar(36) [pk, not null]
+  environment environment_enum [not null]
+  status run_status_enum [not null]
+  base_run_id varchar(36)
+  options_json text [not null, note: "Stored as JSON string"]
+  created_at datetime [not null]
+  started_at datetime
+  finished_at datetime
+}
+
+Table generic_run_rows {
+  id text [pk, not null]
+  run_id varchar(36) [not null]
+  ordinal integer [not null]
+  query_id text [not null]
+  query text [not null]
+  llm_criteria text [not null]
+  field_path text [not null]
+  expected_value text [not null]
+  response_text text [not null]
+  response_time_sec float
+  execution_process text [not null]
+  error text [not null]
+  raw_json text [not null, note: "Stored as JSON string"]
+  logic_result text [not null]
+  llm_eval_json text [not null, note: "Stored as JSON string"]
+  llm_eval_status text [not null]
+
+  Indexes {
+    run_id [name: "ix_generic_run_rows_run_id"]
+  }
+}
+
+Table prompt_audit_logs {
+  id text [pk, not null]
+  environment environment_enum [not null]
+  worker_type text [not null]
+  action text [not null]
+  before_len integer [not null]
+  after_len integer [not null]
+  actor text [not null]
+  created_at datetime [not null]
+}
+
+Table validation_query_groups {
+  id varchar(36) [pk, not null]
+  group_name varchar(140) [not null]
+  description text [not null]
+  default_target_assistant text [not null]
+  llm_eval_criteria_default_json text [not null, note: "Stored as JSON string"]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+
+  Indexes {
+    group_name [unique, name: "ix_validation_query_groups_group_name"]
+  }
+}
+
+Table validation_queries {
+  id varchar(36) [pk, not null]
+  query_text text [not null]
+  expected_result text [not null]
+  category varchar(40) [not null]
+  group_id varchar(36) [not null]
+  llm_eval_criteria_json text [not null, note: "Stored as JSON string"]
+  logic_field_path text [not null]
+  logic_expected_value text [not null]
+  context_json text [not null, note: "Stored as JSON string"]
+  target_assistant text [not null]
+  created_by varchar(120) [not null]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+
+  Indexes {
+    group_id [name: "ix_validation_queries_group_id"]
+    category [name: "ix_validation_queries_category"]
+  }
+}
+
+Table validation_settings {
+  id varchar(36) [pk, not null]
+  environment environment_enum [not null]
+  repeat_in_conversation_default integer [not null]
+  conversation_room_count_default integer [not null]
+  agent_parallel_calls_default integer [not null]
+  timeout_ms_default integer [not null]
+  test_model_default varchar(120) [not null]
+  eval_model_default varchar(120) [not null]
+  pagination_page_size_limit_default integer [not null]
+  updated_at datetime [not null]
+
+  Indexes {
+    environment [unique, name: "ix_validation_settings_environment"]
+  }
+}
+
+Table validation_test_sets {
+  id varchar(36) [pk, not null]
+  name varchar(120) [not null]
+  description text [not null]
+  config_json text [not null, note: "Stored as JSON string"]
+  created_at datetime [not null]
+  updated_at datetime [not null]
+
+  Indexes {
+    name [name: "ix_validation_test_sets_name"]
+  }
+}
+
+Table validation_test_set_items {
+  id varchar(36) [pk, not null]
+  test_set_id varchar(36) [not null]
+  query_id varchar(36) [not null]
+  ordinal integer [not null]
+  created_at datetime [not null]
+
+  Indexes {
+    test_set_id [name: "ix_validation_test_set_items_test_set_id"]
+    query_id [name: "ix_validation_test_set_items_query_id"]
+    ordinal [name: "ix_validation_test_set_items_ordinal"]
+    (test_set_id, query_id) [unique, name: "uq_validation_test_set_item_test_set_query"]
+  }
+}
+
+Table validation_runs {
+  id varchar(36) [pk, not null]
+  mode varchar(20) [not null]
+  environment environment_enum [not null]
+  status run_status_enum [not null]
+  base_run_id varchar(36)
+  test_set_id varchar(36)
+  agent_id varchar(120) [not null]
+  test_model varchar(120) [not null]
+  eval_model varchar(120) [not null]
+  repeat_in_conversation integer [not null]
+  conversation_room_count integer [not null]
+  agent_parallel_calls integer [not null]
+  timeout_ms integer [not null]
+  options_json text [not null, note: "Stored as JSON string"]
+  created_at datetime [not null]
+  started_at datetime
+  finished_at datetime
+
+  Indexes {
+    test_set_id [name: "ix_validation_runs_test_set_id"]
+    status [name: "ix_validation_runs_status"]
+    environment [name: "ix_validation_runs_environment"]
+  }
+}
+
+Table validation_run_items {
+  id varchar(36) [pk, not null]
+  run_id varchar(36) [not null]
+  query_id varchar(36)
+  ordinal integer [not null]
+  query_text_snapshot text [not null]
+  expected_result_snapshot text [not null]
+  category_snapshot varchar(40) [not null]
+  applied_criteria_json text [not null, note: "Stored as JSON string"]
+  logic_field_path_snapshot text [not null]
+  logic_expected_value_snapshot text [not null]
+  context_json_snapshot text [not null, note: "Stored as JSON string"]
+  target_assistant_snapshot text [not null]
+  conversation_room_index integer [not null]
+  repeat_index integer [not null]
+  conversation_id varchar(120) [not null]
+  raw_response text [not null]
+  latency_ms integer
+  error text [not null]
+  raw_json text [not null, note: "Stored as JSON string"]
+  executed_at datetime
+
+  Indexes {
+    run_id [name: "ix_validation_run_items_run_id"]
+    query_id [name: "ix_validation_run_items_query_id"]
+    ordinal [name: "ix_validation_run_items_ordinal"]
+  }
+}
+
+Table validation_llm_evaluations {
+  id varchar(36) [pk, not null]
+  run_item_id varchar(36) [not null]
+  eval_model varchar(120) [not null]
+  metric_scores_json text [not null, note: "Stored as JSON string"]
+  total_score float
+  llm_comment text [not null]
+  status varchar(40) [not null]
+  evaluated_at datetime [not null]
+
+  Indexes {
+    run_item_id [unique, name: "ix_validation_llm_evaluations_run_item_id"]
+    status [name: "ix_validation_llm_evaluations_status"]
+  }
+}
+
+Table validation_logic_evaluations {
+  id varchar(36) [pk, not null]
+  run_item_id varchar(36) [not null]
+  eval_items_json text [not null, note: "Stored as JSON string"]
+  result varchar(20) [not null]
+  fail_reason text [not null]
+  evaluated_at datetime [not null]
+
+  Indexes {
+    run_item_id [unique, name: "ix_validation_logic_evaluations_run_item_id"]
+    result [name: "ix_validation_logic_evaluations_result"]
+  }
+}
+
+Ref: generic_run_rows.run_id > generic_runs.id
+Ref: generic_runs.base_run_id > generic_runs.id
+
+Ref: validation_queries.group_id > validation_query_groups.id
+
+Ref: validation_runs.base_run_id > validation_runs.id
+Ref: validation_runs.test_set_id > validation_test_sets.id
+
+Ref: validation_run_items.run_id > validation_runs.id
+Ref: validation_run_items.query_id > validation_queries.id
+
+Ref: validation_test_set_items.test_set_id > validation_test_sets.id
+Ref: validation_test_set_items.query_id > validation_queries.id
+
+Ref: validation_llm_evaluations.run_item_id - validation_run_items.id
+Ref: validation_logic_evaluations.run_item_id - validation_run_items.id

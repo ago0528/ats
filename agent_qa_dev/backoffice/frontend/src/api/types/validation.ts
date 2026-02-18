@@ -141,6 +141,19 @@ export type ValidationTestSetConfig = {
   timeoutMs?: number;
 };
 
+export type QuerySelectionFilter = {
+  q?: string;
+  category?: string[];
+  groupId?: string[];
+};
+
+export type QuerySelectionPayload = {
+  mode: 'ids' | 'filtered';
+  queryIds?: string[];
+  filter?: QuerySelectionFilter;
+  excludedQueryIds?: string[];
+};
+
 export type ValidationTestSetItem = {
   id: string;
   queryId: string;
@@ -162,4 +175,12 @@ export type ValidationTestSet = {
   updatedAt?: string;
   queryIds?: string[];
   items?: ValidationTestSetItem[];
+};
+
+export type ValidationTestSetAppendQueriesResult = {
+  testSetId: string;
+  requestedCount: number;
+  addedCount: number;
+  skippedCount: number;
+  itemCount: number;
 };

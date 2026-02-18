@@ -26,18 +26,57 @@ export async function parseUploadPreviewFile(file: File): Promise<UploadPreviewP
   const queryIndex = resolveColumnIndex(headers, ['질의', 'query', 'query_text']);
   const categoryIndex = resolveColumnIndex(headers, ['카테고리', 'category']);
   const groupIndex = resolveColumnIndex(headers, ['그룹', 'group', 'group_name', 'groupId', 'group_id']);
+  const targetAssistantIndex = resolveColumnIndex(headers, ['targetAssistant', 'target_assistant', '대상어시스턴트']);
+  const contextJsonIndex = resolveColumnIndex(headers, ['contextJson', 'context_json', 'context', '컨텍스트']);
+  const expectedResultIndex = resolveColumnIndex(headers, ['기대 결과', '기대결과', '기대값', 'expectedResult', 'expected_result', 'expected']);
+  const llmEvalCriteriaIndex = resolveColumnIndex(headers, ['LLM 평가기준(JSON)', 'LLM 평가기준', 'llmEvalCriteria', 'llm_eval_criteria']);
+  const logicFieldPathIndex = resolveColumnIndex(headers, ['Logic 검증 필드', '검증 필드', 'logicFieldPath', 'logic_field_path', 'field_path']);
+  const logicExpectedValueIndex = resolveColumnIndex(headers, [
+    'Logic 기대값',
+    '검증 기대값',
+    'logicExpectedValue',
+    'logic_expected_value',
+    'logic_expected',
+    'expected_value',
+  ]);
 
   const parsedRows = lines.slice(1).reduce<UploadPreviewRow[]>((acc, line, index) => {
     const columns = splitCsvLine(line).map(normalizeCsvCell);
     const queryText = queryIndex >= 0 ? (columns[queryIndex] || '') : '';
     const category = categoryIndex >= 0 ? (columns[categoryIndex] || '') : '';
     const groupName = groupIndex >= 0 ? (columns[groupIndex] || '') : '';
-    if (!queryText && !category && !groupName) return acc;
+    const targetAssistant = targetAssistantIndex >= 0 ? (columns[targetAssistantIndex] || '') : '';
+    const contextJson = contextJsonIndex >= 0 ? (columns[contextJsonIndex] || '') : '';
+    const expectedResult = expectedResultIndex >= 0 ? (columns[expectedResultIndex] || '') : '';
+    const llmEvalCriteria = llmEvalCriteriaIndex >= 0 ? (columns[llmEvalCriteriaIndex] || '') : '';
+    const logicFieldPath = logicFieldPathIndex >= 0 ? (columns[logicFieldPathIndex] || '') : '';
+    const logicExpectedValue = logicExpectedValueIndex >= 0 ? (columns[logicExpectedValueIndex] || '') : '';
+
+    if (
+      !queryText
+      && !category
+      && !groupName
+      && !targetAssistant
+      && !contextJson
+      && !expectedResult
+      && !llmEvalCriteria
+      && !logicFieldPath
+      && !logicExpectedValue
+    ) {
+      return acc;
+    }
+
     acc.push({
       key: String(index + 1),
       queryText: queryText || '-',
       category: category || '-',
       groupName: groupName || '-',
+      targetAssistant: targetAssistant || '-',
+      contextJson: contextJson || '-',
+      expectedResult: expectedResult || '-',
+      llmEvalCriteria: llmEvalCriteria || '-',
+      logicFieldPath: logicFieldPath || '-',
+      logicExpectedValue: logicExpectedValue || '-',
     });
     return acc;
   }, []);

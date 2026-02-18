@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from app.repositories.validation_settings import ValidationSettingsRepository
 from app.repositories.validation_test_sets import ValidationTestSetRepository
 
 router = APIRouter(tags=["validation-test-sets"])
+QUERY_SELECTION_LIMIT = 5000
 
 
 def _parse_json_text(value: str) -> dict[str, Any]:
@@ -43,6 +44,66 @@ def _validate_query_ids(query_repo: ValidationQueryRepository, query_ids: list[s
     return normalized
 
 
+def _normalize_values(items: list[str]) -> list[str]:
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def _resolve_query_ids_from_selection(
+    query_repo: ValidationQueryRepository,
+    selection: "ValidationTestSetQuerySelection",
+) -> list[str]:
+    if selection.mode == "ids":
+        resolved_query_ids = _validate_query_ids(query_repo, selection.queryIds)
+        excluded_ids = set(_normalize_values(selection.excludedQueryIds))
+        filtered_query_ids = [query_id for query_id in resolved_query_ids if query_id not in excluded_ids]
+        if not filtered_query_ids:
+            raise HTTPException(status_code=400, detail="No queries matched selection")
+        return filtered_query_ids
+
+    if selection.filter is None:
+        raise HTTPException(status_code=400, detail="querySelection.filter is required when mode is 'filtered'")
+
+    categories = _normalize_values(selection.filter.category)
+    group_ids = _normalize_values(selection.filter.groupId)
+    excluded_ids = _normalize_values(selection.excludedQueryIds)
+    query_text = str(selection.filter.q or "").strip()
+
+    resolved_query_ids = query_repo.list_ids(
+        q=query_text or None,
+        categories=categories or None,
+        group_ids=group_ids or None,
+        excluded_ids=excluded_ids or None,
+        limit=QUERY_SELECTION_LIMIT + 1,
+    )
+    if len(resolved_query_ids) > QUERY_SELECTION_LIMIT:
+        raise HTTPException(status_code=400, detail=f"Selected queries exceed limit ({QUERY_SELECTION_LIMIT})")
+    if not resolved_query_ids:
+        raise HTTPException(status_code=400, detail="No queries matched selection")
+    return resolved_query_ids
+
+
+def _resolve_query_ids_for_request(
+    query_repo: ValidationQueryRepository,
+    *,
+    query_ids: list[str],
+    query_selection: Optional["ValidationTestSetQuerySelection"],
+    allow_empty: bool,
+) -> list[str]:
+    has_query_ids = len(_normalize_values(query_ids)) > 0
+    if has_query_ids and query_selection is not None:
+        raise HTTPException(status_code=400, detail="Use either queryIds or querySelection")
+
+    resolved_query_ids: list[str]
+    if query_selection is not None:
+        resolved_query_ids = _resolve_query_ids_from_selection(query_repo, query_selection)
+    else:
+        resolved_query_ids = _validate_query_ids(query_repo, query_ids)
+
+    if not allow_empty and not resolved_query_ids:
+        raise HTTPException(status_code=400, detail="No queries selected")
+    return resolved_query_ids
+
+
 def _resolve_config_value(
     *,
     override: Optional[Any],
@@ -67,10 +128,24 @@ class ValidationTestSetConfig(BaseModel):
     timeoutMs: Optional[int] = None
 
 
+class ValidationTestSetQuerySelectionFilter(BaseModel):
+    q: str = ""
+    category: list[str] = Field(default_factory=list)
+    groupId: list[str] = Field(default_factory=list)
+
+
+class ValidationTestSetQuerySelection(BaseModel):
+    mode: Literal["ids", "filtered"]
+    queryIds: list[str] = Field(default_factory=list)
+    filter: Optional[ValidationTestSetQuerySelectionFilter] = None
+    excludedQueryIds: list[str] = Field(default_factory=list)
+
+
 class ValidationTestSetCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
     queryIds: list[str] = Field(default_factory=list)
+    querySelection: Optional[ValidationTestSetQuerySelection] = None
     config: ValidationTestSetConfig = Field(default_factory=ValidationTestSetConfig)
 
 
@@ -83,6 +158,11 @@ class ValidationTestSetUpdateRequest(BaseModel):
 
 class ValidationTestSetCloneRequest(BaseModel):
     name: Optional[str] = None
+
+
+class ValidationTestSetAppendQueriesRequest(BaseModel):
+    queryIds: list[str] = Field(default_factory=list)
+    querySelection: Optional[ValidationTestSetQuerySelection] = None
 
 
 class ValidationTestSetRunCreateRequest(BaseModel):
@@ -115,7 +195,12 @@ def list_validation_test_sets(
 @router.post("/validation-test-sets")
 def create_validation_test_set(body: ValidationTestSetCreateRequest, db: Session = Depends(get_db)):
     query_repo = ValidationQueryRepository(db)
-    validated_query_ids = _validate_query_ids(query_repo, body.queryIds)
+    validated_query_ids = _resolve_query_ids_for_request(
+        query_repo,
+        query_ids=body.queryIds,
+        query_selection=body.querySelection,
+        allow_empty=True,
+    )
 
     repo = ValidationTestSetRepository(db)
     created = repo.create(
@@ -183,6 +268,36 @@ def update_validation_test_set(test_set_id: str, body: ValidationTestSetUpdateRe
     db.commit()
     item_count = len(validated_query_ids) if validated_query_ids is not None else len(repo.list_items(updated.id))
     return repo.build_payload(updated, item_count=item_count)
+
+
+@router.post("/validation-test-sets/{test_set_id}/append-queries")
+def append_queries_to_validation_test_set(
+    test_set_id: str,
+    body: ValidationTestSetAppendQueriesRequest,
+    db: Session = Depends(get_db),
+):
+    repo = ValidationTestSetRepository(db)
+    if repo.get(test_set_id) is None:
+        raise HTTPException(status_code=404, detail="Test set not found")
+
+    query_repo = ValidationQueryRepository(db)
+    resolved_query_ids = _resolve_query_ids_for_request(
+        query_repo,
+        query_ids=body.queryIds,
+        query_selection=body.querySelection,
+        allow_empty=False,
+    )
+
+    added_count, skipped_count = repo.append_items(test_set_id, resolved_query_ids)
+    db.commit()
+    item_count = repo.count_items_by_test_set_ids([test_set_id]).get(test_set_id, 0)
+    return {
+        "testSetId": test_set_id,
+        "requestedCount": len(resolved_query_ids),
+        "addedCount": added_count,
+        "skippedCount": skipped_count,
+        "itemCount": item_count,
+    }
 
 
 @router.delete("/validation-test-sets/{test_set_id}")

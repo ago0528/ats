@@ -1,19 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Form } from 'antd';
 import type { MessageInstance } from 'antd/es/message/interface';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { AxiosError } from 'axios';
 
 import {
+  appendQueriesToValidationTestSet,
   createQuery,
+  createValidationTestSet,
   deleteQuery,
   listQueries,
   listQueryGroups,
+  listValidationTestSets,
   previewQueriesBulkUpload,
   updateQuery,
   uploadQueriesBulk,
 } from '../../../api/validation';
-import type { QueryCategory, QueryGroup, ValidationQuery } from '../../../api/types/validation';
+import type {
+  QueryCategory,
+  QueryGroup,
+  QuerySelectionFilter,
+  QuerySelectionPayload,
+  ValidationQuery,
+  ValidationTestSet,
+} from '../../../api/types/validation';
 import type { Environment } from '../../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../../app/types';
 import { formatDateTime, formatShortDate, toTimestamp } from '../../../shared/utils/dateTime';
@@ -34,9 +44,74 @@ type QueryFormValues = {
   targetAssistant: string;
 };
 
+type CreateTestSetFromSelectionValues = {
+  name: string;
+  description: string;
+};
+
+type AppendToTestSetValues = {
+  testSetId: string;
+};
+
+type QuerySelectionSnapshot = {
+  filter: QuerySelectionFilter;
+  signature: string;
+  totalMatched: number;
+};
+
 function normalizeMultiSelectValue(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function normalizeStringArray(values?: string[]) {
+  return Array.from(new Set((values || []).map((value) => String(value).trim()).filter(Boolean)));
+}
+
+function buildSelectionFilter({
+  search,
+  category,
+  groupId,
+}: {
+  search: string;
+  category: string[];
+  groupId: string[];
+}): QuerySelectionFilter {
+  return {
+    q: String(search || '').trim(),
+    category: normalizeStringArray(category),
+    groupId: normalizeStringArray(groupId),
+  };
+}
+
+function buildSelectionSignature(filter: QuerySelectionFilter): string {
+  const normalized = {
+    q: String(filter.q || '').trim(),
+    category: normalizeStringArray(filter.category).sort(),
+    groupId: normalizeStringArray(filter.groupId).sort(),
+  };
+  return JSON.stringify(normalized);
+}
+
+function toQuerySelectionPayload(selection: {
+  mode: 'manual' | 'filtered';
+  manualSelectedRowKeys: string[];
+  filteredSelectionSnapshot: QuerySelectionSnapshot | null;
+  filteredDeselectedIds: string[];
+}): QuerySelectionPayload | null {
+  if (selection.mode === 'filtered') {
+    if (!selection.filteredSelectionSnapshot) return null;
+    return {
+      mode: 'filtered',
+      filter: selection.filteredSelectionSnapshot.filter,
+      excludedQueryIds: selection.filteredDeselectedIds,
+    };
+  }
+  if (selection.manualSelectedRowKeys.length === 0) return null;
+  return {
+    mode: 'ids',
+    queryIds: selection.manualSelectedRowKeys,
+  };
 }
 
 export function useQueryManagement({
@@ -55,7 +130,10 @@ export function useQueryManagement({
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string[]>([]);
   const [groupId, setGroupId] = useState<string[]>([]);
-  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [manualSelectedRowKeys, setManualSelectedRowKeys] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState<'manual' | 'filtered'>('manual');
+  const [filteredSelectionSnapshot, setFilteredSelectionSnapshot] = useState<QuerySelectionSnapshot | null>(null);
+  const [filteredDeselectedIds, setFilteredDeselectedIds] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ValidationQuery | null>(null);
   const [saving, setSaving] = useState(false);
@@ -70,10 +148,57 @@ export function useQueryManagement({
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [createTestSetModalOpen, setCreateTestSetModalOpen] = useState(false);
+  const [creatingTestSet, setCreatingTestSet] = useState(false);
+  const [appendToTestSetModalOpen, setAppendToTestSetModalOpen] = useState(false);
+  const [appendingToTestSet, setAppendingToTestSet] = useState(false);
+  const [testSetOptionsLoading, setTestSetOptionsLoading] = useState(false);
+  const [testSetOptions, setTestSetOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(50);
   const previewRequestSeq = useRef(0);
   const [form] = Form.useForm<QueryFormValues>();
+
+  const currentSelectionFilter = useMemo(
+    () => buildSelectionFilter({ search, category, groupId }),
+    [search, category, groupId],
+  );
+  const currentSelectionSignature = useMemo(
+    () => buildSelectionSignature(currentSelectionFilter),
+    [currentSelectionFilter],
+  );
+  const isFilteredSelectionActive = selectionMode === 'filtered' && filteredSelectionSnapshot !== null;
+  const isFilteredSelectionLocked = isFilteredSelectionActive
+    ? filteredSelectionSnapshot.signature !== currentSelectionSignature
+    : false;
+
+  const selectedCount = isFilteredSelectionActive
+    ? Math.max(0, filteredSelectionSnapshot.totalMatched - filteredDeselectedIds.length)
+    : manualSelectedRowKeys.length;
+  const filteredSelectionTotal = filteredSelectionSnapshot?.totalMatched || 0;
+  const filteredDeselectedCount = filteredDeselectedIds.length;
+  const canBulkDelete = selectionMode === 'manual' && manualSelectedRowKeys.length > 0;
+
+  const tableSelectedRowKeys = useMemo(() => {
+    if (!isFilteredSelectionActive) return manualSelectedRowKeys;
+    if (isFilteredSelectionLocked) return [];
+    const deselectedSet = new Set(filteredDeselectedIds);
+    return items.map((item) => String(item.id)).filter((queryId) => !deselectedSet.has(queryId));
+  }, [
+    filteredDeselectedIds,
+    isFilteredSelectionActive,
+    isFilteredSelectionLocked,
+    items,
+    manualSelectedRowKeys,
+  ]);
+
+  const clearQuerySelection = () => {
+    setSelectionMode('manual');
+    setManualSelectedRowKeys([]);
+    setFilteredSelectionSnapshot(null);
+    setFilteredDeselectedIds([]);
+    setBulkDeleteModalOpen(false);
+  };
 
   const loadGroups = async () => {
     try {
@@ -124,6 +249,24 @@ export function useQueryManagement({
   useEffect(() => {
     void loadQueries();
   }, [search, category, groupId, currentPage, pageSize, environment, tokens.bearer, tokens.cms, tokens.mrs]);
+
+  const loadTestSetOptions = async () => {
+    try {
+      setTestSetOptionsLoading(true);
+      const data = await listValidationTestSets({ limit: 300 });
+      setTestSetOptions(
+        data.items.map((item: ValidationTestSet) => ({
+          label: `${item.name} (${item.itemCount}건)`,
+          value: item.id,
+        })),
+      );
+    } catch (error) {
+      console.error(error);
+      message.error('테스트 세트 목록 조회에 실패했습니다.');
+    } finally {
+      setTestSetOptionsLoading(false);
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -204,7 +347,8 @@ export function useQueryManagement({
   const handleDelete = async (queryId: string) => {
     try {
       await deleteQuery(queryId);
-      setSelectedRowKeys((prev) => prev.filter((key) => key !== queryId));
+      setManualSelectedRowKeys((prev) => prev.filter((key) => key !== queryId));
+      setFilteredDeselectedIds((prev) => prev.filter((key) => key !== queryId));
       message.success('질의가 삭제됐어요.');
       await loadQueries();
     } catch (error) {
@@ -338,8 +482,8 @@ export function useQueryManagement({
   };
 
   const handleBulkDelete = async () => {
-    if (selectedRowKeys.length === 0) return;
-    const targetIds = [...selectedRowKeys];
+    if (manualSelectedRowKeys.length === 0) return;
+    const targetIds = [...manualSelectedRowKeys];
     try {
       setBulkDeleting(true);
       const results = await Promise.allSettled(targetIds.map((queryId) => deleteQuery(queryId)));
@@ -354,7 +498,7 @@ export function useQueryManagement({
       } else {
         message.warning(`일부 질의만 삭제됐어요. (${successCount}/${targetIds.length})`);
       }
-      setSelectedRowKeys(failedIds);
+      setManualSelectedRowKeys(failedIds);
       setBulkDeleteModalOpen(false);
       await loadQueries();
     } catch (error) {
@@ -380,6 +524,135 @@ export function useQueryManagement({
     setCurrentPage(1);
   };
 
+  const handleRowSelectionChange = (keys: Array<string | number | bigint>) => {
+    if (!isFilteredSelectionActive) {
+      setManualSelectedRowKeys(keys.map(String));
+      return;
+    }
+    if (isFilteredSelectionLocked) return;
+    const selectedKeySet = new Set(keys.map(String));
+    const pageIds = items.map((item) => String(item.id));
+    setFilteredDeselectedIds((prev) => {
+      const next = new Set(prev);
+      pageIds.forEach((pageId) => {
+        if (selectedKeySet.has(pageId)) {
+          next.delete(pageId);
+        } else {
+          next.add(pageId);
+        }
+      });
+      return Array.from(next);
+    });
+  };
+
+  const handleSelectAllFiltered = () => {
+    if (total <= 0) {
+      message.warning('선택할 질의가 없어요.');
+      return;
+    }
+    setSelectionMode('filtered');
+    setFilteredSelectionSnapshot({
+      filter: currentSelectionFilter,
+      signature: currentSelectionSignature,
+      totalMatched: total,
+    });
+    setFilteredDeselectedIds([]);
+    setManualSelectedRowKeys([]);
+  };
+
+  const handleOpenCreateTestSetModal = () => {
+    if (selectedCount <= 0) {
+      message.warning('테스트 세트로 만들 질의를 선택해 주세요.');
+      return;
+    }
+    setCreateTestSetModalOpen(true);
+  };
+
+  const handleOpenAppendToTestSetModal = async () => {
+    if (selectedCount <= 0) {
+      message.warning('테스트 세트에 추가할 질의를 선택해 주세요.');
+      return;
+    }
+    setAppendToTestSetModalOpen(true);
+    if (testSetOptions.length === 0) {
+      await loadTestSetOptions();
+    }
+  };
+
+  const handleCreateTestSetFromSelection = async (values: CreateTestSetFromSelectionValues) => {
+    const payload = toQuerySelectionPayload({
+      mode: selectionMode,
+      manualSelectedRowKeys,
+      filteredSelectionSnapshot,
+      filteredDeselectedIds,
+    });
+    if (!payload || selectedCount <= 0) {
+      message.warning('선택된 질의가 없어요.');
+      return;
+    }
+
+    try {
+      setCreatingTestSet(true);
+      const data = await createValidationTestSet({
+        name: String(values.name || '').trim(),
+        description: String(values.description || '').trim(),
+        querySelection: payload,
+      });
+      message.success(`테스트 세트를 생성했습니다. (${data.itemCount}건)`);
+      setCreateTestSetModalOpen(false);
+      clearQuerySelection();
+    } catch (error) {
+      console.error(error);
+      const detail = error instanceof AxiosError ? String(error.response?.data?.detail || '').trim() : '';
+      if (detail) {
+        message.error(`테스트 세트 생성에 실패했습니다. (${detail})`);
+      } else {
+        message.error('테스트 세트 생성에 실패했습니다.');
+      }
+    } finally {
+      setCreatingTestSet(false);
+    }
+  };
+
+  const handleAppendToTestSet = async (values: AppendToTestSetValues) => {
+    const payload = toQuerySelectionPayload({
+      mode: selectionMode,
+      manualSelectedRowKeys,
+      filteredSelectionSnapshot,
+      filteredDeselectedIds,
+    });
+    if (!payload || selectedCount <= 0) {
+      message.warning('선택된 질의가 없어요.');
+      return;
+    }
+
+    const targetTestSetId = String(values.testSetId || '').trim();
+    if (!targetTestSetId) {
+      message.warning('추가할 테스트 세트를 선택해 주세요.');
+      return;
+    }
+
+    try {
+      setAppendingToTestSet(true);
+      const result = await appendQueriesToValidationTestSet(targetTestSetId, {
+        querySelection: payload,
+      });
+      message.success(`질의를 추가했습니다. (추가 ${result.addedCount}건, 중복 ${result.skippedCount}건)`);
+      setAppendToTestSetModalOpen(false);
+      clearQuerySelection();
+    } catch (error) {
+      console.error(error);
+      const detail = error instanceof AxiosError ? String(error.response?.data?.detail || '').trim() : '';
+      if (detail) {
+        message.error(`테스트 세트 추가에 실패했습니다. (${detail})`);
+      } else {
+        message.error('테스트 세트 추가에 실패했습니다.');
+      }
+    } finally {
+      setAppendingToTestSet(false);
+    }
+  };
+
   return {
     groups,
     items,
@@ -387,8 +660,13 @@ export function useQueryManagement({
     loading,
     category,
     groupId,
-    selectedRowKeys,
-    setSelectedRowKeys,
+    selectionMode,
+    isFilteredSelectionLocked,
+    selectedCount,
+    filteredSelectionTotal,
+    filteredDeselectedCount,
+    tableSelectedRowKeys,
+    canBulkDelete,
     modalOpen,
     setModalOpen,
     editing,
@@ -406,6 +684,12 @@ export function useQueryManagement({
     bulkDeleteModalOpen,
     setBulkDeleteModalOpen,
     bulkDeleting,
+    createTestSetModalOpen,
+    creatingTestSet,
+    appendToTestSetModalOpen,
+    appendingToTestSet,
+    testSetOptionsLoading,
+    testSetOptions,
     currentPage,
     pageSize,
     setCurrentPage,
@@ -424,10 +708,19 @@ export function useQueryManagement({
     handleSearch,
     handleCategoryChange,
     handleGroupChange,
+    handleRowSelectionChange,
+    handleSelectAllFiltered,
+    clearQuerySelection,
+    handleOpenCreateTestSetModal,
+    handleOpenAppendToTestSetModal,
+    handleCreateTestSetFromSelection,
+    handleAppendToTestSet,
+    closeCreateTestSetModal: () => setCreateTestSetModalOpen(false),
+    closeAppendToTestSetModal: () => setAppendToTestSetModalOpen(false),
     loadQueries,
     formatDateTime,
     formatShortDate,
   };
 }
 
-export type { QueryFormValues };
+export type { AppendToTestSetValues, CreateTestSetFromSelectionValues, QueryFormValues };

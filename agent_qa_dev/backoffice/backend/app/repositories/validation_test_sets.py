@@ -141,6 +141,41 @@ class ValidationTestSetRepository:
             )
         self.db.flush()
 
+    def append_items(self, test_set_id: str, query_ids: list[str]) -> tuple[int, int]:
+        entity = self.get(test_set_id)
+        if entity is None:
+            raise ValueError("Test set not found")
+
+        unique_query_ids = list(dict.fromkeys([query_id for query_id in query_ids if str(query_id).strip()]))
+        if not unique_query_ids:
+            return 0, 0
+
+        existing_items = self.list_items(test_set_id)
+        existing_query_ids = {item.query_id for item in existing_items}
+        next_ordinal = max((item.ordinal for item in existing_items), default=0)
+
+        added_count = 0
+        skipped_count = 0
+        for query_id in unique_query_ids:
+            if query_id in existing_query_ids:
+                skipped_count += 1
+                continue
+            next_ordinal += 1
+            self.db.add(
+                ValidationTestSetItem(
+                    test_set_id=test_set_id,
+                    query_id=query_id,
+                    ordinal=next_ordinal,
+                ),
+            )
+            existing_query_ids.add(query_id)
+            added_count += 1
+
+        if added_count > 0:
+            entity.updated_at = dt.datetime.utcnow()
+        self.db.flush()
+        return added_count, skipped_count
+
     def delete(self, test_set_id: str) -> bool:
         entity = self.get(test_set_id)
         if entity is None:

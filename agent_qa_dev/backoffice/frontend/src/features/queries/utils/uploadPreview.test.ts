@@ -12,6 +12,28 @@ describe('query upload preview parser', () => {
     expect(result.rows[0]).toMatchObject({ queryText: 'hello', category: 'Happy path', groupName: 'group-a' });
   });
 
+  it('parses optional query columns from template headers', async () => {
+    const csv = [
+      '질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값',
+      'hello,Happy path,group-a,ASSISTANT_A,{"recruitPlanId":123},결과 설명,{"정확성":5},assistantMessage,채용',
+    ].join('\n');
+    const file = new File([csv], 'queries.csv', { type: 'text/csv' });
+
+    const result = await parseUploadPreviewFile(file);
+    expect(result.totalRows).toBe(1);
+    expect(result.rows[0]).toMatchObject({
+      queryText: 'hello',
+      category: 'Happy path',
+      groupName: 'group-a',
+      targetAssistant: 'ASSISTANT_A',
+      contextJson: '{recruitPlanId:123}',
+      expectedResult: '결과 설명',
+      llmEvalCriteria: '{정확성:5}',
+      logicFieldPath: 'assistantMessage',
+      logicExpectedValue: '채용',
+    });
+  });
+
   it('returns excel warning for non-csv files', async () => {
     const file = new File(['x'], 'queries.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const result = await parseUploadPreviewFile(file);

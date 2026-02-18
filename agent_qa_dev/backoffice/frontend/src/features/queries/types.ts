@@ -13,6 +13,12 @@ export type UploadPreviewRow = {
   queryText: string;
   category: string;
   groupName: string;
+  targetAssistant: string;
+  contextJson: string;
+  expectedResult: string;
+  llmEvalCriteria: string;
+  logicFieldPath: string;
+  logicExpectedValue: string;
 };
 
 export type UploadPreviewParseResult = {

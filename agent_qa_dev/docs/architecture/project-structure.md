@@ -1,6 +1,6 @@
 # Project Structure Map
 
-- 기준 시각: 2026-02-17
+- 기준 시각: 2026-02-18
 - 목적: 작업 시작 전에 "어디를 수정해야 하는지" 빠르게 판단하기 위한 구조 지도
 
 ## 1) 루트 구조
@@ -8,6 +8,8 @@
 ```text
 agent_qa_dev/
 ├─ AGENTS.md
+├─ scripts/
+│  └─ worktree_release.sh
 ├─ backoffice/
 │  ├─ backend/
 │  └─ frontend/
@@ -49,8 +51,9 @@ agent_qa_dev/
 
 - 운영 규칙: `AGENTS.md`
 - 프론트 정보구조: `docs/architecture/backoffice-frontend-information-architecture.md`
-- 스킬 인덱스: `docs/skills/AGENTS.md`
+- 스킬 인덱스: `AGENTS.md`의 `4) @skills 인덱스 (docs/skills)` 섹션
 - 장애/재발방지 기록: `docs/troubleshooting/incidents`
+- 작업 병합 자동화: `scripts/worktree_release.sh`, `docs/skills/worktree-merge-release/SKILL.md`
 
 ## 3) 유지보수 규칙
 

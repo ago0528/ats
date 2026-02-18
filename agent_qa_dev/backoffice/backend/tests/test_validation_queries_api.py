@@ -12,7 +12,10 @@ def test_validation_queries_crud_and_bulk_upload():
     assert template_resp.status_code == 200
     assert "text/csv" in template_resp.headers.get("content-type", "")
     assert "attachment; filename=\"query_template.csv\"" == template_resp.headers.get("content-disposition")
-    assert "질의,카테고리,그룹" in template_resp.content.decode("utf-8-sig")
+    assert (
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값"
+        in template_resp.content.decode("utf-8-sig")
+    )
 
     group_resp = client.post("/api/v1/query-groups", json={"groupName": "지원자 관리", "description": "그룹"})
     group_id = group_resp.json()["id"]
@@ -50,11 +53,11 @@ def test_validation_queries_crud_and_bulk_upload():
     assert patch_resp.json()["category"] == "Edge case"
 
     csv_body = (
-        "질의,카테고리,그룹\n"
-        "질의1,Happy path,\n"
-        f"질의2,Adversarial input,{group_id}\n"
-        "질의3,Edge case,지원자 관리\n"
-        "질의4,Edge case,없는그룹\n"
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n"
+        "질의1,Happy path,,,,,,,\n"
+        f'질의2,Adversarial input,{group_id},ORCHESTRATOR_WORKER_V3,"{{""recruitPlanId"":123}}",기대 결과 2,"{{""정확성"":5}}",assistantMessage,채용\n'
+        "질의3,Edge case,지원자 관리,,,,,,\n"
+        "질의4,Edge case,없는그룹,,,,,,\n"
     )
     preview_resp = client.post(
         "/api/v1/queries/bulk-upload/preview",
@@ -77,7 +80,17 @@ def test_validation_queries_crud_and_bulk_upload():
     listed = client.get("/api/v1/queries").json()["items"]
     by_text = {item["queryText"]: item for item in listed}
     assert by_text["질의1"]["groupId"] is None
+    assert by_text["질의1"]["expectedResult"] == ""
+    assert by_text["질의1"]["llmEvalCriteria"] == {}
+    assert by_text["질의1"]["logicFieldPath"] == ""
+    assert by_text["질의1"]["logicExpectedValue"] == ""
     assert by_text["질의2"]["groupId"] == group_id
+    assert by_text["질의2"]["targetAssistant"] == "ORCHESTRATOR_WORKER_V3"
+    assert by_text["질의2"]["contextJson"] == '{"recruitPlanId":123}'
+    assert by_text["질의2"]["expectedResult"] == "기대 결과 2"
+    assert by_text["질의2"]["llmEvalCriteria"] == {"정확성": 5}
+    assert by_text["질의2"]["logicFieldPath"] == "assistantMessage"
+    assert by_text["질의2"]["logicExpectedValue"] == "채용"
     assert by_text["질의3"]["groupId"] == group_id
     assert by_text["질의4"]["groupName"] == "없는그룹"
 

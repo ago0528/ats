@@ -1,7 +1,9 @@
 import { api } from './client';
 import type {
+  QuerySelectionPayload,
   QueryGroup,
   ValidationTestSet,
+  ValidationTestSetAppendQueriesResult,
   ValidationTestSetConfig,
   ValidationQuery,
   ValidationRun,
@@ -230,6 +232,7 @@ export async function createValidationTestSet(payload: {
   name: string;
   description?: string;
   queryIds?: string[];
+  querySelection?: QuerySelectionPayload;
   config?: ValidationTestSetConfig;
 }) {
   const { data } = await api.post<ValidationTestSet>('/validation-test-sets', payload);
@@ -251,6 +254,20 @@ export async function deleteValidationTestSet(testSetId: string) {
 
 export async function cloneValidationTestSet(testSetId: string, payload?: { name?: string }) {
   const { data } = await api.post<ValidationTestSet>(`/validation-test-sets/${testSetId}/clone`, payload ?? {});
+  return data;
+}
+
+export async function appendQueriesToValidationTestSet(
+  testSetId: string,
+  payload: {
+    queryIds?: string[];
+    querySelection?: QuerySelectionPayload;
+  },
+) {
+  const { data } = await api.post<ValidationTestSetAppendQueriesResult>(
+    `/validation-test-sets/${testSetId}/append-queries`,
+    payload,
+  );
   return data;
 }
 

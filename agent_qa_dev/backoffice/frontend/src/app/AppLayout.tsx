@@ -251,12 +251,6 @@ export function AppLayout() {
         <QueryManagementPage
           environment={environment}
           tokens={runtimeSecrets}
-          onCreateTestSetFromQueries={(queryIds) => {
-            const queryIdsParam = queryIds
-              .map((queryId) => encodeURIComponent(String(queryId)))
-              .join(',');
-            navigate(`/validation-data/test-sets?mode=create&queryIds=${queryIdsParam}`);
-          }}
         />
       );
     }

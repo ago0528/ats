@@ -3,7 +3,6 @@ import { Button, Card, Descriptions, Empty, Form, Input, InputNumber, Modal, Sel
 import type { ColumnsType } from 'antd/es/table';
 
 import type {
-  QueryGroup,
   ValidationRun,
   ValidationRunItem,
   ValidationTestSet,
@@ -42,9 +41,6 @@ export function ValidationRunSection({
   handleEvaluate,
   handleCompare,
   compareResult,
-  groups,
-  saveTargetGroupId,
-  setSaveTargetGroupId,
   runItemsCurrentPage,
   runItemsPageSize,
   setRunItemsCurrentPage,
@@ -67,9 +63,6 @@ export function ValidationRunSection({
   handleEvaluate: () => Promise<void>;
   handleCompare: () => Promise<void>;
   compareResult: Record<string, unknown> | null;
-  groups: QueryGroup[];
-  saveTargetGroupId: string;
-  setSaveTargetGroupId: (value: string) => void;
   runItemsCurrentPage: number;
   runItemsPageSize: number;
   setRunItemsCurrentPage: (value: number) => void;
@@ -194,16 +187,6 @@ export function ValidationRunSection({
             <Button loading={loading} onClick={() => { void handleCompare(); }} disabled={!runCompareEnabled}>
               결과 비교
             </Button>
-          </Space>
-
-          <Space>
-            <Select
-              placeholder="저장 그룹 선택"
-              options={groups.map((group) => ({ label: group.groupName, value: group.id }))}
-              value={saveTargetGroupId}
-              onChange={(value) => setSaveTargetGroupId(value)}
-              style={{ width: 280 }}
-            />
           </Space>
 
           <StandardDataTable

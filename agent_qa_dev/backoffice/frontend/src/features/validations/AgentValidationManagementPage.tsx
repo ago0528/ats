@@ -9,11 +9,12 @@ import {
   executeValidationRun,
   getValidationGroupDashboard,
   getValidationRun,
+  getValidationTestSet,
   listQueryGroups,
   listValidationRunItems,
   listValidationRuns,
   listValidationTestSets,
-  saveValidationRunItemAsQuery,
+  updateValidationTestSet,
 } from '../../api/validation';
 import type {
   QueryGroup,
@@ -68,7 +69,6 @@ export function AgentValidationManagementPage({
   const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null);
   const [dashboardGroupId, setDashboardGroupId] = useState<string>('');
   const [dashboardData, setDashboardData] = useState<Record<string, unknown> | null>(null);
-  const [saveTargetGroupId, setSaveTargetGroupId] = useState<string>('');
 
   const runQueryParams = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -86,7 +86,6 @@ export function AgentValidationManagementPage({
       ]);
       setGroups(groupData.items);
       setTestSets(testSetData.items);
-      setSaveTargetGroupId((prev) => prev || groupData.items[0]?.id || '');
       setDashboardGroupId((prev) => prev || groupData.items[0]?.id || '');
       setSelectedTestSetId((prev) => {
         if (runQueryParams.testSetId) return runQueryParams.testSetId;
@@ -296,29 +295,39 @@ export function AgentValidationManagementPage({
     }
   };
 
-  const handleSaveAsQuery = async (item: ValidationRunItem) => {
-    if (!selectedRunId) return;
-    if (!saveTargetGroupId) {
-      message.warning('저장할 그룹을 먼저 선택해 주세요.');
+  const handleAddToTestSet = async (item: ValidationRunItem) => {
+    if (!selectedTestSetId) {
+      message.warning('추가할 테스트세트를 먼저 선택해 주세요.');
+      return;
+    }
+    const queryId = item.queryId?.trim();
+    if (!queryId) {
+      message.warning('원본 질의가 없는 항목은 테스트세트에 추가할 수 없습니다.');
       return;
     }
     try {
-      const result = await saveValidationRunItemAsQuery(selectedRunId, item.id, {
-        groupId: saveTargetGroupId,
-        category: item.category,
-        queryText: item.queryText,
-        expectedResult: item.expectedResult,
-      });
-      message.success(`질의 저장 완료: ${result.queryId}`);
+      const testSet = await getValidationTestSet(selectedTestSetId);
+      const queryIds = testSet.queryIds || [];
+      if (queryIds.includes(queryId)) {
+        message.info('이미 선택된 테스트세트에 포함된 질의입니다.');
+        return;
+      }
+      await updateValidationTestSet(selectedTestSetId, { queryIds: [...queryIds, queryId] });
+      setTestSets((prev) => prev.map((row) => (
+        row.id === selectedTestSetId
+          ? { ...row, itemCount: queryIds.length + 1 }
+          : row
+      )));
+      message.success('선택한 테스트세트에 질의를 추가했습니다.');
     } catch (error) {
       console.error(error);
-      message.error('질의 저장에 실패했습니다.');
+      message.error('테스트세트에 질의를 추가하지 못했습니다.');
     }
   };
 
   const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns({
-    handleSaveAsQuery: (item) => {
-      void handleSaveAsQuery(item);
+    handleAddToTestSet: (item) => {
+      void handleAddToTestSet(item);
     },
   });
 
@@ -348,9 +357,6 @@ export function AgentValidationManagementPage({
           handleEvaluate={handleEvaluate}
           handleCompare={handleCompare}
           compareResult={compareResult}
-          groups={groups}
-          saveTargetGroupId={saveTargetGroupId}
-          setSaveTargetGroupId={setSaveTargetGroupId}
           runItemsCurrentPage={runItemsCurrentPage}
           runItemsPageSize={runItemsPageSize}
           setRunItemsCurrentPage={setRunItemsCurrentPage}

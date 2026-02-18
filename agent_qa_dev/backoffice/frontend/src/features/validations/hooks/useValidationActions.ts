@@ -8,9 +8,8 @@ import {
   executeValidationRun,
   getValidationGroupDashboard,
   rerunValidationRun,
-  saveValidationRunItemAsQuery,
 } from '../../../api/validation';
-import type { ValidationRun, ValidationRunCreateRequest, ValidationRunItem } from '../../../api/types/validation';
+import type { ValidationRun, ValidationRunCreateRequest } from '../../../api/types/validation';
 import type { Environment } from '../../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../../app/types';
 import type { RunMode } from '../types';
@@ -40,11 +39,8 @@ export function useValidationActions({
   setCompareResult,
   dashboardGroupId,
   setDashboardData,
-  selectedRunId,
-  saveTargetGroupId,
   loadRuns,
   loadRunDetail,
-  loadMeta,
 }: {
   message: MessageInstance;
   environment: Environment;
@@ -65,11 +61,8 @@ export function useValidationActions({
   setCompareResult: (value: Record<string, unknown> | null) => void;
   dashboardGroupId: string;
   setDashboardData: (value: Record<string, unknown> | null) => void;
-  selectedRunId: string;
-  saveTargetGroupId: string;
   loadRuns: () => Promise<void>;
   loadRunDetail: (runId: string) => Promise<void>;
-  loadMeta: () => Promise<void>;
 }) {
   const handleCreateRun = useCallback(async () => {
     if (runMode === 'REGISTERED' && selectedQueryIds.length === 0) {
@@ -216,27 +209,6 @@ export function useValidationActions({
     }
   }, [dashboardGroupId, message, setDashboardData]);
 
-  const handleSaveAsQuery = useCallback(async (item: ValidationRunItem) => {
-    if (!selectedRunId) return;
-    if (!saveTargetGroupId) {
-      message.warning('저장할 그룹을 먼저 선택해 주세요.');
-      return;
-    }
-    try {
-      const result = await saveValidationRunItemAsQuery(selectedRunId, item.id, {
-        groupId: saveTargetGroupId,
-        category: item.category,
-        queryText: item.queryText,
-        expectedResult: item.expectedResult,
-      });
-      message.success(`질의 저장 완료: ${result.queryId}`);
-      await loadMeta();
-    } catch (error) {
-      console.error(error);
-      message.error('질의 저장에 실패했습니다.');
-    }
-  }, [loadMeta, message, saveTargetGroupId, selectedRunId]);
-
   return {
     handleCreateRun,
     handleExecute,
@@ -244,7 +216,6 @@ export function useValidationActions({
     handleRerun,
     handleCompare,
     handleLoadDashboard,
-    handleSaveAsQuery,
   };
 }
 

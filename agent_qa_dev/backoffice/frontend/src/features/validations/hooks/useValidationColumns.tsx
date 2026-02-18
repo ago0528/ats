@@ -22,9 +22,9 @@ function renderEllipsisCell(value?: string, type?: 'danger') {
 }
 
 export function useValidationColumns({
-  handleSaveAsQuery,
+  handleAddToTestSet,
 }: {
-  handleSaveAsQuery: (item: ValidationRunItem) => void;
+  handleAddToTestSet: (item: ValidationRunItem) => void;
 }) {
   const runItemColumns = useMemo<ColumnsType<ValidationRunItem>>(
     () => [
@@ -80,10 +80,14 @@ export function useValidationColumns({
         key: 'actions',
         title: '작업',
         width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.actions,
-        render: (_, row: ValidationRunItem) => <Button onClick={() => handleSaveAsQuery(row)}>질의 저장</Button>,
+        render: (_, row: ValidationRunItem) => (
+          <Button onClick={() => handleAddToTestSet(row)} disabled={!row.queryId}>
+            테스트세트 추가
+          </Button>
+        ),
       },
     ],
-    [handleSaveAsQuery],
+    [handleAddToTestSet],
   );
 
   const historyDetailItemColumns = useMemo<ColumnsType<ValidationRunItem>>(

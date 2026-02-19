@@ -6,8 +6,6 @@ import {
   Modal,
   Input,
   App,
-  Row,
-  Col,
   Space,
   Tag,
   Typography,
@@ -115,6 +113,8 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const closeModeRef = useRef<ModalMode | null>(null);
   const activeModalRef = useRef<ModalMode | null>(null);
   const diffModifiedChangeRef = useRef<{ dispose: () => void } | null>(null);
+  const viewDiffEditorRef = useRef<{ layout: () => void } | null>(null);
+  const viewDiffWrapperRef = useRef<HTMLDivElement | null>(null);
   const diffEditorRef = useRef<{
     layout: () => void;
     getOriginalEditor?: () => { updateOptions: (options: Record<string, unknown>) => void; getDomNode?: () => HTMLElement | null };
@@ -257,6 +257,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   const clearModalState = () => {
     disposeDiffEditorListeners();
+    viewDiffEditorRef.current = null;
     setActiveModal(null);
     setSelectedWorker('');
     setPromptData({
@@ -316,6 +317,14 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     });
   }, []);
 
+  const layoutViewDiffEditor = useCallback(() => {
+    requestAnimationFrame(() => {
+      const editor = viewDiffEditorRef.current;
+      if (!editor) return;
+      editor.layout();
+    });
+  }, []);
+
   const copyTextToClipboard = async (label: string, text: string, successMessage?: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -345,6 +354,24 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   }, [activeModal, layoutDiffEditor]);
 
   useEffect(() => {
+    if (activeModal !== 'view') {
+      return;
+    }
+
+    const wrapper = viewDiffWrapperRef.current;
+    if (!wrapper) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      layoutViewDiffEditor();
+    });
+    resizeObserver.observe(wrapper);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [activeModal, layoutViewDiffEditor]);
+
+  useEffect(() => {
     activeModalRef.current = activeModal;
   }, [activeModal]);
 
@@ -355,6 +382,14 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
     disposeDiffEditorListeners();
   }, [activeModal, disposeDiffEditorListeners]);
+
+  useEffect(() => {
+    if (activeModal === 'view') {
+      return;
+    }
+
+    viewDiffEditorRef.current = null;
+  }, [activeModal]);
 
 
   const filteredWorkers = useMemo(
@@ -439,7 +474,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
             </div>
           </StandardModalMetaBlock>
-          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0, gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '520px', minHeight: 0, gap: 8 }}>
             <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Space size={8}>
                 <Tag color="blue">길이 차이: {getLengthDelta(promptData.previousPrompt, promptData.currentPrompt)}</Tag>
@@ -469,52 +504,44 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 </Button>
               </Space>
             </div>
-            <Row gutter={12}>
-              <Col xs={24} md={12}>
-                <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                  <Typography.Text strong>직전 프롬프트</Typography.Text>
-                  {!promptData.previousPrompt ? (
-                    <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
-                  ) : null}
-                  <Input.TextArea
-                    value={promptData.previousPrompt}
-                    disabled
-                    style={{
-                      height: 190,
-                      resize: 'none',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    }}
-                  />
-                </Space>
-              </Col>
-              <Col xs={24} md={12}>
-                <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                  <Typography.Text strong>현재 프롬프트</Typography.Text>
-                  <Input.TextArea
-                    value={promptData.currentPrompt}
-                    disabled
-                    style={{
-                      height: 190,
-                      resize: 'none',
-                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                    }}
-                  />
-                </Space>
-              </Col>
-            </Row>
-            <div style={{ width: '100%' }}>
-              <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                <Typography.Text strong>DIFF 미리보기</Typography.Text>
-                <Input.TextArea
-                  value={viewDiffSummary.diffText || '차이가 없습니다.'}
-                  disabled
-                  style={{
-                    height: 120,
-                    resize: 'none',
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                  }}
-                />
-              </Space>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Typography.Text strong>직전 프롬프트</Typography.Text>
+              <Typography.Text strong>현재 프롬프트</Typography.Text>
+            </div>
+            {!promptData.previousPrompt ? (
+              <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
+            ) : null}
+            <div
+              ref={viewDiffWrapperRef}
+              style={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+            >
+              <DiffEditor
+                key={`prompt-view-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
+                language="markdown"
+                original={promptData.previousPrompt}
+                modified={promptData.currentPrompt}
+                originalModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-original/${editorSessionKey}`}
+                modifiedModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-modified/${editorSessionKey}`}
+                onMount={(editor) => {
+                  viewDiffEditorRef.current = editor;
+                  const originalEditor = editor.getOriginalEditor?.();
+                  const modifiedEditor = editor.getModifiedEditor?.();
+                  originalEditor?.updateOptions({
+                    readOnly: true,
+                    renderLineHighlight: 'none',
+                  });
+                  modifiedEditor?.updateOptions({
+                    readOnly: true,
+                    renderLineHighlight: 'none',
+                  });
+                  originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                  modifiedEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                  layoutViewDiffEditor();
+                }}
+                options={DIFF_EDITOR_OPTIONS}
+                height="100%"
+                theme="light"
+              />
             </div>
           </div>
         </div>

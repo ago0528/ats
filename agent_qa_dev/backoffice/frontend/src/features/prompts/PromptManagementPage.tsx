@@ -500,7 +500,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 theme="light"
               />
             </div>
-          </div>
+          </Space>
         </div>
       </StandardModal>
 

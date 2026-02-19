@@ -11,15 +11,17 @@ export const CATEGORY_OPTIONS: Array<{ label: string; value: QueryCategory }> = 
 
 export const BULK_UPLOAD_PREVIEW_LIMIT = 10;
 export const BULK_UPLOAD_EMPTY_TEXT = '질의를 업로드해주세요.';
+export const BULK_UPDATE_EMPTY_TEXT = '질의를 업로드해주세요.';
+export const BULK_UPDATE_PREVIEW_LIMIT = 20;
 
 export const DEFAULT_COLUMN_WIDTHS: Record<QueryColumnKey, number> = {
   queryId: 120,
   queryText: 380,
   category: 140,
   groupName: 100,
+  testSetUsage: 120,
   createdAt: 140,
-  latestRun: 160,
-  latestResult: 220,
+  updatedAt: 140,
   actions: 180,
 };
 

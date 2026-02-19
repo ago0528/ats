@@ -11,6 +11,8 @@ from app.models.validation_llm_evaluation import ValidationLlmEvaluation
 from app.models.validation_logic_evaluation import ValidationLogicEvaluation
 from app.models.validation_query import ValidationQuery
 from app.models.validation_run_item import ValidationRunItem
+from app.models.validation_test_set import ValidationTestSet
+from app.models.validation_test_set_item import ValidationTestSetItem
 
 
 def _to_json_text(value: Any) -> str:
@@ -62,6 +64,47 @@ class ValidationQueryRepository:
         rows = list(self.db.query(ValidationQuery).filter(ValidationQuery.id.in_(query_ids)).all())
         by_id = {row.id: row for row in rows}
         return [by_id[qid] for qid in query_ids if qid in by_id]
+
+    def get_test_set_usage(self, query_ids: list[str]) -> dict[str, dict[str, Any]]:
+        if not query_ids:
+            return {}
+
+        rows = (
+            self.db.query(
+                ValidationTestSetItem.query_id,
+                ValidationTestSetItem.test_set_id,
+                ValidationTestSet.name,
+            )
+            .join(ValidationTestSet, ValidationTestSet.id == ValidationTestSetItem.test_set_id)
+            .filter(ValidationTestSetItem.query_id.in_(query_ids))
+            .order_by(ValidationTestSet.name.asc(), ValidationTestSetItem.test_set_id.asc())
+            .all()
+        )
+        if not rows:
+            return {}
+
+        usage: dict[str, dict[str, Any]] = {}
+        for query_id, test_set_id, test_set_name in rows:
+            if not query_id:
+                continue
+            if query_id not in usage:
+                usage[query_id] = {
+                    "testSetIds": set(),
+                    "testSetNames": [],
+                }
+            test_set_ids = usage[query_id]["testSetIds"]
+            if test_set_id in test_set_ids:
+                continue
+            test_set_ids.add(test_set_id)
+            usage[query_id]["testSetNames"].append(str(test_set_name or "").strip())
+
+        return {
+            query_id: {
+                "count": len(payload["testSetIds"]),
+                "testSetNames": [name for name in payload["testSetNames"] if name],
+            }
+            for query_id, payload in usage.items()
+        }
 
     def list_ids(
         self,

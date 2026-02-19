@@ -34,6 +34,50 @@ export type ValidationQuery = {
     logicResult?: string;
     llmStatus?: string;
   };
+  testSetUsage?: {
+    count: number;
+    testSetNames: string[];
+  };
+};
+
+export type QueryBulkUpdatePreviewStatus =
+  | 'planned-update'
+  | 'unchanged'
+  | 'unmapped-query-id'
+  | 'missing-query-id'
+  | 'duplicate-query-id';
+
+export type QueryBulkUpdatePreviewRow = {
+  rowNo: number;
+  queryId: string;
+  queryText: string;
+  status: QueryBulkUpdatePreviewStatus | string;
+  changedFields: string[];
+};
+
+export type QueryBulkUpdatePreviewResult = {
+  totalRows: number;
+  validRows: number;
+  plannedUpdateCount: number;
+  unchangedCount: number;
+  unmappedQueryCount: number;
+  missingQueryIdRows: number[];
+  duplicateQueryIdRows?: number[];
+  unmappedQueryRows: number[];
+  unmappedQueryIds: string[];
+  groupsToCreate: string[];
+  groupsToCreateRows: number[];
+  previewRows: QueryBulkUpdatePreviewRow[];
+};
+
+export type QueryBulkUpdateResult = {
+  requestedRowCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedUnmappedCount: number;
+  skippedMissingIdCount: number;
+  skippedDuplicateQueryIdCount?: number;
+  createdGroupNames: string[];
 };
 
 export type ValidationRun = {

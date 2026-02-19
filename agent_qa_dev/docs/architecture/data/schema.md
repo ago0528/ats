@@ -242,6 +242,14 @@
 - Index: `ix_validation_queries_group_id(group_id)`
 - Index: `ix_validation_queries_category(category)`
 
+### 조회 파생 정보(비저장)
+
+- `testSetUsage`:
+  - 용도: 질의 관리 화면에서 질의별 테스트 세트 사용 현황(개수/이름 목록) 표시
+  - 산출 방식: `validation_test_set_items.query_id` + `validation_test_sets.name` 조인 기반 집계
+  - 저장 위치: DB 컬럼이 아닌 API 응답 파생 필드
+  - 참고: DB 스키마(테이블/컬럼/관계) 변경 없음
+
 ---
 
 ## 7) `validation_settings`

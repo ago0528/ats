@@ -7,6 +7,9 @@ export function BulkUploadGroupConfirmModal({
   groupNames,
   groupRows,
   loading,
+  title = '그룹 생성 확인',
+  description = '업로드 중 아래 그룹을 새로 생성합니다. 계속할까요?',
+  confirmText = '생성 후 업로드',
   onClose,
   onConfirm,
 }: {
@@ -14,12 +17,15 @@ export function BulkUploadGroupConfirmModal({
   groupNames: string[];
   groupRows: number[];
   loading: boolean;
+  title?: string;
+  description?: string;
+  confirmText?: string;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   return (
     <StandardModal
-      title="그룹 생성 확인"
+      title={title}
       open={open}
       width={560}
       onCancel={onClose}
@@ -29,13 +35,13 @@ export function BulkUploadGroupConfirmModal({
             취소
           </Button>
           <Button type="primary" loading={loading} onClick={onConfirm}>
-            생성 후 업로드
+            {confirmText}
           </Button>
         </Space>
       }
     >
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        <Typography.Text>업로드 중 아래 그룹을 새로 생성합니다. 계속할까요?</Typography.Text>
+        <Typography.Text>{description}</Typography.Text>
         {groupRows.length > 0 ? (
           <Typography.Text type="secondary">감지된 행: {groupRows.join(', ')}</Typography.Text>
         ) : null}

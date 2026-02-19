@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  formatDateYYYYMMDD,
   formatDateTime,
   formatLocaleDateTime,
   formatLocaleTime,
@@ -19,15 +20,19 @@ describe('dateTime utils', () => {
 
   it('formats short date', () => {
     expect(formatShortDate('2024-11-09T12:10:00')).toBe('24-11-09');
+    expect(formatDateYYYYMMDD('2024-11-09T12:10:00')).toBe('2024-11-09');
   });
 
   it('converts UTC boundary into KST day correctly', () => {
     expect(formatDateTime('2024-01-01T23:30:00Z')).toBe('2024-01-02 08:30');
     expect(formatShortDate('2024-01-01T23:30:00Z')).toBe('24-01-02');
+    expect(formatDateYYYYMMDD('2024-01-01T23:30:00Z')).toBe('2024-01-02');
   });
 
   it('returns dash for invalid short date', () => {
     expect(formatShortDate('invalid')).toBe('-');
+    expect(formatDateYYYYMMDD('invalid')).toBe('-');
+    expect(formatDateYYYYMMDD('invalid', '')).toBe('');
   });
 
   it('converts to timestamp', () => {

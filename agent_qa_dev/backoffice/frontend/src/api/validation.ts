@@ -1,5 +1,7 @@
 import { api } from './client';
 import type {
+  QueryBulkUpdatePreviewResult,
+  QueryBulkUpdateResult,
   QuerySelectionPayload,
   QueryGroup,
   ValidationTestSet,
@@ -138,6 +140,28 @@ export async function previewQueriesBulkUpload(file: File, groupId?: string) {
     groupsToCreateRows: number[];
   }>(
     '/queries/bulk-upload/preview',
+    formData,
+  );
+  return data;
+}
+
+export async function previewQueriesBulkUpdate(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<QueryBulkUpdatePreviewResult>(
+    '/queries/bulk-update/preview',
+    formData,
+  );
+  return data;
+}
+
+export async function updateQueriesBulk(file: File, options?: { allowCreateGroups?: boolean; skipUnmappedQueryIds?: boolean }) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('allowCreateGroups', String(Boolean(options?.allowCreateGroups)));
+  formData.append('skipUnmappedQueryIds', String(Boolean(options?.skipUnmappedQueryIds)));
+  const { data } = await api.post<QueryBulkUpdateResult>(
+    '/queries/bulk-update',
     formData,
   );
   return data;

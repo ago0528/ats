@@ -12,12 +12,15 @@ import {
   listQueries,
   listQueryGroups,
   listValidationTestSets,
+  previewQueriesBulkUpdate,
   previewQueriesBulkUpload,
+  updateQueriesBulk,
   updateQuery,
   uploadQueriesBulk,
 } from '../../../api/validation';
 import type {
   QueryCategory,
+  QueryBulkUpdatePreviewResult,
   QueryGroup,
   QuerySelectionFilter,
   QuerySelectionPayload,
@@ -26,10 +29,11 @@ import type {
 } from '../../../api/types/validation';
 import type { Environment } from '../../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../../app/types';
-import { formatDateTime, formatShortDate, toTimestamp } from '../../../shared/utils/dateTime';
+import { toTimestamp } from '../../../shared/utils/dateTime';
 import { parseJsonOrOriginal, stringifyPretty } from '../../../shared/utils/json';
-import { BULK_UPLOAD_EMPTY_TEXT } from '../constants';
-import type { UploadPreviewRow } from '../types';
+import { BULK_UPDATE_EMPTY_TEXT, BULK_UPLOAD_EMPTY_TEXT } from '../constants';
+import type { BulkUpdatePreviewRow, UploadPreviewRow } from '../types';
+import { buildBulkUpdateCsvContent, mapBulkUpdatePreviewRows } from '../utils/bulkUpdate';
 import { parseUploadPreviewFile } from '../utils/uploadPreview';
 
 type QueryFormValues = {
@@ -57,6 +61,11 @@ type QuerySelectionSnapshot = {
   filter: QuerySelectionFilter;
   signature: string;
   totalMatched: number;
+};
+
+type BulkUpdateAttemptOptions = {
+  allowCreateGroups: boolean;
+  skipUnmappedQueryIds: boolean;
 };
 
 function normalizeMultiSelectValue(value: unknown): string[] {
@@ -146,6 +155,19 @@ export function useQueryManagement({
   const [bulkUploadPendingGroupNames, setBulkUploadPendingGroupNames] = useState<string[]>([]);
   const [bulkUploadPendingGroupRows, setBulkUploadPendingGroupRows] = useState<number[]>([]);
   const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkUpdateModalOpen, setBulkUpdateModalOpen] = useState(false);
+  const [bulkUpdateFiles, setBulkUpdateFiles] = useState<UploadFile[]>([]);
+  const [bulkUpdatePreviewRows, setBulkUpdatePreviewRows] = useState<BulkUpdatePreviewRow[]>([]);
+  const [bulkUpdatePreviewTotal, setBulkUpdatePreviewTotal] = useState(0);
+  const [bulkUpdatePreviewEmptyText, setBulkUpdatePreviewEmptyText] = useState(BULK_UPDATE_EMPTY_TEXT);
+  const [bulkUpdatePreviewSummary, setBulkUpdatePreviewSummary] = useState<QueryBulkUpdatePreviewResult | null>(null);
+  const [bulkUpdateGroupConfirmOpen, setBulkUpdateGroupConfirmOpen] = useState(false);
+  const [bulkUpdatePendingGroupNames, setBulkUpdatePendingGroupNames] = useState<string[]>([]);
+  const [bulkUpdatePendingGroupRows, setBulkUpdatePendingGroupRows] = useState<number[]>([]);
+  const [bulkUpdateUnmappedConfirmOpen, setBulkUpdateUnmappedConfirmOpen] = useState(false);
+  const [bulkUpdatePendingUnmappedCount, setBulkUpdatePendingUnmappedCount] = useState(0);
+  const [bulkUpdatePendingOptions, setBulkUpdatePendingOptions] = useState<BulkUpdateAttemptOptions | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [createTestSetModalOpen, setCreateTestSetModalOpen] = useState(false);
@@ -156,7 +178,8 @@ export function useQueryManagement({
   const [testSetOptions, setTestSetOptions] = useState<Array<{ label: string; value: string }>>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(50);
-  const previewRequestSeq = useRef(0);
+  const bulkUploadPreviewRequestSeq = useRef(0);
+  const bulkUpdatePreviewRequestSeq = useRef(0);
   const [form] = Form.useForm<QueryFormValues>();
 
   const currentSelectionFilter = useMemo(
@@ -358,7 +381,7 @@ export function useQueryManagement({
   };
 
   const resetBulkUploadState = () => {
-    previewRequestSeq.current += 1;
+    bulkUploadPreviewRequestSeq.current += 1;
     setBulkUploadFiles([]);
     setBulkUploadPreviewRows([]);
     setBulkUploadPreviewTotal(0);
@@ -386,8 +409,8 @@ export function useQueryManagement({
 
   const handleBulkUploadFileChange = async (nextFiles: UploadFile[]) => {
     const latestFiles = nextFiles.slice(-1);
-    const requestId = previewRequestSeq.current + 1;
-    previewRequestSeq.current = requestId;
+    const requestId = bulkUploadPreviewRequestSeq.current + 1;
+    bulkUploadPreviewRequestSeq.current = requestId;
     setBulkUploadFiles(latestFiles);
     setBulkUploadGroupConfirmOpen(false);
     setBulkUploadPendingGroupNames([]);
@@ -401,7 +424,7 @@ export function useQueryManagement({
     }
     try {
       const preview = await parseUploadPreviewFile(selectedFile);
-      if (requestId !== previewRequestSeq.current) return;
+      if (requestId !== bulkUploadPreviewRequestSeq.current) return;
       setBulkUploadPreviewRows(preview.rows);
       setBulkUploadPreviewTotal(preview.totalRows);
       setBulkUploadPreviewEmptyText(preview.emptyText);
@@ -410,7 +433,7 @@ export function useQueryManagement({
       }
     } catch (error) {
       console.error(error);
-      if (requestId !== previewRequestSeq.current) return;
+      if (requestId !== bulkUploadPreviewRequestSeq.current) return;
       setBulkUploadPreviewRows([]);
       setBulkUploadPreviewTotal(0);
       setBulkUploadPreviewEmptyText('미리보기를 불러오지 못했어요.');
@@ -479,6 +502,212 @@ export function useQueryManagement({
     } finally {
       setBulkUploading(false);
     }
+  };
+
+  const applyBulkUpdatePreview = (preview: QueryBulkUpdatePreviewResult) => {
+    setBulkUpdatePreviewSummary(preview);
+    setBulkUpdatePreviewRows(mapBulkUpdatePreviewRows(preview.previewRows || []));
+    setBulkUpdatePreviewTotal(preview.totalRows || 0);
+    setBulkUpdatePreviewEmptyText('표시할 미리보기가 없어요.');
+  };
+
+  const resetBulkUpdateState = () => {
+    bulkUpdatePreviewRequestSeq.current += 1;
+    setBulkUpdateFiles([]);
+    setBulkUpdatePreviewRows([]);
+    setBulkUpdatePreviewTotal(0);
+    setBulkUpdatePreviewEmptyText(BULK_UPDATE_EMPTY_TEXT);
+    setBulkUpdatePreviewSummary(null);
+    setBulkUpdateGroupConfirmOpen(false);
+    setBulkUpdatePendingGroupNames([]);
+    setBulkUpdatePendingGroupRows([]);
+    setBulkUpdateUnmappedConfirmOpen(false);
+    setBulkUpdatePendingUnmappedCount(0);
+    setBulkUpdatePendingOptions(null);
+  };
+
+  const openBulkUpdateModal = () => {
+    resetBulkUpdateState();
+    setBulkUpdateModalOpen(true);
+  };
+
+  const closeBulkUpdateModal = () => {
+    if (bulkUpdating) return;
+    setBulkUpdateModalOpen(false);
+    resetBulkUpdateState();
+  };
+
+  const closeBulkUpdateGroupConfirmModal = () => {
+    if (bulkUpdating) return;
+    setBulkUpdateGroupConfirmOpen(false);
+  };
+
+  const closeBulkUpdateUnmappedConfirmModal = () => {
+    if (bulkUpdating) return;
+    setBulkUpdateUnmappedConfirmOpen(false);
+  };
+
+  const handleBulkUpdateFileChange = async (nextFiles: UploadFile[]) => {
+    const latestFiles = nextFiles.slice(-1);
+    const requestId = bulkUpdatePreviewRequestSeq.current + 1;
+    bulkUpdatePreviewRequestSeq.current = requestId;
+    setBulkUpdateFiles(latestFiles);
+    setBulkUpdateGroupConfirmOpen(false);
+    setBulkUpdatePendingGroupNames([]);
+    setBulkUpdatePendingGroupRows([]);
+    setBulkUpdateUnmappedConfirmOpen(false);
+    setBulkUpdatePendingUnmappedCount(0);
+    setBulkUpdatePendingOptions(null);
+
+    const selectedFile = latestFiles[0]?.originFileObj;
+    if (!selectedFile) {
+      setBulkUpdatePreviewRows([]);
+      setBulkUpdatePreviewTotal(0);
+      setBulkUpdatePreviewSummary(null);
+      setBulkUpdatePreviewEmptyText(BULK_UPDATE_EMPTY_TEXT);
+      return;
+    }
+
+    try {
+      const preview = await previewQueriesBulkUpdate(selectedFile);
+      if (requestId !== bulkUpdatePreviewRequestSeq.current) return;
+      applyBulkUpdatePreview(preview);
+    } catch (error) {
+      console.error(error);
+      if (requestId !== bulkUpdatePreviewRequestSeq.current) return;
+      setBulkUpdatePreviewRows([]);
+      setBulkUpdatePreviewTotal(0);
+      setBulkUpdatePreviewSummary(null);
+      setBulkUpdatePreviewEmptyText('미리보기를 불러오지 못했어요.');
+      const detail = error instanceof AxiosError ? String(error.response?.data?.detail || '').trim() : '';
+      if (detail) {
+        message.error(`업데이트 미리보기에 실패했습니다. (${detail})`);
+      } else {
+        message.error('업데이트 미리보기에 실패했습니다.');
+      }
+    }
+  };
+
+  const loadAllFilteredQueries = async () => {
+    const selectedCategories = normalizeMultiSelectValue(category);
+    const selectedGroupIds = normalizeMultiSelectValue(groupId);
+    const allItems: ValidationQuery[] = [];
+    let offset = 0;
+    const chunkSize = 500;
+
+    while (true) {
+      const data = await listQueries({
+        q: search || undefined,
+        category: selectedCategories.length > 0 ? selectedCategories : undefined,
+        groupId: selectedGroupIds.length > 0 ? selectedGroupIds : undefined,
+        offset,
+        limit: chunkSize,
+        sortBy: 'createdAt',
+        sortOrder: 'desc',
+      });
+      allItems.push(...data.items);
+      if (allItems.length >= data.total || data.items.length === 0) break;
+      offset += chunkSize;
+    }
+
+    return allItems;
+  };
+
+  const handleDownloadBulkUpdateCsv = async () => {
+    try {
+      const allItems = await loadAllFilteredQueries();
+      if (allItems.length === 0) {
+        message.warning('다운로드할 질의가 없어요.');
+        return;
+      }
+      const csvContent = buildBulkUpdateCsvContent(allItems);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `queries-bulk-update-${Date.now()}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      message.error('CSV 다운로드에 실패했습니다.');
+    }
+  };
+
+  const runBulkUpdateAttempt = async (options: BulkUpdateAttemptOptions) => {
+    const file = bulkUpdateFiles[0]?.originFileObj;
+    if (!file) {
+      message.warning('업로드할 파일을 선택해 주세요.');
+      return;
+    }
+
+    try {
+      setBulkUpdating(true);
+      const preview = await previewQueriesBulkUpdate(file);
+      applyBulkUpdatePreview(preview);
+
+      if ((preview.groupsToCreate?.length || 0) > 0 && !options.allowCreateGroups) {
+        setBulkUpdatePendingOptions({ ...options, allowCreateGroups: true });
+        setBulkUpdatePendingGroupNames(preview.groupsToCreate);
+        setBulkUpdatePendingGroupRows(preview.groupsToCreateRows || []);
+        setBulkUpdateGroupConfirmOpen(true);
+        return;
+      }
+
+      if ((preview.unmappedQueryCount || 0) > 0 && !options.skipUnmappedQueryIds) {
+        setBulkUpdatePendingOptions({ ...options, skipUnmappedQueryIds: true });
+        setBulkUpdatePendingUnmappedCount(preview.unmappedQueryCount || 0);
+        setBulkUpdateUnmappedConfirmOpen(true);
+        return;
+      }
+
+      const result = await updateQueriesBulk(file, options);
+      message.success(`업데이트가 완료됐어요. (${result.updatedCount}건)`);
+      if ((result.createdGroupNames?.length || 0) > 0) {
+        message.info(`그룹이 자동 생성됐어요. (${result.createdGroupNames?.join(', ')})`);
+      }
+      if ((result.skippedUnmappedCount || 0) > 0) {
+        message.warning(`쿼리 ID 미매핑 항목 ${result.skippedUnmappedCount}건은 건너뛰었습니다.`);
+      }
+      setBulkUpdateGroupConfirmOpen(false);
+      setBulkUpdateUnmappedConfirmOpen(false);
+      setBulkUpdatePendingOptions(null);
+      setBulkUpdateModalOpen(false);
+      resetBulkUpdateState();
+      await Promise.all([loadGroups(), loadQueries()]);
+    } catch (error) {
+      console.error(error);
+      const detail = error instanceof AxiosError ? String(error.response?.data?.detail || '').trim() : '';
+      if (detail) {
+        message.error(`대규모 업데이트에 실패했습니다. (${detail})`);
+      } else {
+        message.error('대규모 업데이트에 실패했습니다.');
+      }
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    await runBulkUpdateAttempt({ allowCreateGroups: false, skipUnmappedQueryIds: false });
+  };
+
+  const confirmBulkUpdateWithGroupCreation = async () => {
+    const nextOptions = bulkUpdatePendingOptions ?? { allowCreateGroups: true, skipUnmappedQueryIds: false };
+    await runBulkUpdateAttempt({
+      allowCreateGroups: true,
+      skipUnmappedQueryIds: Boolean(nextOptions.skipUnmappedQueryIds),
+    });
+  };
+
+  const confirmBulkUpdateWithUnmappedSkip = async () => {
+    const nextOptions = bulkUpdatePendingOptions ?? { allowCreateGroups: false, skipUnmappedQueryIds: true };
+    await runBulkUpdateAttempt({
+      allowCreateGroups: Boolean(nextOptions.allowCreateGroups),
+      skipUnmappedQueryIds: true,
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -681,6 +910,18 @@ export function useQueryManagement({
     bulkUploadPendingGroupNames,
     bulkUploadPendingGroupRows,
     bulkUploading,
+    bulkUpdateModalOpen,
+    bulkUpdateFiles,
+    bulkUpdatePreviewRows,
+    bulkUpdatePreviewTotal,
+    bulkUpdatePreviewEmptyText,
+    bulkUpdatePreviewSummary,
+    bulkUpdateGroupConfirmOpen,
+    bulkUpdatePendingGroupNames,
+    bulkUpdatePendingGroupRows,
+    bulkUpdateUnmappedConfirmOpen,
+    bulkUpdatePendingUnmappedCount,
+    bulkUpdating,
     bulkDeleteModalOpen,
     setBulkDeleteModalOpen,
     bulkDeleting,
@@ -704,6 +945,15 @@ export function useQueryManagement({
     handleBulkUploadFileChange,
     handleBulkUpload,
     confirmBulkUploadWithGroupCreation,
+    openBulkUpdateModal,
+    closeBulkUpdateModal,
+    closeBulkUpdateGroupConfirmModal,
+    closeBulkUpdateUnmappedConfirmModal,
+    handleBulkUpdateFileChange,
+    handleBulkUpdate,
+    confirmBulkUpdateWithGroupCreation,
+    confirmBulkUpdateWithUnmappedSkip,
+    handleDownloadBulkUpdateCsv,
     handleBulkDelete,
     handleSearch,
     handleCategoryChange,
@@ -718,8 +968,6 @@ export function useQueryManagement({
     closeCreateTestSetModal: () => setCreateTestSetModalOpen(false),
     closeAppendToTestSetModal: () => setAppendToTestSetModalOpen(false),
     loadQueries,
-    formatDateTime,
-    formatShortDate,
   };
 }
 

@@ -6,6 +6,8 @@ import {
   Modal,
   Input,
   App,
+  Row,
+  Col,
   Space,
   Tag,
   Typography,
@@ -467,40 +469,52 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 </Button>
               </Space>
             </div>
-            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <Typography.Text strong>직전 프롬프트</Typography.Text>
-              <Typography.Text strong>현재 프롬프트</Typography.Text>
-            </div>
-            {!promptData.previousPrompt ? (
-              <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
-            ) : null}
-            <div style={{ width: '100%', flex: 1, minHeight: 0, height: 460 }}>
-              <DiffEditor
-                key={`prompt-view-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
-                language="markdown"
-                original={promptData.previousPrompt}
-                modified={promptData.currentPrompt}
-                originalModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-original/${editorSessionKey}`}
-                modifiedModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-modified/${editorSessionKey}`}
-                onMount={(editor) => {
-                  const originalEditor = editor.getOriginalEditor?.();
-                  const modifiedEditor = editor.getModifiedEditor?.();
-                  originalEditor?.updateOptions({
-                    readOnly: true,
-                    renderLineHighlight: 'none',
-                  });
-                  modifiedEditor?.updateOptions({
-                    readOnly: true,
-                    renderLineHighlight: 'none',
-                  });
-                  originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
-                  modifiedEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
-                  requestAnimationFrame(() => editor.layout());
-                }}
-                options={DIFF_EDITOR_OPTIONS}
-                height="100%"
-                theme="light"
-              />
+            <Row gutter={12}>
+              <Col xs={24} md={12}>
+                <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                  <Typography.Text strong>직전 프롬프트</Typography.Text>
+                  {!promptData.previousPrompt ? (
+                    <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
+                  ) : null}
+                  <Input.TextArea
+                    value={promptData.previousPrompt}
+                    disabled
+                    style={{
+                      height: 190,
+                      resize: 'none',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    }}
+                  />
+                </Space>
+              </Col>
+              <Col xs={24} md={12}>
+                <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                  <Typography.Text strong>현재 프롬프트</Typography.Text>
+                  <Input.TextArea
+                    value={promptData.currentPrompt}
+                    disabled
+                    style={{
+                      height: 190,
+                      resize: 'none',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    }}
+                  />
+                </Space>
+              </Col>
+            </Row>
+            <div style={{ width: '100%' }}>
+              <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                <Typography.Text strong>DIFF 미리보기</Typography.Text>
+                <Input.TextArea
+                  value={viewDiffSummary.diffText || '차이가 없습니다.'}
+                  disabled
+                  style={{
+                    height: 120,
+                    resize: 'none',
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                  }}
+                />
+              </Space>
             </div>
           </div>
         </div>

@@ -42,6 +42,7 @@ const MODAL_WIDTH: Record<ModalMode, string> = {
 
 const DIFF_EDITOR_OPTIONS = {
   renderSideBySide: true,
+  useInlineViewWhenSpaceIsLimited: false,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
   fontSize: 13,
@@ -436,8 +437,8 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
             </div>
           </StandardModalMetaBlock>
-          <Space direction="vertical" style={{ width: '100%' }} size={8}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: 0, gap: 8 }}>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Space size={8}>
                 <Tag color="blue">길이 차이: {getLengthDelta(promptData.previousPrompt, promptData.currentPrompt)}</Tag>
                 <Tag color="success">+Added {viewDiffSummary.added}</Tag>
@@ -466,14 +467,14 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 </Button>
               </Space>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Typography.Text strong>직전 프롬프트</Typography.Text>
               <Typography.Text strong>현재 프롬프트</Typography.Text>
             </div>
             {!promptData.previousPrompt ? (
               <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
             ) : null}
-            <div style={{ flex: 1, minHeight: 0, height: 460 }}>
+            <div style={{ width: '100%', flex: 1, minHeight: 0, height: 460 }}>
               <DiffEditor
                 key={`prompt-view-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
                 language="markdown"
@@ -494,13 +495,14 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                   });
                   originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
                   modifiedEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                  requestAnimationFrame(() => editor.layout());
                 }}
                 options={DIFF_EDITOR_OPTIONS}
                 height="100%"
                 theme="light"
               />
             </div>
-          </Space>
+          </div>
         </div>
       </StandardModal>
 

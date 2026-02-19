@@ -17,6 +17,23 @@ from app.repositories.validation_query_groups import ValidationQueryGroupReposit
 router = APIRouter(tags=["validation-queries"])
 
 ALLOWED_CATEGORIES = {"Happy path", "Edge case", "Adversarial input"}
+QUERY_ID_COLUMN_CANDIDATES = ["쿼리 ID", "query_id", "queryId", "id"]
+QUERY_TEXT_COLUMN_CANDIDATES = ["query_text", "query", "질의"]
+CATEGORY_COLUMN_CANDIDATES = ["category", "카테고리"]
+GROUP_COLUMN_CANDIDATES = ["group_id", "groupId", "group", "group_name", "그룹"]
+TARGET_ASSISTANT_COLUMN_CANDIDATES = ["target_assistant", "targetAssistant", "대상어시스턴트"]
+CONTEXT_JSON_COLUMN_CANDIDATES = ["context_json", "contextJson", "context", "컨텍스트"]
+EXPECTED_RESULT_COLUMN_CANDIDATES = ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"]
+LLM_EVAL_CRITERIA_COLUMN_CANDIDATES = ["llm_eval_criteria", "llmEvalCriteria", "LLM 평가기준", "LLM 평가기준(JSON)"]
+LOGIC_FIELD_PATH_COLUMN_CANDIDATES = ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"]
+LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES = [
+    "logic_expected_value",
+    "logicExpectedValue",
+    "검증 기대값",
+    "Logic 기대값",
+    "logic_expected",
+    "expected_value",
+]
 
 
 def _parse_json_text(value: str) -> Any:
@@ -144,6 +161,269 @@ def _build_all_rows_invalid_detail(*, missing_query_rows: list[int], unknown_gro
     return "; ".join(detail_parts)
 
 
+def _normalize_json_text_for_compare(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    try:
+        payload = json.loads(text)
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    except Exception:
+        return text
+
+
+def _normalized_header_set(df: pd.DataFrame) -> set[str]:
+    return {str(column).replace("\ufeff", "").strip() for column in df.columns}
+
+
+def _has_any_column(headers: set[str], candidates: list[str]) -> bool:
+    normalized_candidates = {candidate.replace("\ufeff", "").strip() for candidate in candidates}
+    return any(candidate in headers for candidate in normalized_candidates)
+
+
+def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
+    headers = _normalized_header_set(df)
+    has_query_text = _has_any_column(headers, QUERY_TEXT_COLUMN_CANDIDATES)
+    has_category = _has_any_column(headers, CATEGORY_COLUMN_CANDIDATES)
+    has_group = _has_any_column(headers, GROUP_COLUMN_CANDIDATES)
+    has_target_assistant = _has_any_column(headers, TARGET_ASSISTANT_COLUMN_CANDIDATES)
+    has_context_json = _has_any_column(headers, CONTEXT_JSON_COLUMN_CANDIDATES)
+    has_expected_result = _has_any_column(headers, EXPECTED_RESULT_COLUMN_CANDIDATES)
+    has_llm_eval_criteria = _has_any_column(headers, LLM_EVAL_CRITERIA_COLUMN_CANDIDATES)
+    has_logic_field_path = _has_any_column(headers, LOGIC_FIELD_PATH_COLUMN_CANDIDATES)
+    has_logic_expected_value = _has_any_column(headers, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES)
+
+    rows: list[dict[str, Any]] = []
+    missing_query_id_rows: list[int] = []
+    duplicate_query_id_rows: list[int] = []
+    seen_query_ids: set[str] = set()
+
+    for row_no, series in enumerate(df.to_dict(orient="records"), start=1):
+        query_id = _extract_cell(series, QUERY_ID_COLUMN_CANDIDATES).strip()
+        if not query_id:
+            missing_query_id_rows.append(row_no)
+        elif query_id in seen_query_ids:
+            duplicate_query_id_rows.append(row_no)
+        else:
+            seen_query_ids.add(query_id)
+
+        rows.append(
+            {
+                "rowNo": row_no,
+                "queryId": query_id,
+                "queryText": _extract_cell(series, QUERY_TEXT_COLUMN_CANDIDATES) if has_query_text else None,
+                "category": (
+                    _normalize_category(_extract_cell(series, CATEGORY_COLUMN_CANDIDATES, default="Happy path"))
+                    if has_category
+                    else None
+                ),
+                "groupValue": _extract_cell(series, GROUP_COLUMN_CANDIDATES).strip() if has_group else None,
+                "targetAssistant": _extract_cell(series, TARGET_ASSISTANT_COLUMN_CANDIDATES) if has_target_assistant else None,
+                "contextJson": _extract_cell(series, CONTEXT_JSON_COLUMN_CANDIDATES) if has_context_json else None,
+                "expectedResult": _extract_cell(series, EXPECTED_RESULT_COLUMN_CANDIDATES) if has_expected_result else None,
+                "llmEvalCriteria": _extract_cell(series, LLM_EVAL_CRITERIA_COLUMN_CANDIDATES) if has_llm_eval_criteria else None,
+                "logicFieldPath": _extract_cell(series, LOGIC_FIELD_PATH_COLUMN_CANDIDATES) if has_logic_field_path else None,
+                "logicExpectedValue": _extract_cell(series, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES) if has_logic_expected_value else None,
+                "hasQueryText": has_query_text,
+                "hasCategory": has_category,
+                "hasGroup": has_group,
+                "hasTargetAssistant": has_target_assistant,
+                "hasContextJson": has_context_json,
+                "hasExpectedResult": has_expected_result,
+                "hasLlmEvalCriteria": has_llm_eval_criteria,
+                "hasLogicFieldPath": has_logic_field_path,
+                "hasLogicExpectedValue": has_logic_expected_value,
+                "missingQueryId": row_no in missing_query_id_rows,
+                "duplicateQueryId": row_no in duplicate_query_id_rows,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "missingQueryIdRows": missing_query_id_rows,
+        "duplicateQueryIdRows": duplicate_query_id_rows,
+    }
+
+
+def _analyze_bulk_update_rows(
+    *,
+    parsed_rows: list[dict[str, Any]],
+    missing_query_id_rows: list[int],
+    duplicate_query_id_rows: list[int],
+    existing_queries_by_id: dict[str, Any],
+    group_map_by_id: dict[str, Any],
+    group_id_by_name: dict[str, str],
+) -> dict[str, Any]:
+    preview_rows: list[dict[str, Any]] = []
+    planned_updates: list[dict[str, Any]] = []
+    unmapped_query_rows: list[int] = []
+    unmapped_query_ids: list[str] = []
+    unknown_group_rows: list[int] = []
+    unknown_group_values: set[str] = set()
+    unchanged_count = 0
+
+    for row in parsed_rows:
+        row_no = int(row["rowNo"])
+        query_id = str(row.get("queryId") or "").strip()
+        uploaded_query_text = str(row.get("queryText") or "").strip() if row.get("hasQueryText") else ""
+
+        if row.get("missingQueryId"):
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "queryId": "",
+                    "queryText": uploaded_query_text,
+                    "status": "missing-query-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        if row.get("duplicateQueryId"):
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "queryId": query_id,
+                    "queryText": uploaded_query_text,
+                    "status": "duplicate-query-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        existing = existing_queries_by_id.get(query_id)
+        if existing is None:
+            unmapped_query_rows.append(row_no)
+            if query_id and query_id not in unmapped_query_ids:
+                unmapped_query_ids.append(query_id)
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "queryId": query_id,
+                    "queryText": uploaded_query_text,
+                    "status": "unmapped-query-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        changed_fields: list[str] = []
+        plan_payload: dict[str, Any] = {
+            "queryId": query_id,
+            "queryText": None,
+            "category": None,
+            "groupValue": None,
+            "updateGroupId": bool(row.get("hasGroup")),
+            "expectedResult": None,
+            "llmEvalCriteria": None,
+            "logicFieldPath": None,
+            "logicExpectedValue": None,
+            "targetAssistant": None,
+            "contextJson": None,
+        }
+
+        if row.get("hasQueryText"):
+            next_query_text = str(row.get("queryText") or "")
+            if next_query_text.strip() != str(existing.query_text or ""):
+                changed_fields.append("queryText")
+                plan_payload["queryText"] = next_query_text
+
+        if row.get("hasCategory"):
+            next_category = str(row.get("category") or "Happy path")
+            if next_category != str(existing.category or ""):
+                changed_fields.append("category")
+                plan_payload["category"] = next_category
+
+        if row.get("hasGroup"):
+            group_value = str(row.get("groupValue") or "").strip()
+            plan_payload["groupValue"] = group_value
+
+            resolved_group_id: Optional[str]
+            if not group_value:
+                resolved_group_id = ""
+            elif group_value in group_map_by_id:
+                resolved_group_id = group_value
+            elif group_value in group_id_by_name:
+                resolved_group_id = group_id_by_name[group_value]
+            else:
+                resolved_group_id = None
+                unknown_group_rows.append(row_no)
+                unknown_group_values.add(group_value)
+
+            if resolved_group_id is None or resolved_group_id != str(existing.group_id or ""):
+                changed_fields.append("group")
+
+        if row.get("hasExpectedResult"):
+            next_expected_result = str(row.get("expectedResult") or "")
+            if next_expected_result != str(existing.expected_result or ""):
+                changed_fields.append("expectedResult")
+                plan_payload["expectedResult"] = next_expected_result
+
+        if row.get("hasLlmEvalCriteria"):
+            next_llm_eval_criteria = str(row.get("llmEvalCriteria") or "")
+            if _normalize_json_text_for_compare(next_llm_eval_criteria) != _normalize_json_text_for_compare(str(existing.llm_eval_criteria_json or "")):
+                changed_fields.append("llmEvalCriteria")
+                plan_payload["llmEvalCriteria"] = next_llm_eval_criteria
+
+        if row.get("hasLogicFieldPath"):
+            next_logic_field_path = str(row.get("logicFieldPath") or "")
+            if next_logic_field_path != str(existing.logic_field_path or ""):
+                changed_fields.append("logicFieldPath")
+                plan_payload["logicFieldPath"] = next_logic_field_path
+
+        if row.get("hasLogicExpectedValue"):
+            next_logic_expected_value = str(row.get("logicExpectedValue") or "")
+            if next_logic_expected_value != str(existing.logic_expected_value or ""):
+                changed_fields.append("logicExpectedValue")
+                plan_payload["logicExpectedValue"] = next_logic_expected_value
+
+        if row.get("hasTargetAssistant"):
+            next_target_assistant = str(row.get("targetAssistant") or "")
+            if next_target_assistant != str(existing.target_assistant or ""):
+                changed_fields.append("targetAssistant")
+                plan_payload["targetAssistant"] = next_target_assistant
+
+        if row.get("hasContextJson"):
+            next_context_json = str(row.get("contextJson") or "")
+            if next_context_json != str(existing.context_json or ""):
+                changed_fields.append("contextJson")
+                plan_payload["contextJson"] = next_context_json
+
+        if changed_fields:
+            planned_updates.append(plan_payload)
+            status = "planned-update"
+        else:
+            unchanged_count += 1
+            status = "unchanged"
+
+        preview_rows.append(
+            {
+                "rowNo": row_no,
+                "queryId": query_id,
+                "queryText": uploaded_query_text or str(existing.query_text or ""),
+                "status": status,
+                "changedFields": changed_fields,
+            }
+        )
+
+    valid_rows = len(preview_rows) - len(missing_query_id_rows) - len(duplicate_query_id_rows)
+    return {
+        "totalRows": len(parsed_rows),
+        "validRows": max(0, valid_rows),
+        "plannedUpdateCount": len(planned_updates),
+        "unchangedCount": unchanged_count,
+        "unmappedQueryCount": len(unmapped_query_rows),
+        "missingQueryIdRows": missing_query_id_rows,
+        "duplicateQueryIdRows": duplicate_query_id_rows,
+        "unmappedQueryRows": unmapped_query_rows,
+        "unmappedQueryIds": unmapped_query_ids,
+        "groupsToCreate": sorted(unknown_group_values),
+        "groupsToCreateRows": unknown_group_rows,
+        "previewRows": preview_rows,
+        "plannedUpdates": planned_updates,
+    }
+
+
 class QueryCreateRequest(BaseModel):
     queryText: str = Field(min_length=1)
     expectedResult: str = ""
@@ -198,6 +478,7 @@ def list_queries(
         )
         total = query_repo.count(q=q, categories=category_values or None, group_ids=group_ids or None)
     latest_summary = query_repo.get_latest_run_summary([row.id for row in rows])
+    test_set_usage = query_repo.get_test_set_usage([row.id for row in rows])
 
     group_map = {group.id: group for group in group_repo.list(limit=100000)}
     return {
@@ -218,6 +499,7 @@ def list_queries(
                 "createdAt": row.created_at,
                 "updatedAt": row.updated_at,
                 "latestRunSummary": latest_summary.get(row.id, {}),
+                "testSetUsage": test_set_usage.get(row.id, {"count": 0, "testSetNames": []}),
             }
             for row in rows
         ],
@@ -475,5 +757,163 @@ async def bulk_upload_queries(
         "queryIds": created_ids,
         "unmappedGroupRows": [],
         "unmappedGroupValues": [],
+        "createdGroupNames": created_group_names,
+    }
+
+
+@router.post("/queries/bulk-update/preview")
+async def preview_bulk_update_queries(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    group_repo = ValidationQueryGroupRepository(db)
+    query_repo = ValidationQueryRepository(db)
+    groups = group_repo.list(limit=100000)
+    group_map_by_id = {group.id: group for group in groups}
+    group_id_by_name = {group.group_name.strip(): group.id for group in groups}
+
+    filename = (file.filename or "").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    df = _load_bulk_upload_dataframe(filename, raw)
+    parsed = _parse_bulk_update_rows(df)
+    candidate_query_ids = [
+        str(row.get("queryId") or "").strip()
+        for row in parsed["rows"]
+        if not row.get("missingQueryId") and not row.get("duplicateQueryId")
+    ]
+    unique_query_ids = list(dict.fromkeys(candidate_query_ids))
+    existing_queries = query_repo.list_by_ids(unique_query_ids)
+    existing_queries_by_id = {row.id: row for row in existing_queries}
+
+    analysis = _analyze_bulk_update_rows(
+        parsed_rows=parsed["rows"],
+        missing_query_id_rows=parsed["missingQueryIdRows"],
+        duplicate_query_id_rows=parsed["duplicateQueryIdRows"],
+        existing_queries_by_id=existing_queries_by_id,
+        group_map_by_id=group_map_by_id,
+        group_id_by_name=group_id_by_name,
+    )
+    return {
+        "totalRows": analysis["totalRows"],
+        "validRows": analysis["validRows"],
+        "plannedUpdateCount": analysis["plannedUpdateCount"],
+        "unchangedCount": analysis["unchangedCount"],
+        "unmappedQueryCount": analysis["unmappedQueryCount"],
+        "missingQueryIdRows": analysis["missingQueryIdRows"],
+        "duplicateQueryIdRows": analysis["duplicateQueryIdRows"],
+        "unmappedQueryRows": analysis["unmappedQueryRows"],
+        "unmappedQueryIds": analysis["unmappedQueryIds"],
+        "groupsToCreate": analysis["groupsToCreate"],
+        "groupsToCreateRows": analysis["groupsToCreateRows"],
+        "previewRows": analysis["previewRows"],
+    }
+
+
+@router.post("/queries/bulk-update")
+async def bulk_update_queries(
+    file: UploadFile = File(...),
+    allowCreateGroups: bool = Form(default=False),
+    skipUnmappedQueryIds: bool = Form(default=False),
+    db: Session = Depends(get_db),
+):
+    group_repo = ValidationQueryGroupRepository(db)
+    query_repo = ValidationQueryRepository(db)
+    groups = group_repo.list(limit=100000)
+    group_map_by_id = {group.id: group for group in groups}
+    group_id_by_name = {group.group_name.strip(): group.id for group in groups}
+
+    filename = (file.filename or "").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    df = _load_bulk_upload_dataframe(filename, raw)
+    parsed = _parse_bulk_update_rows(df)
+    candidate_query_ids = [
+        str(row.get("queryId") or "").strip()
+        for row in parsed["rows"]
+        if not row.get("missingQueryId") and not row.get("duplicateQueryId")
+    ]
+    unique_query_ids = list(dict.fromkeys(candidate_query_ids))
+    existing_queries = query_repo.list_by_ids(unique_query_ids)
+    existing_queries_by_id = {row.id: row for row in existing_queries}
+
+    analysis = _analyze_bulk_update_rows(
+        parsed_rows=parsed["rows"],
+        missing_query_id_rows=parsed["missingQueryIdRows"],
+        duplicate_query_id_rows=parsed["duplicateQueryIdRows"],
+        existing_queries_by_id=existing_queries_by_id,
+        group_map_by_id=group_map_by_id,
+        group_id_by_name=group_id_by_name,
+    )
+
+    if analysis["groupsToCreate"] and not allowCreateGroups:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown groups detected. Confirm group creation and retry.",
+        )
+
+    if analysis["unmappedQueryCount"] > 0 and not skipUnmappedQueryIds:
+        raise HTTPException(
+            status_code=400,
+            detail="Unmapped query IDs detected. Confirm skipping and retry.",
+        )
+
+    created_group_names: list[str] = []
+    if allowCreateGroups:
+        for group_name in analysis["groupsToCreate"]:
+            normalized_group_name = str(group_name or "").strip()
+            if not normalized_group_name or normalized_group_name in group_id_by_name:
+                continue
+            created = group_repo.create(group_name=normalized_group_name)
+            group_map_by_id[created.id] = created
+            group_id_by_name[created.group_name.strip()] = created.id
+            created_group_names.append(created.group_name)
+
+    updated_count = 0
+    for plan in analysis["plannedUpdates"]:
+        group_value = str(plan.get("groupValue") or "").strip()
+        resolved_group_id = None
+        update_group_id = bool(plan.get("updateGroupId"))
+        if update_group_id:
+            if not group_value:
+                resolved_group_id = ""
+            elif group_value in group_map_by_id:
+                resolved_group_id = group_value
+            elif group_value in group_id_by_name:
+                resolved_group_id = group_id_by_name[group_value]
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown group value for bulk update row (queryId={plan.get('queryId')}).",
+                )
+
+        updated = query_repo.update(
+            str(plan.get("queryId") or ""),
+            query_text=plan.get("queryText"),
+            expected_result=plan.get("expectedResult"),
+            category=plan.get("category"),
+            group_id=resolved_group_id,
+            update_group_id=update_group_id,
+            llm_eval_criteria=plan.get("llmEvalCriteria"),
+            logic_field_path=plan.get("logicFieldPath"),
+            logic_expected_value=plan.get("logicExpectedValue"),
+            context_json=plan.get("contextJson"),
+            target_assistant=plan.get("targetAssistant"),
+        )
+        if updated is not None:
+            updated_count += 1
+
+    db.commit()
+    return {
+        "requestedRowCount": analysis["totalRows"],
+        "updatedCount": updated_count,
+        "unchangedCount": analysis["unchangedCount"],
+        "skippedUnmappedCount": analysis["unmappedQueryCount"],
+        "skippedMissingIdCount": len(analysis["missingQueryIdRows"]),
+        "skippedDuplicateQueryIdCount": len(analysis["duplicateQueryIdRows"]),
         "createdGroupNames": created_group_names,
     }

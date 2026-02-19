@@ -1,4 +1,5 @@
-import { App, Button, Card, Popconfirm, Space, Typography } from 'antd';
+import { DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { App, Button, Card, Popconfirm, Space, Tag, Tooltip, Typography, Upload } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
 
@@ -7,7 +8,8 @@ import type { Environment } from '../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../app/types';
 import { QueryCategoryTag } from '../../components/common/QueryCategoryTag';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
-import { formatDateTime, formatShortDate } from '../../shared/utils/dateTime';
+import { StandardModal } from '../../components/common/StandardModal';
+import { formatDateYYYYMMDD } from '../../shared/utils/dateTime';
 import { DEFAULT_COLUMN_WIDTHS, TABLE_ROW_SELECTION_WIDTH } from './constants';
 import { AppendToTestSetModal } from './components/AppendToTestSetModal';
 import { BulkDeleteModal } from './components/BulkDeleteModal';
@@ -17,6 +19,23 @@ import { CreateTestSetFromSelectionModal } from './components/CreateTestSetFromS
 import { QueryFilters } from './components/QueryFilters';
 import { QueryFormModal } from './components/QueryFormModal';
 import { useQueryManagement } from './hooks/useQueryManagement';
+import type { BulkUpdatePreviewRow } from './types';
+
+const BULK_UPDATE_STATUS_LABEL: Record<string, string> = {
+  'planned-update': '업데이트 예정',
+  unchanged: '변경 없음',
+  'unmapped-query-id': '쿼리 ID 미매핑',
+  'missing-query-id': '쿼리 ID 누락',
+  'duplicate-query-id': '쿼리 ID 중복',
+};
+
+const BULK_UPDATE_STATUS_COLOR: Record<string, string> = {
+  'planned-update': 'blue',
+  unchanged: 'default',
+  'unmapped-query-id': 'orange',
+  'missing-query-id': 'red',
+  'duplicate-query-id': 'red',
+};
 
 export function QueryManagementPage({
   environment,
@@ -54,6 +73,18 @@ export function QueryManagementPage({
     bulkUploadPendingGroupNames,
     bulkUploadPendingGroupRows,
     bulkUploading,
+    bulkUpdateModalOpen,
+    bulkUpdateFiles,
+    bulkUpdatePreviewRows,
+    bulkUpdatePreviewTotal,
+    bulkUpdatePreviewEmptyText,
+    bulkUpdatePreviewSummary,
+    bulkUpdateGroupConfirmOpen,
+    bulkUpdatePendingGroupNames,
+    bulkUpdatePendingGroupRows,
+    bulkUpdateUnmappedConfirmOpen,
+    bulkUpdatePendingUnmappedCount,
+    bulkUpdating,
     bulkDeleteModalOpen,
     setBulkDeleteModalOpen,
     bulkDeleting,
@@ -77,6 +108,15 @@ export function QueryManagementPage({
     handleBulkUploadFileChange,
     handleBulkUpload,
     confirmBulkUploadWithGroupCreation,
+    openBulkUpdateModal,
+    closeBulkUpdateModal,
+    closeBulkUpdateGroupConfirmModal,
+    closeBulkUpdateUnmappedConfirmModal,
+    handleBulkUpdateFileChange,
+    handleBulkUpdate,
+    confirmBulkUpdateWithGroupCreation,
+    confirmBulkUpdateWithUnmappedSkip,
+    handleDownloadBulkUpdateCsv,
     handleBulkDelete,
     handleSearch,
     handleCategoryChange,
@@ -123,23 +163,31 @@ export function QueryManagementPage({
         render: (value?: string) => value || '-',
       },
       {
+        key: 'testSetUsage',
+        title: '테스트 세트',
+        width: DEFAULT_COLUMN_WIDTHS.testSetUsage,
+        render: (_, row: ValidationQuery) => {
+          const usageCount = row.testSetUsage?.count || 0;
+          const usageNames = row.testSetUsage?.testSetNames || [];
+          if (usageCount <= 0) return '0';
+          return (
+            <Tooltip title={usageNames.length > 0 ? usageNames.join(', ') : '-'}>
+              <Typography.Text style={{ cursor: 'help' }}>{usageCount}</Typography.Text>
+            </Tooltip>
+          );
+        },
+      },
+      {
         key: 'createdAt',
         title: '등록일자',
         width: DEFAULT_COLUMN_WIDTHS.createdAt,
-        render: (_, row: ValidationQuery) => formatShortDate(row.createdAt),
+        render: (_, row: ValidationQuery) => formatDateYYYYMMDD(row.createdAt),
       },
       {
-        key: 'latestRun',
-        title: '최근 검증',
-        width: DEFAULT_COLUMN_WIDTHS.latestRun,
-        render: (_, row: ValidationQuery) => formatDateTime(row.latestRunSummary?.executedAt),
-      },
-      {
-        key: 'latestResult',
-        title: '최근 결과',
-        width: DEFAULT_COLUMN_WIDTHS.latestResult,
-        render: (_, row: ValidationQuery) =>
-          `${row.latestRunSummary?.logicResult || '-'} / ${row.latestRunSummary?.llmStatus || '-'}`,
+        key: 'updatedAt',
+        title: '최근 수정일자',
+        width: DEFAULT_COLUMN_WIDTHS.updatedAt,
+        render: (_, row: ValidationQuery) => formatDateYYYYMMDD(row.updatedAt),
       },
       {
         key: 'actions',
@@ -163,6 +211,32 @@ export function QueryManagementPage({
     [handleDelete, openEdit],
   );
 
+  const bulkUpdatePreviewColumns = useMemo<ColumnsType<BulkUpdatePreviewRow>>(
+    () => [
+      { key: 'rowNo', title: '행', dataIndex: 'rowNo', width: 80 },
+      { key: 'queryId', title: '쿼리 ID', dataIndex: 'queryId', width: 170, ellipsis: true },
+      { key: 'queryText', title: '질의', dataIndex: 'queryText', width: 320, ellipsis: true },
+      {
+        key: 'status',
+        title: '상태',
+        dataIndex: 'status',
+        width: 140,
+        render: (value: string) => (
+          <Tag color={BULK_UPDATE_STATUS_COLOR[value] || 'default'}>{BULK_UPDATE_STATUS_LABEL[value] || value}</Tag>
+        ),
+      },
+      {
+        key: 'changedFields',
+        title: '변경 필드',
+        dataIndex: 'changedFields',
+        width: 300,
+        ellipsis: true,
+        render: (value: string[]) => (value.length > 0 ? value.join(', ') : '-'),
+      },
+    ],
+    [],
+  );
+
   return (
     <Card className="backoffice-content-card" title="질의 관리">
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
@@ -176,6 +250,7 @@ export function QueryManagementPage({
         />
 
         <Space wrap>
+          <Button onClick={openBulkUpdateModal}>대규모 업데이트</Button>
           <Button onClick={openBulkUploadModal}>대규모 업로드</Button>
           <Button onClick={openCreate}>질의 등록</Button>
           <Button onClick={handleSelectAllFiltered} disabled={total === 0}>
@@ -239,6 +314,89 @@ export function QueryManagementPage({
         />
       </Space>
 
+      <StandardModal
+        title="대규모 업데이트"
+        open={bulkUpdateModalOpen}
+        width={920}
+        onCancel={closeBulkUpdateModal}
+        footer={(
+          <Space>
+            <Button onClick={closeBulkUpdateModal} disabled={bulkUpdating}>
+              취소
+            </Button>
+            <Button type="primary" loading={bulkUpdating} disabled={!bulkUpdateFiles[0]?.originFileObj} onClick={() => { void handleBulkUpdate(); }}>
+              업데이트
+            </Button>
+          </Space>
+        )}
+      >
+        <div style={{ width: '100%', padding: 0, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
+          <Typography.Text type="secondary">현재 필터 결과의 질의를 CSV로 내려받아 수정 후 업로드하세요.</Typography.Text>
+
+          <div>
+            <Typography.Text>현재 질의 CSV 다운로드</Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              <Button icon={<DownloadOutlined />} onClick={() => { void handleDownloadBulkUpdateCsv(); }} disabled={bulkUpdating}>
+                CSV 다운로드
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Typography.Text>CSV 업로드</Typography.Text>
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Upload
+                fileList={bulkUpdateFiles}
+                beforeUpload={() => false}
+                onChange={({ fileList }) => {
+                  void handleBulkUpdateFileChange(fileList);
+                }}
+                maxCount={1}
+                accept=".csv,.xlsx,.xls"
+                showUploadList={false}
+              >
+                <Button icon={<UploadOutlined />}>CSV 업로드</Button>
+              </Upload>
+              {bulkUpdateFiles[0]?.name ? <Typography.Text type="secondary">{bulkUpdateFiles[0].name}</Typography.Text> : null}
+            </div>
+          </div>
+
+          <div>
+            <Typography.Text>업로드한 질의 미리보기</Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              {bulkUpdateFiles.length === 0 ? (
+                <Typography.Text type="secondary">질의를 업로드해주세요.</Typography.Text>
+              ) : (
+                <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                  <StandardDataTable
+                    tableId="query-management-bulk-update-preview"
+                    className="query-management-table"
+                    rowKey="key"
+                    size="small"
+                    columns={bulkUpdatePreviewColumns}
+                    dataSource={bulkUpdatePreviewRows}
+                    tableLayout="fixed"
+                    pagination={false}
+                    scroll={{ x: 1120, y: 300 }}
+                    locale={{ emptyText: bulkUpdatePreviewEmptyText }}
+                  />
+                  {bulkUpdatePreviewSummary ? (
+                    <Typography.Text type="secondary">
+                      총 {bulkUpdatePreviewSummary.totalRows}건 중 업데이트 예정 {bulkUpdatePreviewSummary.plannedUpdateCount}건, 변경 없음 {bulkUpdatePreviewSummary.unchangedCount}건
+                    </Typography.Text>
+                  ) : null}
+                  {bulkUpdatePreviewSummary && bulkUpdatePreviewSummary.unmappedQueryCount > 0 ? (
+                    <Typography.Text type="warning">
+                      쿼리 ID가 수정된 항목이 있어요. 쿼리 ID가 수정된 항목은 업데이트되지 않아요.
+                    </Typography.Text>
+                  ) : null}
+                </Space>
+              )}
+            </div>
+          </div>
+        </div>
+      </StandardModal>
+
       <BulkUploadModal
         open={bulkUploadModalOpen}
         files={bulkUploadFiles}
@@ -265,6 +423,44 @@ export function QueryManagementPage({
           void confirmBulkUploadWithGroupCreation();
         }}
       />
+
+      <BulkUploadGroupConfirmModal
+        open={bulkUpdateGroupConfirmOpen}
+        groupNames={bulkUpdatePendingGroupNames}
+        groupRows={bulkUpdatePendingGroupRows}
+        loading={bulkUpdating}
+        title="그룹 생성 확인"
+        description="업데이트 중 아래 그룹을 새로 생성합니다. 계속할까요?"
+        confirmText="생성 후 업데이트"
+        onClose={closeBulkUpdateGroupConfirmModal}
+        onConfirm={() => {
+          void confirmBulkUpdateWithGroupCreation();
+        }}
+      />
+
+      <StandardModal
+        title="쿼리 ID 미매핑 확인"
+        open={bulkUpdateUnmappedConfirmOpen}
+        width={560}
+        onCancel={closeBulkUpdateUnmappedConfirmModal}
+        footer={(
+          <Space>
+            <Button onClick={closeBulkUpdateUnmappedConfirmModal} disabled={bulkUpdating}>
+              취소
+            </Button>
+            <Button type="primary" loading={bulkUpdating} onClick={() => { void confirmBulkUpdateWithUnmappedSkip(); }}>
+              업데이트
+            </Button>
+          </Space>
+        )}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text>
+            쿼리 ID가 매핑되지 않은 항목 {bulkUpdatePendingUnmappedCount}건은 업데이트에서 제외됩니다.<br />
+            쿼리 ID가 수정된 항목은 업데이트되지 않아요.
+          </Typography.Text>
+        </Space>
+      </StandardModal>
 
       <BulkDeleteModal
         open={bulkDeleteModalOpen}
@@ -312,3 +508,4 @@ export function QueryManagementPage({
     </Card>
   );
 }
+

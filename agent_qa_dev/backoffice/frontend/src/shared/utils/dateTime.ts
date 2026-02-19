@@ -58,6 +58,14 @@ export function formatShortDate(value?: string | null) {
   return `${String(parts.year || '').slice(-2)}-${parts.month}-${parts.day}`;
 }
 
+export function formatDateYYYYMMDD(value?: string | null, fallback = '-') {
+  if (!value) return fallback;
+  const date = parseUtcLikeDate(value);
+  if (!date) return fallback;
+  const parts = getDateParts(KST_DATE_FORMATTER, date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export function toTimestamp(value?: string | null) {
   if (!value) return 0;
   const timestamp = parseUtcLikeDate(value)?.getTime() ?? Number.NaN;

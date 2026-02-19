@@ -39,9 +39,20 @@ def test_validation_queries_crud_and_bulk_upload():
     assert create_resp.json()["contextJson"] == "{\"recruitPlanId\": 123}"
     query_id = create_resp.json()["id"]
 
+    test_set_resp = client.post(
+        "/api/v1/validation-test-sets",
+        json={
+            "name": "질의 사용 테스트 세트",
+            "queryIds": [query_id],
+        },
+    )
+    assert test_set_resp.status_code == 200
+
     list_resp = client.get("/api/v1/queries")
     assert list_resp.status_code == 200
     assert list_resp.json()["total"] == 1
+    assert list_resp.json()["items"][0]["testSetUsage"]["count"] == 1
+    assert list_resp.json()["items"][0]["testSetUsage"]["testSetNames"] == ["질의 사용 테스트 세트"]
 
     filtered_resp = client.get(f"/api/v1/queries?queryIds={query_id}")
     assert filtered_resp.status_code == 200
@@ -112,3 +123,129 @@ def test_validation_queries_crud_and_bulk_upload():
     delete_resp = client.delete(f"/api/v1/queries/{query_id}")
     assert delete_resp.status_code == 200
     assert delete_resp.json()["ok"] is True
+
+
+def test_validation_queries_bulk_update_preview_and_apply():
+    client = TestClient(app)
+
+    source_group_resp = client.post("/api/v1/query-groups", json={"groupName": "원본그룹", "description": "기본 그룹"})
+    assert source_group_resp.status_code == 200
+    source_group_id = source_group_resp.json()["id"]
+
+    first_query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "업데이트 대상 질의",
+            "expectedResult": "기존 기대값",
+            "category": "Happy path",
+            "groupId": source_group_id,
+            "llmEvalCriteria": {"정확성": 3},
+            "logicFieldPath": "assistantMessage",
+            "logicExpectedValue": "기존값",
+            "targetAssistant": "ORCHESTRATOR_WORKER_V3",
+            "contextJson": "{\"phase\":\"old\"}",
+        },
+    )
+    assert first_query_resp.status_code == 200
+    first_query_id = first_query_resp.json()["id"]
+
+    second_query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "변경 없음 질의",
+            "expectedResult": "유지",
+            "category": "Edge case",
+            "groupId": source_group_id,
+            "llmEvalCriteria": {"정확성": 4},
+            "logicFieldPath": "assistantMessage",
+            "logicExpectedValue": "유지값",
+            "targetAssistant": "ORCHESTRATOR_WORKER_V3",
+            "contextJson": "{\"phase\":\"keep\"}",
+        },
+    )
+    assert second_query_resp.status_code == 200
+    second_query_id = second_query_resp.json()["id"]
+
+    usage_set_resp = client.post(
+        "/api/v1/validation-test-sets",
+        json={
+            "name": "업데이트 사용 세트",
+            "queryIds": [first_query_id, second_query_id],
+        },
+    )
+    assert usage_set_resp.status_code == 200
+
+    csv_body = (
+        "쿼리 ID,질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n"
+        f'{first_query_id},업데이트 완료 질의,Adversarial input,새그룹,NEW_ASSISTANT,"{{""phase"":""new""}}",신규 기대값,"{{""정확성"":5}}",assistantMessage,신규값\n'
+        f'{second_query_id},변경 없음 질의,Edge case,원본그룹,ORCHESTRATOR_WORKER_V3,"{{""phase"":""keep""}}",유지,"{{""정확성"":4}}",assistantMessage,유지값\n'
+        ",누락행,Happy path,,,,,,,\n"
+        "unknown-query-id,매핑 실패 질의,Happy path,,,,,,,\n"
+        f"{first_query_id},중복 행,Happy path,,,,,,,\n"
+    )
+
+    preview_resp = client.post(
+        "/api/v1/queries/bulk-update/preview",
+        files={"file": ("queries-update.csv", io.BytesIO(csv_body.encode("utf-8")), "text/csv")},
+    )
+    assert preview_resp.status_code == 200
+    preview_json = preview_resp.json()
+    assert preview_json["totalRows"] == 5
+    assert preview_json["plannedUpdateCount"] == 1
+    assert preview_json["unchangedCount"] == 1
+    assert preview_json["unmappedQueryCount"] == 1
+    assert preview_json["missingQueryIdRows"] == [3]
+    assert preview_json["duplicateQueryIdRows"] == [5]
+    assert preview_json["unmappedQueryRows"] == [4]
+    assert preview_json["unmappedQueryIds"] == ["unknown-query-id"]
+    assert preview_json["groupsToCreate"] == ["새그룹"]
+    assert preview_json["groupsToCreateRows"] == [1]
+    assert any(row["status"] == "planned-update" and row["queryId"] == first_query_id for row in preview_json["previewRows"])
+    assert any(row["status"] == "unmapped-query-id" and row["queryId"] == "unknown-query-id" for row in preview_json["previewRows"])
+
+    blocked_group_resp = client.post(
+        "/api/v1/queries/bulk-update",
+        data={"allowCreateGroups": "false", "skipUnmappedQueryIds": "false"},
+        files={"file": ("queries-update.csv", io.BytesIO(csv_body.encode("utf-8")), "text/csv")},
+    )
+    assert blocked_group_resp.status_code == 400
+
+    blocked_unmapped_resp = client.post(
+        "/api/v1/queries/bulk-update",
+        data={"allowCreateGroups": "true", "skipUnmappedQueryIds": "false"},
+        files={"file": ("queries-update.csv", io.BytesIO(csv_body.encode("utf-8")), "text/csv")},
+    )
+    assert blocked_unmapped_resp.status_code == 400
+
+    apply_resp = client.post(
+        "/api/v1/queries/bulk-update",
+        data={"allowCreateGroups": "true", "skipUnmappedQueryIds": "true"},
+        files={"file": ("queries-update.csv", io.BytesIO(csv_body.encode("utf-8")), "text/csv")},
+    )
+    assert apply_resp.status_code == 200
+    apply_json = apply_resp.json()
+    assert apply_json["requestedRowCount"] == 5
+    assert apply_json["updatedCount"] == 1
+    assert apply_json["unchangedCount"] == 1
+    assert apply_json["skippedUnmappedCount"] == 1
+    assert apply_json["skippedMissingIdCount"] == 1
+    assert apply_json["skippedDuplicateQueryIdCount"] == 1
+    assert apply_json["createdGroupNames"] == ["새그룹"]
+
+    listed_resp = client.get("/api/v1/queries")
+    assert listed_resp.status_code == 200
+    listed = listed_resp.json()["items"]
+    by_id = {item["id"]: item for item in listed}
+    assert by_id[first_query_id]["queryText"] == "업데이트 완료 질의"
+    assert by_id[first_query_id]["category"] == "Adversarial input"
+    assert by_id[first_query_id]["groupName"] == "새그룹"
+    assert by_id[first_query_id]["targetAssistant"] == "NEW_ASSISTANT"
+    assert by_id[first_query_id]["contextJson"] == '{"phase":"new"}'
+    assert by_id[first_query_id]["expectedResult"] == "신규 기대값"
+    assert by_id[first_query_id]["llmEvalCriteria"] == {"정확성": 5}
+    assert by_id[first_query_id]["logicExpectedValue"] == "신규값"
+    assert by_id[first_query_id]["testSetUsage"]["count"] == 1
+    assert by_id[first_query_id]["testSetUsage"]["testSetNames"] == ["업데이트 사용 세트"]
+
+    assert by_id[second_query_id]["queryText"] == "변경 없음 질의"
+    assert by_id[second_query_id]["expectedResult"] == "유지"

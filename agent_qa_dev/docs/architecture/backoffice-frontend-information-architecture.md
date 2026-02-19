@@ -3,7 +3,7 @@
 - 문서 목적: AQB Backoffice의 화면 구조, 도메인 객체, 핵심 운영 흐름을 PM/운영 관점에서 빠르게 파악
 - 대상 독자: PM, PO, 운영 리드, QA 리드
 - 기준 코드: `backoffice/frontend/src`
-- 최신 갱신일: 2026-02-17
+- 최신 갱신일: 2026-02-19
 
 ## 1. 제품 구조 한눈에 보기
 
@@ -50,7 +50,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 검증 이력 | `/validation/history` | `AgentValidationManagementPage` (history 섹션) | Run 목록 조회 |
 | 검증 이력 상세 | `/validation/history/:runId` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세 조회 및 실행 워크벤치 연결 |
 | 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 그룹 단위 성과/실패 패턴 조회 |
-| 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드 |
+| 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD, 기본 대상 어시스턴트/기준 관리 |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |
 | Validation Settings | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값 관리 |
@@ -92,9 +92,11 @@ flowchart LR
 ### 4.1 질의 -> 테스트 세트 설계 흐름
 
 1. `질의 관리`에서 질의를 등록/정비
-2. 질의를 선택하거나 `전체 선택(필터 결과)`로 선택 집합 구성
-3. `테스트 세트 만들기` 또는 `테스트 세트에 추가`를 질의 관리 화면에서 바로 수행
-4. 생성 시 이름/설명을 입력하고, 추가 시 대상 테스트 세트를 선택해 저장
+2. `대규모 업데이트`로 현재 필터 결과를 CSV 내려받아 질의 필드를 일괄 수정
+3. `테스트 세트` 컬럼에서 질의별 사용 개수/사용 중인 테스트 세트를 확인
+4. 질의를 선택하거나 `전체 선택(필터 결과)`로 선택 집합 구성
+5. `테스트 세트 만들기` 또는 `테스트 세트에 추가`를 질의 관리 화면에서 바로 수행
+6. 생성 시 이름/설명을 입력하고, 추가 시 대상 테스트 세트를 선택해 저장
 
 ### 4.2 검증 실행 워크벤치 흐름
 
@@ -164,8 +166,9 @@ flowchart LR
 ### 8.1 메뉴/라우팅
 
 1. `/queries`, `/query-groups` 레거시 URL이 신규 경로로 리다이렉트되는지
-2. `질의 관리`에서 선택 집합(수동/필터 전체)으로 테스트 세트 생성/추가가 정상 동작하는지
-3. 이력 상세 -> 실행 링크(`runId`, `testSetId`)가 정상 반영되는지
+2. `질의 관리`에서 대규모 업데이트(CSV 다운로드/업로드/미리보기/업데이트)가 정상 동작하는지
+3. `질의 관리`에서 선택 집합(수동/필터 전체)으로 테스트 세트 생성/추가가 정상 동작하는지
+4. 이력 상세 -> 실행 링크(`runId`, `testSetId`)가 정상 반영되는지
 
 ### 8.2 실행 워크벤치
 

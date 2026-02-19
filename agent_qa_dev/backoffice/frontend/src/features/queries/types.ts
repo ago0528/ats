@@ -3,9 +3,9 @@ export type QueryColumnKey =
   | 'queryText'
   | 'category'
   | 'groupName'
+  | 'testSetUsage'
   | 'createdAt'
-  | 'latestRun'
-  | 'latestResult'
+  | 'updatedAt'
   | 'actions';
 
 export type UploadPreviewRow = {
@@ -26,4 +26,13 @@ export type UploadPreviewParseResult = {
   totalRows: number;
   emptyText: string;
   warningText?: string;
+};
+
+export type BulkUpdatePreviewRow = {
+  key: string;
+  rowNo: number;
+  queryId: string;
+  queryText: string;
+  status: string;
+  changedFields: string[];
 };

@@ -36,8 +36,8 @@ const MODAL_TITLES: Record<ModalMode, string> = {
 };
 
 const MODAL_WIDTH: Record<ModalMode, string> = {
-  view: 'min(920px, 90vw)',
-  edit: 'min(1120px, 90vw)',
+  view: 'min(1200px, 90vw)',
+  edit: 'min(1200px, 90vw)',
 };
 
 const DIFF_EDITOR_OPTIONS = {

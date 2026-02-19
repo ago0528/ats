@@ -6,8 +6,6 @@ import {
   Modal,
   Input,
   App,
-  Row,
-  Col,
   Space,
   Tag,
   Typography,
@@ -123,6 +121,10 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   const hasTokens = Boolean(tokens.bearer && tokens.cms && tokens.mrs);
   const hasUnsavedChanges = draft !== promptData.currentPrompt;
+  const viewDiffSummary = useMemo(
+    () => calculateLineDiff(promptData.previousPrompt, promptData.currentPrompt),
+    [promptData.previousPrompt, promptData.currentPrompt],
+  );
   const diffSummary = useMemo(
     () => calculateLineDiff(promptData.currentPrompt, draft),
     [promptData.currentPrompt, draft],
@@ -434,60 +436,70 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
             </div>
           </StandardModalMetaBlock>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <Row gutter={12} style={{ height: '100%' }}>
-              <Col xs={24} md={12} style={{ height: '100%' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                  <Typography.Text strong>현재 프롬프트</Typography.Text>
-                  <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-                    <Button
-                      type="text"
-                      icon={<CopyOutlined />}
-                      onClick={() => copyTextToClipboard('현재 프롬프트', promptData.currentPrompt, '클립보드로 복사됐어요.')}
-                      style={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
-                    />
-                    <Input.TextArea
-                      value={promptData.currentPrompt}
-                      disabled
-                      style={{
-                        flex: 1,
-                        minHeight: 0,
-                        height: '400px',
-                        resize: 'none',
-                        paddingTop: 32,
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                      }}
-                    />
-                  </div>
-                </div>
-              </Col>
-              <Col xs={24} md={12} style={{ height: '100%' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-                  <Typography.Text strong>직전 프롬프트</Typography.Text>
-                  <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-                    <Button
-                      type="text"
-                      icon={<CopyOutlined />}
-                      disabled={!promptData.previousPrompt}
-                      onClick={() => copyTextToClipboard('직전 프롬프트', promptData.previousPrompt, '클립보드로 복사됐어요.')}
-                      style={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
-                    />
-                    <Input.TextArea
-                      value={promptData.previousPrompt || '직전 프롬프트가 없습니다.'}
-                      disabled
-                      style={{
-                        flex: 1,
-                        minHeight: 0,
-                        height: '400px',
-                        resize: 'none',
-                        paddingTop: 32,
-                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                      }}
-                    />
-                  </div>
-                </div>
-              </Col>
-            </Row>
+          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Space size={8}>
+                <Tag color="blue">길이 차이: {getLengthDelta(promptData.previousPrompt, promptData.currentPrompt)}</Tag>
+                <Tag color="success">+Added {viewDiffSummary.added}</Tag>
+                <Tag color="error">-Removed {viewDiffSummary.removed}</Tag>
+                <Tag color="warning">~Modified {viewDiffSummary.modified}</Tag>
+              </Space>
+              <Space size={8} wrap>
+                <Button
+                  icon={<CopyOutlined />}
+                  disabled={!promptData.previousPrompt}
+                  onClick={() => copyTextToClipboard('직전 프롬프트', promptData.previousPrompt, '클립보드로 복사됐어요.')}
+                >
+                  Copy 직전
+                </Button>
+                <Button
+                  icon={<CopyOutlined />}
+                  onClick={() => copyTextToClipboard('현재 프롬프트', promptData.currentPrompt, '클립보드로 복사됐어요.')}
+                >
+                  Copy 현재
+                </Button>
+                <Button
+                  icon={<CopyOutlined />}
+                  onClick={() => copyTextToClipboard('DIFF', viewDiffSummary.diffText, '클립보드로 복사됐어요.')}
+                >
+                  Copy DIFF
+                </Button>
+              </Space>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Typography.Text strong>직전 프롬프트</Typography.Text>
+              <Typography.Text strong>현재 프롬프트</Typography.Text>
+            </div>
+            {!promptData.previousPrompt ? (
+              <Typography.Text type="secondary">직전 프롬프트가 없습니다.</Typography.Text>
+            ) : null}
+            <div style={{ flex: 1, minHeight: 0, height: 460 }}>
+              <DiffEditor
+                key={`prompt-view-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
+                language="markdown"
+                original={promptData.previousPrompt}
+                modified={promptData.currentPrompt}
+                originalModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-original/${editorSessionKey}`}
+                modifiedModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-modified/${editorSessionKey}`}
+                onMount={(editor) => {
+                  const originalEditor = editor.getOriginalEditor?.();
+                  const modifiedEditor = editor.getModifiedEditor?.();
+                  originalEditor?.updateOptions({
+                    readOnly: true,
+                    renderLineHighlight: 'none',
+                  });
+                  modifiedEditor?.updateOptions({
+                    readOnly: true,
+                    renderLineHighlight: 'none',
+                  });
+                  originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                  modifiedEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                }}
+                options={DIFF_EDITOR_OPTIONS}
+                height="100%"
+                theme="light"
+              />
+            </div>
           </div>
         </div>
       </StandardModal>

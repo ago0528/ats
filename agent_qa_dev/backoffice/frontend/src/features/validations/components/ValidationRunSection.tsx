@@ -120,16 +120,16 @@ export function ValidationRunSection({
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
       <Typography.Text type="secondary">
-        테스트세트를 선택한 뒤 Run을 생성하고, 실행/평가/비교를 run 단위로 독립 수행합니다.
+        테스트 세트를 선택한 뒤 Run을 생성하고, 실행/평가/비교를 run 단위로 독립 수행합니다.
       </Typography.Text>
 
-      <Card size="small" title="테스트세트 선택 / Run 생성">
+      <Card size="small" title="테스트 세트 선택 / Run 생성">
         <Space wrap>
           <Select
             style={{ width: 360 }}
-            placeholder="테스트세트 선택"
+            placeholder="테스트 세트 선택"
             value={selectedTestSetId || undefined}
-            options={testSets.map((testSet) => ({ label: `${testSet.name} (${testSet.itemCount})`, value: testSet.id }))}
+            options={testSets.map((testSet) => ({ label: `${testSet.name} (${testSet.itemCount}개 질의)`, value: testSet.id }))}
             onChange={(value) => {
               setSelectedTestSetId(value);
               setBaseRunId('');
@@ -151,7 +151,7 @@ export function ValidationRunSection({
       {currentRun ? (
         <Descriptions size="small" bordered column={3}>
           <Descriptions.Item label="Run ID">{currentRun.id}</Descriptions.Item>
-          <Descriptions.Item label="테스트세트">{currentRun.testSetId || '-'}</Descriptions.Item>
+          <Descriptions.Item label="테스트 세트">{currentRun.testSetId || '-'}</Descriptions.Item>
           <Descriptions.Item label="Run 상태">{currentRun.status}</Descriptions.Item>
           <Descriptions.Item label="실행 상태">{executionStateLabel}</Descriptions.Item>
           <Descriptions.Item label="평가 상태">{evaluationStateLabel}</Descriptions.Item>
@@ -178,7 +178,7 @@ export function ValidationRunSection({
               평가 시작
             </Button>
             <Select
-              placeholder="비교 기준 base run 선택"
+              placeholder="비교 기준 Run 선택"
               style={{ width: 420 }}
               value={baseRunId || undefined}
               options={baseRunOptions}
@@ -253,7 +253,7 @@ export function ValidationRunSection({
             <Form.Item label="반복 수" name="repeatInConversation">
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="대화 방 수" name="conversationRoomCount">
+            <Form.Item label="채팅방 수" name="conversationRoomCount">
               <InputNumber min={1} />
             </Form.Item>
             <Form.Item label="병렬 호출 수" name="agentParallelCalls">

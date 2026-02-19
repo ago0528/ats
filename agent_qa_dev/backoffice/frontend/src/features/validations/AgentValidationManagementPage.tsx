@@ -208,7 +208,7 @@ export function AgentValidationManagementPage({
 
   const handleCreateRun = async (overrides: RunCreateOverrides) => {
     if (!selectedTestSetId) {
-      message.warning('테스트세트를 먼저 선택해 주세요.');
+      message.warning('테스트 세트를 먼저 선택해 주세요.');
       return;
     }
     try {
@@ -297,19 +297,19 @@ export function AgentValidationManagementPage({
 
   const handleAddToTestSet = async (item: ValidationRunItem) => {
     if (!selectedTestSetId) {
-      message.warning('추가할 테스트세트를 먼저 선택해 주세요.');
+      message.warning('추가할 테스트 세트를 먼저 선택해 주세요.');
       return;
     }
     const queryId = item.queryId?.trim();
     if (!queryId) {
-      message.warning('원본 질의가 없는 항목은 테스트세트에 추가할 수 없습니다.');
+      message.warning('원본 질의가 없는 항목은 테스트 세트에 추가할 수 없습니다.');
       return;
     }
     try {
       const testSet = await getValidationTestSet(selectedTestSetId);
       const queryIds = testSet.queryIds || [];
       if (queryIds.includes(queryId)) {
-        message.info('이미 선택된 테스트세트에 포함된 질의입니다.');
+        message.info('이미 선택된 테스트 세트에 포함된 질의입니다.');
         return;
       }
       await updateValidationTestSet(selectedTestSetId, { queryIds: [...queryIds, queryId] });
@@ -318,10 +318,10 @@ export function AgentValidationManagementPage({
           ? { ...row, itemCount: queryIds.length + 1 }
           : row
       )));
-      message.success('선택한 테스트세트에 질의를 추가했습니다.');
+      message.success('선택한 테스트 세트에 질의를 추가했습니다.');
     } catch (error) {
       console.error(error);
-      message.error('테스트세트에 질의를 추가하지 못했습니다.');
+      message.error('테스트 세트에 질의를 추가하지 못했습니다.');
     }
   };
 

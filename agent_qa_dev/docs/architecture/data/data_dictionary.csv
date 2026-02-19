@@ -31,6 +31,13 @@ prompt_audit_logs,4,before_len,INTEGER,No,,No
 prompt_audit_logs,5,after_len,INTEGER,No,,No
 prompt_audit_logs,6,actor,TEXT,No,,No
 prompt_audit_logs,7,created_at,DATETIME,No,,No
+prompt_snapshots,0,id,TEXT,No,,Yes
+prompt_snapshots,1,environment,VARCHAR(3),No,,No
+prompt_snapshots,2,worker_type,TEXT,No,,No
+prompt_snapshots,3,current_prompt,TEXT,No,,No
+prompt_snapshots,4,previous_prompt,TEXT,No,,No
+prompt_snapshots,5,actor,TEXT,No,,No
+prompt_snapshots,6,updated_at,DATETIME,No,,No
 validation_llm_evaluations,0,id,VARCHAR(36),No,,Yes
 validation_llm_evaluations,1,run_item_id,VARCHAR(36),No,,No
 validation_llm_evaluations,2,eval_model,VARCHAR(120),No,,No

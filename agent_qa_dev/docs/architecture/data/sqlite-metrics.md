@@ -7,6 +7,10 @@
   - `.mode column`
 - 날짜 컬럼은 UTC 기준 문자열(`datetime`)로 저장된다.
 
+## 인터랙티브 모드
+cd /Users/ago0528/Desktop/files/01_work/01_planning/01_vibecoding/ats/agent_qa_dev
+sqlite3 backoffice/backend/backoffice.db
+
 ## 테이블명 매핑(실제)
 
 - 질의 그룹: `validation_query_groups`
@@ -18,6 +22,7 @@
 - LLM 평가: `validation_llm_evaluations`
 - 로직 평가: `validation_logic_evaluations`
 - 프롬프트 감사 로그: `prompt_audit_logs`
+- 프롬프트 스냅샷: `prompt_snapshots`
 
 ---
 
@@ -45,6 +50,8 @@ UNION ALL
 SELECT 'validation_logic_evaluations', COUNT(*) FROM validation_logic_evaluations
 UNION ALL
 SELECT 'prompt_audit_logs', COUNT(*) FROM prompt_audit_logs
+UNION ALL
+SELECT 'prompt_snapshots', COUNT(*) FROM prompt_snapshots
 ORDER BY row_count DESC;
 ```
 
@@ -72,7 +79,7 @@ LIMIT (SELECT row_limit FROM params);
 
 ## Q03. 최근 생성/실행된 Run 목록
 
-- 무엇을 보는가: run 상태, 테스트세트, 시작/종료 시각
+- 무엇을 보는가: run 상태, 테스트 세트, 시작/종료 시각
 - 파라미터: `row_limit`
 - 주의사항: `test_set_id`가 null인 run이 있을 수 있음
 
@@ -275,7 +282,7 @@ LIMIT (SELECT row_limit FROM params);
 
 ## Q12. 테스트 세트 구성(질의 순서 포함)
 
-- 무엇을 보는가: 특정 테스트세트의 질의 구성과 순서
+- 무엇을 보는가: 특정 테스트 세트의 질의 구성과 순서
 - 파라미터: `target_test_set_id`
 - 주의사항: `ordinal`로 정렬해 실제 실행 순서 확인
 
@@ -348,9 +355,9 @@ GROUP BY r.id
 ORDER BY r.created_at DESC;
 ```
 
-## Q15. 테스트세트별 LLM 평균 점수
+## Q15. 테스트 세트별 LLM 평균 점수
 
-- 무엇을 보는가: 테스트세트 단위 평균 total_score
+- 무엇을 보는가: 테스트 세트 단위 평균 total_score
 - 파라미터: `date_from`
 - 주의사항: `total_score` NULL은 자동 제외됨
 
@@ -373,9 +380,9 @@ GROUP BY ts.id, ts.name
 ORDER BY avg_total_score DESC;
 ```
 
-## Q16. 테스트세트별 로직 평가 결과 분포
+## Q16. 테스트 세트별 로직 평가 결과 분포
 
-- 무엇을 보는가: 테스트세트별 PASS/FAIL/SKIPPED 분포
+- 무엇을 보는가: 테스트 세트별 PASS/FAIL/SKIPPED 분포
 - 파라미터: `date_from`
 - 주의사항: 결과 값은 현재 문자열로 저장됨(표준 코드 강제 없음)
 
@@ -444,6 +451,32 @@ ORDER BY p.created_at DESC
 LIMIT (SELECT row_limit FROM params);
 ```
 
+## Q19. 프롬프트 현재/직전 스냅샷(최근 갱신순)
+
+- 무엇을 보는가: 워커별 현재 프롬프트와 직전 프롬프트 보관 상태
+- 파라미터: `row_limit`
+- 주의사항: `current_prompt`는 ATS 조회 기준 마지막 동기화 시점 값
+
+```sql
+WITH params AS (
+  SELECT 100 AS row_limit
+)
+SELECT
+  s.updated_at,
+  s.environment,
+  s.worker_type,
+  LENGTH(s.current_prompt) AS current_len,
+  LENGTH(s.previous_prompt) AS previous_len,
+  CASE
+    WHEN s.previous_prompt = '' THEN 'NO_PREVIOUS'
+    ELSE 'HAS_PREVIOUS'
+  END AS previous_status,
+  s.actor
+FROM prompt_snapshots s
+ORDER BY s.updated_at DESC
+LIMIT (SELECT row_limit FROM params);
+```
+
 ---
 
 ## 자주 바꾸는 파라미터 가이드
@@ -451,7 +484,7 @@ LIMIT (SELECT row_limit FROM params);
 - 기간 시작일: `date_from` (`YYYY-MM-DD`)
 - 조회 개수: `row_limit` (예: `20`, `50`, `100`)
 - 특정 실행 ID: `target_run_id`
-- 특정 테스트세트 ID: `target_test_set_id`
+- 특정 테스트 세트 ID: `target_test_set_id`
 
 ## 성능/정확성 메모
 

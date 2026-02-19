@@ -8,7 +8,7 @@
 
 - 전체 구조: `docs/architecture/project-structure.md`
 - 프론트 IA: `docs/architecture/backoffice-frontend-information-architecture.md`
-- 스킬 인덱스: `docs/skills/AGENTS.md`
+- 스킬 인덱스: `AGENTS.md`의 `4) @skills 인덱스 (docs/skills)` 섹션
 
 구조가 실제 코드와 다르면 먼저 위 문서를 갱신한 뒤 개발을 진행한다.
 
@@ -36,19 +36,32 @@
 - `ant-design-icons`
 - `langfuse`
 
-## 4) docs 스킬 활용 가이드
+## 4) @skills 인덱스 (docs/skills)
 
 문서/설계/구현 전, 작업 목적에 맞는 스킬을 `docs/skills/*/SKILL.md`에서 먼저 선택해 사용한다.
 
-자주 쓰는 스킬 매핑:
+사용 가능한 스킬 목록:
 
-- 프론트 구현: `docs/skills/backoffice-frontend-antd/SKILL.md`
-- 백엔드 API 구현: `docs/skills/backoffice-backend-api/SKILL.md`
-- AQB 규칙/점수 로직: `docs/skills/aqb-scoring/SKILL.md`
-- 코드 품질 점검: `docs/skills/backoffice-quality-review/SKILL.md`
-- 기획/문서 작성: `docs/skills/backoffice-ideation-writing/SKILL.md`
-- DB 정의서 갱신: `docs/skills/db-schema-doc-updater/SKILL.md`
-- 개발 완료 전 검증: `docs/skills/verification-before-completion/SKILL.md`
+- `docs/skills/aqb-scoring/SKILL.md`
+- `docs/skills/backoffice-backend-api/SKILL.md`
+- `docs/skills/backoffice-frontend-antd/SKILL.md`
+- `docs/skills/backoffice-quality-review/SKILL.md`
+- `docs/skills/brainstorming/SKILL.md`
+- `docs/skills/db-schema-doc-updater/SKILL.md`
+- `docs/skills/dispatching-parallel-agents/SKILL.md`
+- `docs/skills/executing-plans/SKILL.md`
+- `docs/skills/finishing-a-development-branch/SKILL.md`
+- `docs/skills/receiving-code-review/SKILL.md`
+- `docs/skills/requesting-code-review/SKILL.md`
+- `docs/skills/subagent-driven-development/SKILL.md`
+- `docs/skills/systematic-debugging/SKILL.md`
+- `docs/skills/test-driven-development/SKILL.md`
+- `docs/skills/using-git-worktrees/SKILL.md`
+- `docs/skills/using-superpowers/SKILL.md`
+- `docs/skills/verification-before-completion/SKILL.md`
+- `docs/skills/worktree-merge-release/SKILL.md`
+- `docs/skills/writing-plans/SKILL.md`
+- `docs/skills/writing-skills/SKILL.md`
 
 선택 규칙:
 

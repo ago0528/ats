@@ -1,6 +1,6 @@
 # Backoffice 데이터 테이블 정의서 (PM Friendly)
 
-- 최신 갱신일: 2026-02-18
+- 최신 갱신일: 2026-02-19
 - 대상: PM, PO, QA, 운영 담당자
 - 스키마 기준: `backoffice/backend/app/models/*.py` + `backoffice/backend/app/main.py` startup 보정 + `backoffice/backend/backoffice.db`
 
@@ -14,15 +14,16 @@
 1. `generic_runs`
 2. `generic_run_rows`
 3. `prompt_audit_logs`
-4. `validation_query_groups`
-5. `validation_queries`
-6. `validation_settings`
-7. `validation_test_sets`
-8. `validation_test_set_items`
-9. `validation_runs`
-10. `validation_run_items`
-11. `validation_llm_evaluations`
-12. `validation_logic_evaluations`
+4. `prompt_snapshots`
+5. `validation_query_groups`
+6. `validation_queries`
+7. `validation_settings`
+8. `validation_test_sets`
+9. `validation_test_set_items`
+10. `validation_runs`
+11. `validation_run_items`
+12. `validation_llm_evaluations`
+13. `validation_logic_evaluations`
 
 ---
 
@@ -136,7 +137,39 @@
 
 ---
 
-## 4) `validation_query_groups`
+## 4) `prompt_snapshots`
+
+### 테이블 개요
+
+- Table name: `prompt_snapshots`
+- Business purpose: 워커별 현재 프롬프트(ATS 조회 기준)와 직전 프롬프트 1개를 저장해 조회 시점을 안정적으로 제공
+- Primary key: `id`
+- Important relationships: 별도 FK 없음
+- Data lifecycle:
+  - 생성: 프롬프트 조회/수정/초기화에서 해당 워커 스냅샷이 없을 때 생성
+  - 수정: ATS 현재값이 바뀌거나 수정/초기화 액션이 발생하면 `previous_prompt/current_prompt` 갱신
+  - 삭제/보존: 운영 정책에 따라 관리(현재 soft delete 없음)
+
+### 컬럼 정의
+
+| Column name | Type | Nullable | Default | Description | Example value | Notes |
+|---|---|---|---|---|---|---|
+| `id` | `text` | No | UUID (app) | 스냅샷 ID | `1880a306-79a2-41db-95c6-f06559f03004` | PK |
+| `environment` | `enum` | No | 없음 | 대상 환경 | `dev` | 값: `dev/st2/st/pr` |
+| `worker_type` | `text` | No | 없음 | 워커 종류 | `RECRUIT_PLAN_WORKER_V3` | unique 제약 포함 |
+| `current_prompt` | `text` | No | `""` (app) | ATS 기준 현재 프롬프트 | `You are ...` |  |
+| `previous_prompt` | `text` | No | `""` (app) | 바로 직전 프롬프트 | `You are previous ...` |  |
+| `actor` | `text` | No | `system` (app) | 마지막 갱신 주체 | `pm_kim` |  |
+| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 마지막 갱신 시각 | `2026-02-19 11:03:14` |  |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- Unique constraint: `uq_prompt_snapshots_environment_worker_type(environment, worker_type)`
+
+---
+
+## 5) `validation_query_groups`
 
 ### 테이블 개요
 
@@ -168,7 +201,7 @@
 
 ---
 
-## 5) `validation_queries`
+## 6) `validation_queries`
 
 ### 테이블 개요
 
@@ -211,7 +244,7 @@
 
 ---
 
-## 6) `validation_settings`
+## 7) `validation_settings`
 
 ### 테이블 개요
 
@@ -246,7 +279,7 @@
 
 ---
 
-## 7) `validation_test_sets`
+## 8) `validation_test_sets`
 
 ### 테이블 개요
 
@@ -278,7 +311,7 @@
 
 ---
 
-## 8) `validation_test_set_items`
+## 9) `validation_test_set_items`
 
 ### 테이블 개요
 
@@ -315,7 +348,7 @@
 
 ---
 
-## 9) `validation_runs`
+## 10) `validation_runs`
 
 ### 테이블 개요
 
@@ -364,7 +397,7 @@
 
 ---
 
-## 10) `validation_run_items`
+## 11) `validation_run_items`
 
 ### 테이블 개요
 
@@ -417,7 +450,7 @@
 
 ---
 
-## 11) `validation_llm_evaluations`
+## 12) `validation_llm_evaluations`
 
 ### 테이블 개요
 
@@ -453,7 +486,7 @@
 
 ---
 
-## 12) `validation_logic_evaluations`
+## 13) `validation_logic_evaluations`
 
 ### 테이블 개요
 

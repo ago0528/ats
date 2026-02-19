@@ -6,6 +6,8 @@ import {
   Modal,
   Input,
   App,
+  Row,
+  Col,
   Space,
   Tag,
   Typography,
@@ -19,16 +21,14 @@ import type { Environment } from '../../app/EnvironmentScope';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
 import { StandardModal, StandardModalMetaBlock } from '../../components/common/StandardModal';
 import { calculateLineDiff, getLengthDelta } from './utils/promptDiff';
+import { normalizePromptSnapshot, type PromptSnapshotData } from './utils/promptSnapshot';
 
 type Worker = {
   workerType: string;
   description: string;
 };
 
-type WorkerPromptData = {
-  before: string;
-  after: string;
-};
+type WorkerPromptData = PromptSnapshotData;
 
 type ModalMode = 'view' | 'edit';
 
@@ -100,7 +100,12 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [activeModal, setActiveModal] = useState<ModalMode | null>(null);
   const [selectedWorker, setSelectedWorker] = useState('');
-  const [promptData, setPromptData] = useState<WorkerPromptData>({ before: '', after: '' });
+  const [promptData, setPromptData] = useState<WorkerPromptData>({
+    before: '',
+    after: '',
+    currentPrompt: '',
+    previousPrompt: '',
+  });
   const [draft, setDraft] = useState('');
   const [search, setSearch] = useState('');
   const [isFetchingList, setIsFetchingList] = useState(false);
@@ -117,8 +122,11 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const diffWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const hasTokens = Boolean(tokens.bearer && tokens.cms && tokens.mrs);
-  const hasUnsavedChanges = draft !== (promptData.after || promptData.before);
-  const diffSummary = useMemo(() => calculateLineDiff(promptData.before, draft), [promptData.before, draft]);
+  const hasUnsavedChanges = draft !== promptData.currentPrompt;
+  const diffSummary = useMemo(
+    () => calculateLineDiff(promptData.currentPrompt, draft),
+    [promptData.currentPrompt, draft],
+  );
 
   const loadWorkers = async () => {
     setIsFetchingList(true);
@@ -158,10 +166,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   const fetchPromptSnapshot = async (workerType: string) => {
     const response = await api.get(`/prompts/${environment}/${workerType}`, getApiHeaders(tokens));
-    return {
-      before: response.data.before || '',
-      after: response.data.after || '',
-    };
+    return normalizePromptSnapshot(response.data);
   };
 
   const openPromptModal = async (workerType: string, nextMode: ModalMode = 'view') => {
@@ -172,9 +177,9 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     setSelectedWorker(workerType);
     try {
       const nextData = await fetchPromptSnapshot(workerType);
-      const nextDraft = nextData.after || nextData.before;
+      const nextDraft = nextData.currentPrompt;
       setPromptData(nextData);
-      setDraft(nextMode === 'edit' ? nextDraft : nextData.after);
+      setDraft(nextMode === 'edit' ? nextDraft : nextData.currentPrompt);
       setEditorSessionKey((prev) => prev + 1);
       setActiveModal(nextMode);
     } catch (e) {
@@ -185,6 +190,10 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   const updatePrompt = async () => {
     if (!selectedWorker) return;
+    if (draft === promptData.currentPrompt) {
+      message.warning('프롬프트 수정사항이 없어요.');
+      return;
+    }
     setIsPromptSaving(true);
     try {
       const response = await api.put(
@@ -192,10 +201,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
         { prompt: draft },
         getApiHeaders(tokens),
       );
-      const nextData = {
-        before: response.data.before || '',
-        after: response.data.after || '',
-      };
+      const nextData = normalizePromptSnapshot(response.data);
       let syncedData = nextData;
       try {
         syncedData = await fetchPromptSnapshot(selectedWorker);
@@ -203,10 +209,10 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
         console.error(verifyError);
       }
 
-      if (syncedData.after === draft) {
-        message.warning('프롬프트 수정사항이 없어요.');
-      } else {
+      if (syncedData.currentPrompt === draft) {
         message.success('프롬프트가 수정되었습니다.');
+      } else {
+        message.warning('저장 후 다시 조회된 프롬프트가 입력값과 달라 확인이 필요합니다.');
       }
 
       await loadWorkers();
@@ -229,12 +235,9 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     setIsPromptSaving(true);
     try {
       const response = await api.put(`/prompts/${environment}/${workerType}/reset`, {}, getApiHeaders(tokens));
-      const nextData = {
-        before: response.data.before || '',
-        after: response.data.after || '',
-      };
+      const nextData = normalizePromptSnapshot(response.data);
       setPromptData(nextData);
-      setDraft(nextData.after);
+      setDraft(nextData.currentPrompt);
       setSelectedWorker(workerType);
       setActiveModal('view');
       message.success('프롬프트가 초기화되었습니다.');
@@ -251,7 +254,12 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     disposeDiffEditorListeners();
     setActiveModal(null);
     setSelectedWorker('');
-    setPromptData({ before: '', after: '' });
+    setPromptData({
+      before: '',
+      after: '',
+      currentPrompt: '',
+      previousPrompt: '',
+    });
     setDraft('');
   };
 
@@ -426,27 +434,60 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
             </div>
           </StandardModalMetaBlock>
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-              <Button
-                type="text"
-                icon={<CopyOutlined />}
-                onClick={() => copyTextToClipboard('프롬프트', promptData.before, '클립보드로 복사됐어요.')}
-                style={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
-              />
-              <Input.TextArea
-                value={promptData.before}
-                disabled
-                style={{
-                  flex: 1,
-                  minHeight: 0,
-                  height: '400px',
-                  resize: 'none',
-                  paddingTop: 32,
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                }}
-              />
-            </div>
+          <div style={{ flex: 1, minHeight: 0 }}>
+            <Row gutter={12} style={{ height: '100%' }}>
+              <Col xs={24} md={12} style={{ height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                  <Typography.Text strong>현재 프롬프트</Typography.Text>
+                  <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+                    <Button
+                      type="text"
+                      icon={<CopyOutlined />}
+                      onClick={() => copyTextToClipboard('현재 프롬프트', promptData.currentPrompt, '클립보드로 복사됐어요.')}
+                      style={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
+                    />
+                    <Input.TextArea
+                      value={promptData.currentPrompt}
+                      disabled
+                      style={{
+                        flex: 1,
+                        minHeight: 0,
+                        height: '400px',
+                        resize: 'none',
+                        paddingTop: 32,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      }}
+                    />
+                  </div>
+                </div>
+              </Col>
+              <Col xs={24} md={12} style={{ height: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+                  <Typography.Text strong>직전 프롬프트</Typography.Text>
+                  <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+                    <Button
+                      type="text"
+                      icon={<CopyOutlined />}
+                      disabled={!promptData.previousPrompt}
+                      onClick={() => copyTextToClipboard('직전 프롬프트', promptData.previousPrompt, '클립보드로 복사됐어요.')}
+                      style={{ position: 'absolute', top: 4, right: 4, zIndex: 2 }}
+                    />
+                    <Input.TextArea
+                      value={promptData.previousPrompt || '직전 프롬프트가 없습니다.'}
+                      disabled
+                      style={{
+                        flex: 1,
+                        minHeight: 0,
+                        height: '400px',
+                        resize: 'none',
+                        paddingTop: 32,
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                      }}
+                    />
+                  </div>
+                </div>
+              </Col>
+            </Row>
           </div>
         </div>
       </StandardModal>
@@ -488,13 +529,13 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
               <Space size={8}>
-                <Tag color="blue">길이 차이: {getLengthDelta(promptData.before, draft)}</Tag>
+                <Tag color="blue">길이 차이: {getLengthDelta(promptData.currentPrompt, draft)}</Tag>
                 <Tag color="success">+Added {diffSummary.added}</Tag>
                 <Tag color="error">-Removed {diffSummary.removed}</Tag>
                 <Tag color="warning">~Modified {diffSummary.modified}</Tag>
               </Space>
               <Space size={8} wrap>
-                <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('AS-IS', promptData.before)}>
+                <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('AS-IS', promptData.currentPrompt)}>
                   Copy AS-IS
                 </Button>
                 <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('TO-BE', draft)}>
@@ -512,7 +553,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                       okText: '초기화',
                       cancelText: '취소',
                       okType: 'danger',
-                      onOk: () => setDraft(promptData.before),
+                      onOk: () => setDraft(promptData.currentPrompt),
                     });
                   }}
                 >
@@ -528,7 +569,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               <DiffEditor
                 key={`prompt-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
                 language="markdown"
-                original={promptData.before}
+                original={promptData.currentPrompt}
                 modified={draft}
                 originalModelPath={diffModelPaths.originalModelPath}
                 modifiedModelPath={diffModelPaths.modifiedModelPath}

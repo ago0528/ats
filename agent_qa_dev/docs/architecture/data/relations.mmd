@@ -32,6 +32,16 @@ erDiagram
     datetime created_at
   }
 
+  PROMPT_SNAPSHOTS {
+    text id PK
+    environment_enum environment
+    text worker_type UK
+    text current_prompt
+    text previous_prompt
+    text actor
+    datetime updated_at
+  }
+
   VALIDATION_QUERY_GROUPS {
     varchar_36 id PK
     varchar_140 group_name UK

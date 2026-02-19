@@ -22,6 +22,7 @@ sqlite3 backoffice/backend/backoffice.db
 - LLM 평가: `validation_llm_evaluations`
 - 로직 평가: `validation_logic_evaluations`
 - 프롬프트 감사 로그: `prompt_audit_logs`
+- 프롬프트 스냅샷: `prompt_snapshots`
 
 ---
 
@@ -49,6 +50,8 @@ UNION ALL
 SELECT 'validation_logic_evaluations', COUNT(*) FROM validation_logic_evaluations
 UNION ALL
 SELECT 'prompt_audit_logs', COUNT(*) FROM prompt_audit_logs
+UNION ALL
+SELECT 'prompt_snapshots', COUNT(*) FROM prompt_snapshots
 ORDER BY row_count DESC;
 ```
 
@@ -445,6 +448,32 @@ SELECT
   (p.after_len - p.before_len) AS diff_len
 FROM prompt_audit_logs p
 ORDER BY p.created_at DESC
+LIMIT (SELECT row_limit FROM params);
+```
+
+## Q19. 프롬프트 현재/직전 스냅샷(최근 갱신순)
+
+- 무엇을 보는가: 워커별 현재 프롬프트와 직전 프롬프트 보관 상태
+- 파라미터: `row_limit`
+- 주의사항: `current_prompt`는 ATS 조회 기준 마지막 동기화 시점 값
+
+```sql
+WITH params AS (
+  SELECT 100 AS row_limit
+)
+SELECT
+  s.updated_at,
+  s.environment,
+  s.worker_type,
+  LENGTH(s.current_prompt) AS current_len,
+  LENGTH(s.previous_prompt) AS previous_len,
+  CASE
+    WHEN s.previous_prompt = '' THEN 'NO_PREVIOUS'
+    ELSE 'HAS_PREVIOUS'
+  END AS previous_status,
+  s.actor
+FROM prompt_snapshots s
+ORDER BY s.updated_at DESC
 LIMIT (SELECT row_limit FROM params);
 ```
 

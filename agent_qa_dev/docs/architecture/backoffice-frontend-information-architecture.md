@@ -54,7 +54,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD, 기본 대상 어시스턴트/기준 관리 |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |
 | Validation Settings | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값 관리 |
-| Prompt | `/prompt` | `PromptManagementPage` | 워커 프롬프트 조회/수정/초기화 |
+| Prompt | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
 | Generic Legacy | `/generic-legacy` | `GenericRunPage` | 레거시 검증 플로우 운영 |
 
 ## 3. 핵심 도메인 객체

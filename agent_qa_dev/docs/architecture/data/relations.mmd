@@ -124,7 +124,7 @@ erDiagram
 
   VALIDATION_LLM_EVALUATIONS {
     varchar_36 id PK
-    varchar_36 run_item_id FK UK
+    varchar_36 run_item_id FK
     varchar_120 eval_model
     text metric_scores_json
     float total_score
@@ -134,7 +134,7 @@ erDiagram
 
   VALIDATION_LOGIC_EVALUATIONS {
     varchar_36 id PK
-    varchar_36 run_item_id FK UK
+    varchar_36 run_item_id FK
     text eval_items_json
     varchar_20 result
     text fail_reason
@@ -155,5 +155,5 @@ erDiagram
   VALIDATION_RUNS ||--o{ VALIDATION_RUN_ITEMS : "executes"
   VALIDATION_QUERIES ||--o{ VALIDATION_RUN_ITEMS : "source query"
 
-  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LLM_EVALUATIONS : "llm eval"
-  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval"
+  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LLM_EVALUATIONS : "llm eval (run_item_id unique)"
+  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval (run_item_id unique)"

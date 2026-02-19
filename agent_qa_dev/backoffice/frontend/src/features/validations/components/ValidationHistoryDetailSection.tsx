@@ -73,7 +73,7 @@ export function ValidationHistoryDetailSection({
             <Descriptions.Item label="총/완료/오류">
               {currentRun.totalItems} / {currentRun.doneItems} / {currentRun.errorItems}
             </Descriptions.Item>
-            <Descriptions.Item label="테스트세트">{currentRun.testSetId || '-'}</Descriptions.Item>
+            <Descriptions.Item label="테스트 세트">{currentRun.testSetId || '-'}</Descriptions.Item>
             <Descriptions.Item label="에이전트">{currentRun.agentId}</Descriptions.Item>
             <Descriptions.Item label="모드">{currentRun.mode}</Descriptions.Item>
           </Descriptions>

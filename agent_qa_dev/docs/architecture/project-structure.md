@@ -39,10 +39,10 @@ agent_qa_dev/
 ### Backend
 
 - API 라우터: `backoffice/backend/app/api`
-- 테스트세트 라우터: `backoffice/backend/app/api/routes/validation_test_sets.py`
+- 테스트 세트 라우터: `backoffice/backend/app/api/routes/validation_test_sets.py`
 - 서비스 계층: `backoffice/backend/app/services`
 - 저장소 계층: `backoffice/backend/app/repositories`
-- 테스트세트 저장소: `backoffice/backend/app/repositories/validation_test_sets.py`
+- 테스트 세트 저장소: `backoffice/backend/app/repositories/validation_test_sets.py`
 - 배치/잡: `backoffice/backend/app/jobs`
 - 운영 스크립트: `backoffice/backend/scripts`
 - 테스트: `backoffice/backend/tests`
@@ -54,7 +54,7 @@ agent_qa_dev/
 - 데이터 테이블 정의서: `docs/architecture/data/schema.md`
 - 데이터 관계도(ERD): `docs/architecture/data/relations.mmd`
 - SQLite 운영 SQL 모음: `docs/architecture/data/sqlite-metrics.md`
-- 스킬 인덱스: `docs/skills/AGENTS.md`
+- 스킬 인덱스: `AGENTS.md`의 `4) @skills 인덱스 (docs/skills)` 섹션
 - 장애/재발방지 기록: `docs/troubleshooting/incidents`
 
 ## 3) 유지보수 규칙

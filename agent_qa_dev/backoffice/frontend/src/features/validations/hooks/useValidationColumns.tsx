@@ -82,7 +82,7 @@ export function useValidationColumns({
         width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.actions,
         render: (_, row: ValidationRunItem) => (
           <Button onClick={() => handleAddToTestSet(row)} disabled={!row.queryId}>
-            테스트세트 추가
+            테스트 세트 추가
           </Button>
         ),
       },

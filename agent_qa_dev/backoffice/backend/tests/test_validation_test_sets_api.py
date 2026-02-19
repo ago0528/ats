@@ -75,7 +75,7 @@ def test_validation_test_set_crud_clone_create_run_and_snapshot():
     create_resp = client.post(
         "/api/v1/validation-test-sets",
         json={
-            "name": "테스트세트 A",
+            "name": "테스트 세트 A",
             "description": "설명",
             "queryIds": [query_id_1],
             "config": {
@@ -118,7 +118,7 @@ def test_validation_test_set_crud_clone_create_run_and_snapshot():
     patch_resp = client.patch(
         f"/api/v1/validation-test-sets/{test_set_id}",
         json={
-            "name": "테스트세트 A-수정",
+            "name": "테스트 세트 A-수정",
             "queryIds": [query_id_2],
             "config": {"repeatInConversation": 1, "conversationRoomCount": 1},
         },
@@ -196,7 +196,7 @@ def test_validation_test_set_create_with_filtered_query_selection():
     create_resp = client.post(
         "/api/v1/validation-test-sets",
         json={
-            "name": "필터 선택 테스트세트",
+            "name": "필터 선택 테스트 세트",
             "querySelection": {
                 "mode": "filtered",
                 "filter": {
@@ -224,7 +224,7 @@ def test_validation_test_set_append_queries_deduplicates_and_excludes():
 
     create_resp = client.post(
         "/api/v1/validation-test-sets",
-        json={"name": "추가 테스트세트", "queryIds": [query_id_1]},
+        json={"name": "추가 테스트 세트", "queryIds": [query_id_1]},
     )
     assert create_resp.status_code == 200
     test_set_id = create_resp.json()["id"]

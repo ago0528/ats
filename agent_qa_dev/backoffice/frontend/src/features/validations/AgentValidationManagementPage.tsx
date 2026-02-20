@@ -7,17 +7,15 @@ import {
   createRunFromValidationTestSet,
   evaluateValidationRun,
   executeValidationRun,
-  getValidationGroupDashboard,
+  getValidationTestSetDashboard,
   getValidationRun,
   getValidationTestSet,
-  listQueryGroups,
   listValidationRunItems,
   listValidationRuns,
   listValidationTestSets,
   updateValidationTestSet,
 } from '../../api/validation';
 import type {
-  QueryGroup,
   ValidationRun,
   ValidationRunItem,
   ValidationTestSet,
@@ -53,7 +51,6 @@ export function AgentValidationManagementPage({
 }) {
   const { message } = App.useApp();
   const location = useLocation();
-  const [groups, setGroups] = useState<QueryGroup[]>([]);
   const [testSets, setTestSets] = useState<ValidationTestSet[]>([]);
   const [runs, setRuns] = useState<ValidationRun[]>([]);
   const [runItems, setRunItems] = useState<ValidationRunItem[]>([]);
@@ -67,7 +64,7 @@ export function AgentValidationManagementPage({
   const [historyPageSize, setHistoryPageSize] = useState<number>(50);
   const [loading, setLoading] = useState(false);
   const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null);
-  const [dashboardGroupId, setDashboardGroupId] = useState<string>('');
+  const [dashboardTestSetId, setDashboardTestSetId] = useState<string>('');
   const [dashboardData, setDashboardData] = useState<Record<string, unknown> | null>(null);
 
   const runQueryParams = useMemo(() => {
@@ -80,13 +77,9 @@ export function AgentValidationManagementPage({
 
   const loadGroupsAndTestSets = async () => {
     try {
-      const [groupData, testSetData] = await Promise.all([
-        listQueryGroups({ limit: 500 }),
-        listValidationTestSets({ limit: 500 }),
-      ]);
-      setGroups(groupData.items);
+      const testSetData = await listValidationTestSets({ limit: 500 });
       setTestSets(testSetData.items);
-      setDashboardGroupId((prev) => prev || groupData.items[0]?.id || '');
+      setDashboardTestSetId((prev) => prev || testSetData.items[0]?.id || '');
       setSelectedTestSetId((prev) => {
         if (runQueryParams.testSetId) return runQueryParams.testSetId;
         if (prev && testSetData.items.some((item) => item.id === prev)) return prev;
@@ -285,9 +278,9 @@ export function AgentValidationManagementPage({
   };
 
   const handleLoadDashboard = async () => {
-    if (!dashboardGroupId) return;
+    if (!dashboardTestSetId) return;
     try {
-      const data = await getValidationGroupDashboard(dashboardGroupId);
+      const data = await getValidationTestSetDashboard(dashboardTestSetId);
       setDashboardData(data as Record<string, unknown>);
     } catch (error) {
       console.error(error);
@@ -395,9 +388,9 @@ export function AgentValidationManagementPage({
 
       {section === 'dashboard' ? (
         <ValidationDashboardSection
-          groups={groups}
-          dashboardGroupId={dashboardGroupId}
-          setDashboardGroupId={setDashboardGroupId}
+          testSets={testSets}
+          dashboardTestSetId={dashboardTestSetId}
+          setDashboardTestSetId={setDashboardTestSetId}
           handleLoadDashboard={() => {
             void handleLoadDashboard();
           }}

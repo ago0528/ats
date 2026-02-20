@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aqb_openai_judge import openai_judge_with_retry
+from app.lib.aqb_openai_judge import openai_judge_with_retry
 
 
 class OpenAIJudgeAdapter:

@@ -10,7 +10,7 @@ import aiohttp
 
 from app.adapters.agent_client_adapter import AgentClientAdapter
 from app.core.db import SessionLocal
-from app.core.enums import RunStatus
+from app.core.enums import EvalStatus, RunStatus
 from app.repositories.validation_runs import ValidationRunRepository
 
 
@@ -43,6 +43,7 @@ async def execute_validation_run(
     db = SessionLocal()
     repo = ValidationRunRepository(db)
     repo.set_status(run_id, RunStatus.RUNNING)
+    repo.set_eval_status(run_id, EvalStatus.PENDING)
     db.commit()
 
     try:

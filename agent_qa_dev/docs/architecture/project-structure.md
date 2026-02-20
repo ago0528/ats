@@ -40,7 +40,10 @@ agent_qa_dev/
 
 - API 라우터: `backoffice/backend/app/api`
 - 테스트 세트 라우터: `backoffice/backend/app/api/routes/validation_test_sets.py`
+- 에이전트 잡 라우터: `backoffice/backend/app/api/routes/validation_agents.py`
+- 내부 공용 라이브러리(AQB 이식): `backoffice/backend/app/lib`
 - 서비스 계층: `backoffice/backend/app/services`
+- 에이전트 작업 서비스: `backoffice/backend/app/services/agent_tasks`
 - 저장소 계층: `backoffice/backend/app/repositories`
 - 테스트 세트 저장소: `backoffice/backend/app/repositories/validation_test_sets.py`
 - 배치/잡: `backoffice/backend/app/jobs`

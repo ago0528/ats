@@ -1,6 +1,6 @@
 # Backoffice 데이터 테이블 정의서 (PM Friendly)
 
-- 최신 갱신일: 2026-02-19
+- 최신 갱신일: 2026-02-20
 - 대상: PM, PO, QA, 운영 담당자
 - 스키마 기준: `backoffice/backend/app/models/*.py` + `backoffice/backend/app/main.py` startup 보정 + `backoffice/backend/backoffice.db`
 
@@ -24,6 +24,8 @@
 11. `validation_run_items`
 12. `validation_llm_evaluations`
 13. `validation_logic_evaluations`
+14. `validation_score_snapshots`
+15. `automation_jobs`
 
 ---
 
@@ -393,6 +395,9 @@
 | `created_at` | `datetime` | No | UTC now (app) | run 생성 시각 | `2026-02-18 10:41:01` |  |
 | `started_at` | `datetime` | Yes | `NULL` | 실행 시작 시각 | `2026-02-18 10:41:10` |  |
 | `finished_at` | `datetime` | Yes | `NULL` | 실행 종료 시각 | `2026-02-18 10:44:55` |  |
+| `eval_status` | `enum` | No | `PENDING` (app) | 평가 상태 | `RUNNING` | index, 값: `PENDING/RUNNING/DONE/FAILED` |
+| `eval_started_at` | `datetime` | Yes | `NULL` | 평가 시작 시각 | `2026-02-20 09:10:05` |  |
+| `eval_finished_at` | `datetime` | Yes | `NULL` | 평가 종료 시각 | `2026-02-20 09:12:12` |  |
 
 ### 인덱스/제약조건
 
@@ -402,6 +407,7 @@
 - Index: `ix_validation_runs_environment(environment)`
 - Index: `ix_validation_runs_status(status)`
 - Index: `ix_validation_runs_test_set_id(test_set_id)`
+- Index: `ix_validation_runs_eval_status(eval_status)`
 
 ---
 
@@ -528,6 +534,88 @@
 
 ---
 
+## 14) `validation_score_snapshots`
+
+### 테이블 개요
+
+- Table name: `validation_score_snapshots`
+- Business purpose: run 평가 종료 시점의 점수/품질 지표를 스냅샷으로 저장해 대시보드 집계를 안정화
+- Primary key: `id`
+- Important relationships:
+  - `run_id -> validation_runs.id` (N:1)
+  - `test_set_id -> validation_test_sets.id` (N:1, nullable)
+  - `query_group_id -> validation_query_groups.id` (N:1, nullable)
+- Data lifecycle:
+  - 생성/수정: 평가 작업 완료 시 run 단위로 재계산 후 upsert
+  - 삭제: run 재평가 시 해당 run 스냅샷을 치환
+  - 보존: 대시보드/리포트의 기준 데이터로 보존
+
+### 컬럼 정의
+
+| Column name | Type | Nullable | Default | Description | Example value | Notes |
+|---|---|---|---|---|---|---|
+| `id` | `varchar(36)` | No | UUID (app) | 스냅샷 ID | `58ca91d4-6f9b-4b16-b36e-8f9bfcc3e4e9` | PK |
+| `run_id` | `varchar(36)` | No | 없음 | 대상 run ID | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index |
+| `test_set_id` | `varchar(36)` | Yes | `NULL` | 대상 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index |
+| `query_group_id` | `varchar(36)` | Yes | `NULL` | 그룹 단위 스냅샷 키 | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index |
+| `total_items` | `integer` | No | `0` (app) | 집계 대상 item 수 | `120` |  |
+| `executed_items` | `integer` | No | `0` (app) | 실행 완료 item 수 | `117` |  |
+| `error_items` | `integer` | No | `0` (app) | 오류 item 수 | `3` |  |
+| `logic_pass_items` | `integer` | No | `0` (app) | 로직 PASS item 수 | `98` |  |
+| `logic_pass_rate` | `float` | No | `0` (app) | 로직 PASS 비율(%) | `81.6667` |  |
+| `llm_done_items` | `integer` | No | `0` (app) | LLM 평가 완료 item 수 | `110` |  |
+| `llm_metric_averages_json` | `text` | No | `{}` (app) | LLM 메트릭 평균(JSON 문자열) | `{"정확성":4.12}` | JSON string |
+| `llm_total_score_avg` | `float` | Yes | `NULL` | LLM 총점 평균 | `4.03` |  |
+| `evaluated_at` | `datetime` | No | UTC now (app) | 스냅샷 계산 시각 | `2026-02-20 09:12:12` | index |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- FK: `run_id -> validation_runs.id`
+- FK: `test_set_id -> validation_test_sets.id`
+- FK: `query_group_id -> validation_query_groups.id`
+- Index: `ix_validation_score_snapshots_run_id(run_id)`
+- Index: `ix_validation_score_snapshots_test_set_id(test_set_id)`
+- Index: `ix_validation_score_snapshots_query_group_id(query_group_id)`
+- Index: `ix_validation_score_snapshots_evaluated_at(evaluated_at)`
+
+---
+
+## 15) `automation_jobs`
+
+### 테이블 개요
+
+- Table name: `automation_jobs`
+- Business purpose: 질의 생성/리포트 작성 등 에이전트 작업 요청과 결과를 비동기 job 단위로 저장
+- Primary key: `id`
+- Important relationships: 별도 FK 없음(job payload 기준 참조)
+- Data lifecycle:
+  - 생성: 에이전트 작업 요청 시 `PENDING` 생성
+  - 수정: `RUNNING` -> `DONE/FAILED` 상태 전이, 결과/오류 기록
+  - 보존: 운영 로그/감사 목적 보존
+
+### 컬럼 정의
+
+| Column name | Type | Nullable | Default | Description | Example value | Notes |
+|---|---|---|---|---|---|---|
+| `id` | `varchar(36)` | No | UUID (app) | job ID | `73d4bda8-9f8a-4995-a50e-efce347c35c4` | PK |
+| `job_type` | `varchar(80)` | No | 없음 | 작업 종류 | `QUERY_GENERATION` | index |
+| `status` | `varchar(20)` | No | `PENDING` (app) | 작업 상태 | `DONE` | index |
+| `payload_json` | `text` | No | `{}` (app) | 요청 파라미터(JSON 문자열) | `{"testSetId":"...","limit":5}` | JSON string |
+| `result_json` | `text` | No | `""` (app) | 작업 결과(JSON 문자열) | `{"summary":"..."}` | JSON string |
+| `error` | `text` | No | `""` (app) | 실패 사유 | `timeout` |  |
+| `created_at` | `datetime` | No | UTC now (app) | 생성 시각 | `2026-02-20 09:45:00` |  |
+| `started_at` | `datetime` | Yes | `NULL` | 시작 시각 | `2026-02-20 09:45:01` |  |
+| `finished_at` | `datetime` | Yes | `NULL` | 종료 시각 | `2026-02-20 09:45:03` |  |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- Index: `ix_automation_jobs_job_type(job_type)`
+- Index: `ix_automation_jobs_status(status)`
+
+---
+
 ## 부록: 관계 요약
 
 - Query Group 1:N Query
@@ -536,6 +624,7 @@
 - Run 1:N Run Item
 - Run Item 1:1 LLM Evaluation
 - Run Item 1:1 Logic Evaluation
+- Run 1:N Score Snapshot
 - Generic Run 1:N Generic Run Row
 
 ## 부록: rename 이력 기록 규칙

@@ -323,6 +323,36 @@ export async function getValidationGroupDashboard(groupId: string) {
   return data;
 }
 
+export async function getValidationTestSetDashboard(
+  testSetId: string,
+  params?: { runId?: string; dateFrom?: string; dateTo?: string },
+) {
+  const { data } = await api.get<{
+    testSetId: string;
+    runCount: number;
+    totalItems: number;
+    executedItems: number;
+    errorItems: number;
+    logicPassRate: number;
+    llmMetricAverages: Record<string, number>;
+    llmTotalScoreAverage: number | null;
+    failurePatterns: Array<{ category: string; count: number }>;
+    runSummaries: Array<{
+      runId: string;
+      status: string;
+      evalStatus: string;
+      createdAt?: string;
+      finishedAt?: string | null;
+      totalItems: number;
+      executedItems: number;
+      errorItems: number;
+      logicPassItems: number;
+      llmDoneItems: number;
+    }>;
+  }>(`/validation-dashboard/test-sets/${testSetId}`, { params });
+  return data;
+}
+
 export async function getValidationSettings(environment: Environment) {
   const { data } = await api.get<ValidationSettings>(`/validation-settings/${environment}`);
   return data;

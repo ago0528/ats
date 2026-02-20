@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aqb_prompt_template import ENV_PRESETS
+from app.lib.aqb_prompt_template import ENV_PRESETS
 
 from .enums import Environment
 

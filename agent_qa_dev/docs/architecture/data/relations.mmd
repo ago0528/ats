@@ -114,6 +114,9 @@ erDiagram
     datetime created_at
     datetime started_at
     datetime finished_at
+    eval_status_enum eval_status
+    datetime eval_started_at
+    datetime eval_finished_at
   }
 
   VALIDATION_RUN_ITEMS {
@@ -151,6 +154,34 @@ erDiagram
     datetime evaluated_at
   }
 
+  VALIDATION_SCORE_SNAPSHOTS {
+    varchar_36 id PK
+    varchar_36 run_id FK
+    varchar_36 test_set_id FK
+    varchar_36 query_group_id FK
+    integer total_items
+    integer executed_items
+    integer error_items
+    integer logic_pass_items
+    float logic_pass_rate
+    integer llm_done_items
+    text llm_metric_averages_json
+    float llm_total_score_avg
+    datetime evaluated_at
+  }
+
+  AUTOMATION_JOBS {
+    varchar_36 id PK
+    varchar_80 job_type
+    varchar_20 status
+    text payload_json
+    text result_json
+    text error
+    datetime created_at
+    datetime started_at
+    datetime finished_at
+  }
+
   GENERIC_RUNS ||--o{ GENERIC_RUN_ROWS : "has rows"
   GENERIC_RUNS ||--o{ GENERIC_RUNS : "base_run_id"
 
@@ -167,3 +198,6 @@ erDiagram
 
   VALIDATION_RUN_ITEMS ||--|| VALIDATION_LLM_EVALUATIONS : "llm eval (run_item_id unique)"
   VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval (run_item_id unique)"
+  VALIDATION_RUNS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "score snapshots"
+  VALIDATION_TEST_SETS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "dashboard axis"
+  VALIDATION_QUERY_GROUPS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "group snapshot"

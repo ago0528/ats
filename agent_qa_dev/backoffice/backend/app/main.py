@@ -12,6 +12,7 @@ from app.api.routes.prompts import router as prompts_router
 from app.api.routes.queries import router as queries_router
 from app.api.routes.query_groups import router as query_groups_router
 from app.api.routes.utils import router as utils_router
+from app.api.routes.validation_agents import router as validation_agents_router
 from app.api.routes.validation_runs import router as validation_runs_router
 from app.api.routes.validation_settings import router as validation_settings_router
 from app.api.routes.validation_test_sets import router as validation_test_sets_router
@@ -51,6 +52,9 @@ def startup() -> None:
     _ensure_sqlite_column("validation_run_items", "context_json_snapshot", "context_json_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_run_items", "target_assistant_snapshot", "target_assistant_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_runs", "test_set_id", "test_set_id TEXT")
+    _ensure_sqlite_column("validation_runs", "eval_status", "eval_status TEXT NOT NULL DEFAULT 'PENDING'")
+    _ensure_sqlite_column("validation_runs", "eval_started_at", "eval_started_at DATETIME")
+    _ensure_sqlite_column("validation_runs", "eval_finished_at", "eval_finished_at DATETIME")
     _ensure_sqlite_column(
         "validation_settings",
         "pagination_page_size_limit_default",
@@ -76,3 +80,4 @@ app.include_router(queries_router, prefix="/api/v1")
 app.include_router(validation_settings_router, prefix="/api/v1")
 app.include_router(validation_runs_router, prefix="/api/v1")
 app.include_router(validation_test_sets_router, prefix="/api/v1")
+app.include_router(validation_agents_router, prefix="/api/v1")

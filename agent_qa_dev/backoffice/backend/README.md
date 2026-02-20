@@ -53,3 +53,6 @@ python scripts/reset_db.py --allow-db-reset
 - 백엔드를 직접 실행할 때는 `BACKOFFICE_DB_PATH`를 절대경로로 고정하는 것을 권장합니다.
 - 테스트/리셋은 `*_test` DB에서만 허용되며, 리셋 시 `BACKOFFICE_ALLOW_DB_RESET=1` 또는 `--allow-db-reset` 명시가 필요합니다.
 - 화면/알림에는 `/api/v1/version`으로 조회한 앱 버전(기본 `0.1.0`)이 표시됩니다.
+- AQB 공용 유틸/어댑터 로직은 루트 `aqb_*.py`가 아니라 `backoffice/backend/app/lib` 경로를 기준으로 사용합니다.
+- 테스트 세트 기준 대시보드 API: `GET /api/v1/validation-dashboard/test-sets/{test_set_id}` (`runId`, `dateFrom`, `dateTo` optional query)
+- 에이전트 확장 API: `POST /api/v1/validation-agents/query-generator`, `POST /api/v1/validation-agents/report-writer`, `GET /api/v1/validation-agents/jobs/{job_id}`

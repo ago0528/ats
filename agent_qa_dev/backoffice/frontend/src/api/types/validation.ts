@@ -85,6 +85,7 @@ export type ValidationRun = {
   mode: ValidationRunMode;
   environment: Environment;
   status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
+  evalStatus?: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
   baseRunId?: string | null;
   testSetId?: string | null;
   agentId: string;
@@ -102,6 +103,8 @@ export type ValidationRun = {
   createdAt?: string;
   startedAt?: string | null;
   finishedAt?: string | null;
+  evalStartedAt?: string | null;
+  evalFinishedAt?: string | null;
 };
 
 export type ValidationRunItem = {

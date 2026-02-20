@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
-from app.core.enums import Environment, RunStatus
+from app.core.enums import Environment, EvalStatus, RunStatus
 
 
 class ValidationRun(Base):
@@ -31,3 +31,6 @@ class ValidationRun(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=dt.datetime.utcnow)
     started_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     finished_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    eval_status: Mapped[EvalStatus] = mapped_column(Enum(EvalStatus), nullable=False, default=EvalStatus.PENDING, index=True)
+    eval_started_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    eval_finished_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)

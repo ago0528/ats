@@ -3,7 +3,7 @@
 - 문서 목적: AQB Backoffice의 화면 구조, 도메인 객체, 핵심 운영 흐름을 PM/운영 관점에서 빠르게 파악
 - 대상 독자: PM, PO, 운영 리드, QA 리드
 - 기준 코드: `backoffice/frontend/src`
-- 최신 갱신일: 2026-02-19
+- 최신 갱신일: 2026-02-20
 
 ## 1. 제품 구조 한눈에 보기
 
@@ -49,7 +49,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 검증 실행 | `/validation/run` | `AgentValidationManagementPage` (run 섹션) | 테스트 세트 선택/Run 생성/Run 실행/평가/비교 워크벤치 |
 | 검증 이력 | `/validation/history` | `AgentValidationManagementPage` (history 섹션) | Run 목록 조회 |
 | 검증 이력 상세 | `/validation/history/:runId` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세 조회 및 실행 워크벤치 연결 |
-| 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 그룹 단위 성과/실패 패턴 조회 |
+| 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 테스트 세트 기준 성과/실패 패턴 조회 |
 | 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD, 기본 대상 어시스턴트/기준 관리 |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |

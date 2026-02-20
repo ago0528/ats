@@ -7,8 +7,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.core.environment import get_env_config
 from app.core.enums import Environment
+from app.lib.curl_parsing import parse_curl_headers
 
-from curl_parsing import parse_curl_headers
 
 router = APIRouter(tags=["utils"])
 

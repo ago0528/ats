@@ -12,19 +12,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from aqb_runtime_utils import dataframe_to_excel_bytes
 from app.core.db import get_db
 from app.core.environment import get_env_config
-from app.core.enums import Environment, RunStatus
+from app.core.enums import Environment, EvalStatus, RunStatus
 from app.jobs.runner import runner
 from app.jobs.validation_evaluate_job import evaluate_validation_run
 from app.jobs.validation_execute_job import execute_validation_run
+from app.lib.aqb_runtime_utils import dataframe_to_excel_bytes
 from app.repositories.validation_queries import ValidationQueryRepository
 from app.repositories.validation_query_groups import ValidationQueryGroupRepository
 from app.repositories.validation_runs import ValidationRunRepository
 from app.repositories.validation_settings import ValidationSettingsRepository
 from app.services.validation_compare import compare_validation_runs
-from app.services.validation_dashboard import build_group_dashboard
+from app.services.validation_dashboard import build_group_dashboard, build_test_set_dashboard
 
 router = APIRouter(tags=["validation-runs"])
 
@@ -332,6 +332,9 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
             run.timeout_ms,
         )
 
+    repo.set_status(run.id, RunStatus.RUNNING)
+    repo.set_eval_status(run.id, EvalStatus.PENDING)
+    db.commit()
     runner.run(job_id, _job)
     return {"jobId": job_id, "status": runner.jobs[job_id]}
 
@@ -342,6 +345,14 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
+    if run.status == RunStatus.PENDING:
+        raise HTTPException(status_code=409, detail="Run must be executed before evaluation")
+    if run.status == RunStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Run is still executing")
+    if run.eval_status == EvalStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Evaluation is already running")
+    if repo.count_done_items(run.id) == 0 and repo.count_error_items(run.id) == 0:
+        raise HTTPException(status_code=409, detail="No execution results found for evaluation")
 
     job_id = str(uuid.uuid4())
     eval_model = body.openaiModel or run.eval_model
@@ -359,6 +370,8 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
             int(eval_parallel),
         )
 
+    repo.set_eval_status(run.id, EvalStatus.RUNNING)
+    db.commit()
     runner.run(job_id, _job)
     return {"jobId": job_id, "status": runner.jobs[job_id]}
 
@@ -466,3 +479,17 @@ def compare_run(run_id: str, baseRunId: Optional[str] = Query(default=None), db:
 @router.get("/validation-dashboard/groups/{group_id}")
 def group_dashboard(group_id: str, db: Session = Depends(get_db)):
     return build_group_dashboard(db, group_id)
+
+
+@router.get("/validation-dashboard/test-sets/{test_set_id}")
+def test_set_dashboard(
+    test_set_id: str,
+    runId: Optional[str] = Query(default=None),
+    dateFrom: Optional[str] = Query(default=None),
+    dateTo: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    try:
+        return build_test_set_dashboard(db, test_set_id, run_id=runId, date_from=dateFrom, date_to=dateTo)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

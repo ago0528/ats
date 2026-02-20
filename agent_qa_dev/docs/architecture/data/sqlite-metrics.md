@@ -21,6 +21,8 @@ sqlite3 backoffice/backend/backoffice.db
 - 실행 항목(run item): `validation_run_items`
 - LLM 평가: `validation_llm_evaluations`
 - 로직 평가: `validation_logic_evaluations`
+- 점수 스냅샷: `validation_score_snapshots`
+- 자동화 잡: `automation_jobs`
 - 프롬프트 감사 로그: `prompt_audit_logs`
 - 프롬프트 스냅샷: `prompt_snapshots`
 
@@ -48,6 +50,10 @@ UNION ALL
 SELECT 'validation_llm_evaluations', COUNT(*) FROM validation_llm_evaluations
 UNION ALL
 SELECT 'validation_logic_evaluations', COUNT(*) FROM validation_logic_evaluations
+UNION ALL
+SELECT 'validation_score_snapshots', COUNT(*) FROM validation_score_snapshots
+UNION ALL
+SELECT 'automation_jobs', COUNT(*) FROM automation_jobs
 UNION ALL
 SELECT 'prompt_audit_logs', COUNT(*) FROM prompt_audit_logs
 UNION ALL

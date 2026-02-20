@@ -1,7 +1,10 @@
 from fastapi.testclient import TestClient
 
 from app.api.routes import validation_runs as validation_runs_route
+from app.core.db import SessionLocal
+from app.core.enums import RunStatus
 from app.main import app
+from app.repositories.validation_runs import ValidationRunRepository
 
 
 def test_validation_runs_flow(monkeypatch):
@@ -58,6 +61,21 @@ def test_validation_runs_flow(monkeypatch):
     assert exec_resp.status_code == 200
     assert exec_resp.json()["status"] == "DONE"
 
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    run_item = repo.list_items(run_id, limit=1)[0]
+    repo.update_item_execution(
+        run_item.id,
+        conversation_id="conv-1",
+        raw_response="ok",
+        latency_ms=100,
+        error="",
+        raw_json='{"assistantMessage":"결과 A"}',
+    )
+    repo.set_status(run_id, RunStatus.DONE)
+    db.commit()
+    db.close()
+
     eval_resp = client.post(
         f"/api/v1/validation-runs/{run_id}/evaluate",
         json={"openaiModel": "gpt-5.2"},
@@ -87,3 +105,55 @@ def test_validation_runs_flow(monkeypatch):
 
     missing_export_resp = client.get("/api/v1/validation-runs/not-found/export.xlsx")
     assert missing_export_resp.status_code == 404
+
+
+def test_validation_run_evaluate_gate(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setenv("BACKOFFICE_OPENAI_API_KEY", "test-openai-key")
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-게이트", "description": "desc", "defaultTargetAssistant": "ORCHESTRATOR_WORKER_V3"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 A",
+            "expectedResult": "결과 A",
+            "category": "Happy path",
+            "groupId": group_id,
+            "logicFieldPath": "assistantMessage",
+            "logicExpectedValue": "결과",
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "mode": "REGISTERED",
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    pending_eval_resp = client.post(
+        f"/api/v1/validation-runs/{run_id}/evaluate",
+        json={"openaiModel": "gpt-5.2"},
+    )
+    assert pending_eval_resp.status_code == 409
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    repo.set_status(run_id, RunStatus.DONE)
+    db.commit()
+    db.close()
+
+    no_result_eval_resp = client.post(
+        f"/api/v1/validation-runs/{run_id}/evaluate",
+        json={"openaiModel": "gpt-5.2"},
+    )
+    assert no_result_eval_resp.status_code == 409

@@ -7,11 +7,13 @@ from typing import Any, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.enums import Environment, RunStatus
+from app.core.enums import Environment, EvalStatus, RunStatus
 from app.models.validation_llm_evaluation import ValidationLlmEvaluation
 from app.models.validation_logic_evaluation import ValidationLogicEvaluation
+from app.models.validation_query import ValidationQuery
 from app.models.validation_run import ValidationRun
 from app.models.validation_run_item import ValidationRunItem
+from app.models.validation_score_snapshot import ValidationScoreSnapshot
 
 
 def _to_json_text(value: Any) -> str:
@@ -113,6 +115,17 @@ class ValidationRunRepository:
             run.started_at = dt.datetime.utcnow()
         if status in (RunStatus.DONE, RunStatus.FAILED):
             run.finished_at = dt.datetime.utcnow()
+
+    def set_eval_status(self, run_id: str, status: EvalStatus) -> None:
+        run = self.get_run(run_id)
+        if run is None:
+            return
+        run.eval_status = status
+        if status == EvalStatus.RUNNING:
+            run.eval_started_at = dt.datetime.utcnow()
+            run.eval_finished_at = None
+        if status in (EvalStatus.DONE, EvalStatus.FAILED):
+            run.eval_finished_at = dt.datetime.utcnow()
 
     def add_items(self, run_id: str, items: list[dict[str, Any]]) -> list[str]:
         row_ids: list[str] = []
@@ -318,6 +331,53 @@ class ValidationRunRepository:
         self.db.flush()
         return cloned
 
+    def clear_score_snapshots_for_run(self, run_id: str) -> None:
+        self.db.query(ValidationScoreSnapshot).filter(ValidationScoreSnapshot.run_id == run_id).delete()
+        self.db.flush()
+
+    def upsert_score_snapshot(
+        self,
+        *,
+        run_id: str,
+        test_set_id: Optional[str],
+        query_group_id: Optional[str],
+        total_items: int,
+        executed_items: int,
+        error_items: int,
+        logic_pass_items: int,
+        llm_done_items: int,
+        llm_metric_averages: Any,
+        llm_total_score_avg: Optional[float],
+    ) -> ValidationScoreSnapshot:
+        query = self.db.query(ValidationScoreSnapshot).filter(ValidationScoreSnapshot.run_id == run_id)
+        if query_group_id is None:
+            entity = query.filter(ValidationScoreSnapshot.query_group_id.is_(None)).first()
+        else:
+            entity = query.filter(ValidationScoreSnapshot.query_group_id == query_group_id).first()
+
+        if entity is None:
+            entity = ValidationScoreSnapshot(run_id=run_id, test_set_id=test_set_id, query_group_id=query_group_id)
+            self.db.add(entity)
+
+        entity.test_set_id = test_set_id
+        entity.total_items = max(0, int(total_items))
+        entity.executed_items = max(0, int(executed_items))
+        entity.error_items = max(0, int(error_items))
+        entity.logic_pass_items = max(0, int(logic_pass_items))
+        entity.logic_pass_rate = round((entity.logic_pass_items / entity.total_items) * 100, 4) if entity.total_items else 0.0
+        entity.llm_done_items = max(0, int(llm_done_items))
+        entity.llm_metric_averages_json = _to_json_text(llm_metric_averages if llm_metric_averages is not None else {})
+        entity.llm_total_score_avg = llm_total_score_avg
+        entity.evaluated_at = dt.datetime.utcnow()
+        self.db.flush()
+        return entity
+
+    def list_query_group_ids_by_query_ids(self, query_ids: list[str]) -> dict[str, str]:
+        if not query_ids:
+            return {}
+        rows = self.db.query(ValidationQuery.id, ValidationQuery.group_id).filter(ValidationQuery.id.in_(query_ids)).all()
+        return {str(query_id): str(group_id) for query_id, group_id in rows if query_id and group_id}
+
     def build_run_payload(self, run: ValidationRun) -> dict[str, Any]:
         return {
             "id": run.id,
@@ -337,6 +397,9 @@ class ValidationRunRepository:
             "createdAt": run.created_at,
             "startedAt": run.started_at,
             "finishedAt": run.finished_at,
+            "evalStatus": run.eval_status.value if isinstance(run.eval_status, EvalStatus) else str(run.eval_status),
+            "evalStartedAt": run.eval_started_at,
+            "evalFinishedAt": run.eval_finished_at,
             "totalItems": self.count_items(run.id),
             "doneItems": self.count_done_items(run.id),
             "errorItems": self.count_error_items(run.id),

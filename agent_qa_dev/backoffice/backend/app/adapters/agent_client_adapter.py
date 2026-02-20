@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from aqb_agent_client import ApplicantAgentClient
+from app.lib.aqb_agent_client import ApplicantAgentClient
 
 
 class AgentClientAdapter:

@@ -15,3 +15,10 @@ class RunStatus(str, Enum):
     RUNNING = "RUNNING"
     DONE = "DONE"
     FAILED = "FAILED"
+
+
+class EvalStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    DONE = "DONE"
+    FAILED = "FAILED"

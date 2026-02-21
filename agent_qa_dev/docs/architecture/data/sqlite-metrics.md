@@ -95,6 +95,7 @@ WITH params AS (
 )
 SELECT
   r.id,
+  r.name,
   r.created_at,
   r.environment,
   r.status,

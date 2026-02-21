@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react';
-import { App, Button, Form, Input, InputNumber, Select, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Typography,
+} from 'antd';
 
 import { ENV_OPTIONS, type Environment } from '../../app/EnvironmentScope';
-import { getValidationSettings, updateValidationSettings } from '../../api/validation';
+import {
+  getValidationSettings,
+  updateValidationSettings,
+} from '../../api/validation';
 import type { RuntimeSecrets } from '../../app/types';
 import {
   STANDARD_PAGE_SIZE_LIMIT_MIN,
@@ -19,15 +30,18 @@ type ValidationSettingsValues = {
   paginationPageSizeLimitDefault: number;
 };
 
-function areValidationSettingsEqual(left: ValidationSettingsValues, right: ValidationSettingsValues) {
+function areValidationSettingsEqual(
+  left: ValidationSettingsValues,
+  right: ValidationSettingsValues,
+) {
   return (
-    left.repeatInConversationDefault === right.repeatInConversationDefault
-    && left.conversationRoomCountDefault === right.conversationRoomCountDefault
-    && left.agentParallelCallsDefault === right.agentParallelCallsDefault
-    && left.timeoutMsDefault === right.timeoutMsDefault
-    && left.testModelDefault === right.testModelDefault
-    && left.evalModelDefault === right.evalModelDefault
-    && left.paginationPageSizeLimitDefault === right.paginationPageSizeLimitDefault
+    left.repeatInConversationDefault === right.repeatInConversationDefault &&
+    left.conversationRoomCountDefault === right.conversationRoomCountDefault &&
+    left.agentParallelCallsDefault === right.agentParallelCallsDefault &&
+    left.timeoutMsDefault === right.timeoutMsDefault &&
+    left.testModelDefault === right.testModelDefault &&
+    left.evalModelDefault === right.evalModelDefault &&
+    left.paginationPageSizeLimitDefault === right.paginationPageSizeLimitDefault
   );
 }
 
@@ -41,11 +55,13 @@ export function ValidationSettingsPage({
   onPaginationPageSizeLimitChange?: (value: number) => void;
 }) {
   const { message } = App.useApp();
-  const [targetEnvironment, setTargetEnvironment] = useState<Environment>(environment);
+  const [targetEnvironment, setTargetEnvironment] =
+    useState<Environment>(environment);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [savedValues, setSavedValues] = useState<ValidationSettingsValues | null>(null);
+  const [savedValues, setSavedValues] =
+    useState<ValidationSettingsValues | null>(null);
   const [form] = Form.useForm<ValidationSettingsValues>();
 
   const load = async (env: Environment) => {
@@ -59,12 +75,16 @@ export function ValidationSettingsPage({
         timeoutMsDefault: data.timeoutMsDefault,
         testModelDefault: data.testModelDefault,
         evalModelDefault: data.evalModelDefault,
-        paginationPageSizeLimitDefault: normalizeStandardPageSizeLimit(data.paginationPageSizeLimitDefault),
+        paginationPageSizeLimitDefault: normalizeStandardPageSizeLimit(
+          data.paginationPageSizeLimitDefault,
+        ),
       };
       form.setFieldsValue(nextValues);
       setSavedValues(nextValues);
       setIsDirty(false);
-      onPaginationPageSizeLimitChange?.(nextValues.paginationPageSizeLimitDefault);
+      onPaginationPageSizeLimitChange?.(
+        nextValues.paginationPageSizeLimitDefault,
+      );
     } catch (error) {
       console.error(error);
       message.error('환경설정을 불러오지 못했습니다.');
@@ -81,7 +101,10 @@ export function ValidationSettingsPage({
     void load(targetEnvironment);
   }, [targetEnvironment, tokens.bearer, tokens.cms, tokens.mrs]);
 
-  const handleValuesChange = (_: unknown, allValues: ValidationSettingsValues) => {
+  const handleValuesChange = (
+    _: unknown,
+    allValues: ValidationSettingsValues,
+  ) => {
     if (!savedValues) return;
     const next = !areValidationSettingsEqual(allValues, savedValues);
     setIsDirty(next);
@@ -149,7 +172,7 @@ export function ValidationSettingsPage({
         </Form.Item>
         <Form.Item
           className="settings-field-block"
-          label="에이전트 병렬 호출 수"
+          label="에이전트 동시 실행 수"
           name="agentParallelCallsDefault"
           rules={[{ required: true, message: '병렬 수를 입력해 주세요.' }]}
         >
@@ -163,10 +186,20 @@ export function ValidationSettingsPage({
         >
           <InputNumber min={1000} precision={0} step={1000} />
         </Form.Item>
-        <Form.Item className="settings-field-block" label="테스트 모델" name="testModelDefault" rules={[{ required: true }]}>
+        <Form.Item
+          className="settings-field-block"
+          label="테스트 모델"
+          name="testModelDefault"
+          rules={[{ required: true }]}
+        >
           <Input />
         </Form.Item>
-        <Form.Item className="settings-field-block" label="평가 모델" name="evalModelDefault" rules={[{ required: true }]}>
+        <Form.Item
+          className="settings-field-block"
+          label="평가 모델"
+          name="evalModelDefault"
+          rules={[{ required: true }]}
+        >
           <Input />
         </Form.Item>
         <Form.Item
@@ -175,7 +208,11 @@ export function ValidationSettingsPage({
           name="paginationPageSizeLimitDefault"
           rules={[{ required: true, message: '제한 개수를 입력해 주세요.' }]}
         >
-          <InputNumber min={STANDARD_PAGE_SIZE_LIMIT_MIN} precision={0} step={10} />
+          <InputNumber
+            min={STANDARD_PAGE_SIZE_LIMIT_MIN}
+            precision={0}
+            step={10}
+          />
         </Form.Item>
       </Form>
 

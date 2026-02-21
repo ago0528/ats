@@ -46,16 +46,16 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 실행 ID | `c7b9c7d7-9a9d-4ae2-8850-4d153f7f1e21` | PK |
-| `environment` | `enum` | No | 없음 | 실행 대상 환경 | `st` | 값: `dev/st2/st/pr` |
-| `status` | `enum` | No | `PENDING` (app) | 실행 상태 | `RUNNING` | 값: `PENDING/RUNNING/DONE/FAILED` |
-| `base_run_id` | `varchar(36)` | Yes | `NULL` | 비교 기준이 되는 이전 실행 ID | `95e64257-7f77-4dca-a37d-f9c7377c9d92` | FK(self) |
-| `options_json` | `text` | No | `{}` (app) | 실행 옵션(JSON 문자열) | `{"sheet":"Sheet1"}` | JSON string |
-| `created_at` | `datetime` | No | UTC now (app) | 실행 레코드 생성 시각 | `2026-02-18 11:20:31` |  |
-| `started_at` | `datetime` | Yes | `NULL` | 실제 실행 시작 시각 | `2026-02-18 11:22:03` |  |
-| `finished_at` | `datetime` | Yes | `NULL` | 실행 종료 시각 | `2026-02-18 11:25:48` |  |
+| Column name    | Type          | Nullable | Default         | Description                   | Example value                          | Notes                             |
+| -------------- | ------------- | -------- | --------------- | ----------------------------- | -------------------------------------- | --------------------------------- |
+| `id`           | `varchar(36)` | No       | UUID (app)      | 실행 ID                       | `c7b9c7d7-9a9d-4ae2-8850-4d153f7f1e21` | PK                                |
+| `environment`  | `enum`        | No       | 없음            | 실행 대상 환경                | `st`                                   | 값: `dev/st2/st/pr`               |
+| `status`       | `enum`        | No       | `PENDING` (app) | 실행 상태                     | `RUNNING`                              | 값: `PENDING/RUNNING/DONE/FAILED` |
+| `base_run_id`  | `varchar(36)` | Yes      | `NULL`          | 비교 기준이 되는 이전 실행 ID | `95e64257-7f77-4dca-a37d-f9c7377c9d92` | FK(self)                          |
+| `options_json` | `text`        | No       | `{}` (app)      | 실행 옵션(JSON 문자열)        | `{"sheet":"Sheet1"}`                   | JSON string                       |
+| `created_at`   | `datetime`    | No       | UTC now (app)   | 실행 레코드 생성 시각         | `2026-02-18 11:20:31`                  |                                   |
+| `started_at`   | `datetime`    | Yes      | `NULL`          | 실제 실행 시작 시각           | `2026-02-18 11:22:03`                  |                                   |
+| `finished_at`  | `datetime`    | Yes      | `NULL`          | 실행 종료 시각                | `2026-02-18 11:25:48`                  |                                   |
 
 ### 인덱스/제약조건
 
@@ -80,24 +80,24 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `text` | No | UUID (app) | 실행 row ID | `bb5d41f0-f2a0-4c95-9adb-2a159cd3f73d` | PK |
-| `run_id` | `varchar(36)` | No | 없음 | 소속 실행 ID | `c7b9c7d7-9a9d-4ae2-8850-4d153f7f1e21` | FK, index |
-| `ordinal` | `integer` | No | 없음 | 실행 내 순번 | `12` |  |
-| `query_id` | `text` | No | 없음 | 원본 입력의 질의 식별자 | `Q-012` |  |
-| `query` | `text` | No | 없음 | 실제 질의 문구 | `강남구 1억 이하 전세 보여줘` |  |
-| `llm_criteria` | `text` | No | `""` (app) | LLM 평가 기준 | `정확성, 근거성` |  |
-| `field_path` | `text` | No | `""` (app) | 로직 검증 대상 경로 | `results[0].price` |  |
-| `expected_value` | `text` | No | `""` (app) | 기대값 | `<=100000000` |  |
-| `response_text` | `text` | No | `""` (app) | 에이전트 응답 텍스트 | `조건에 맞는 매물은 ...` |  |
-| `response_time_sec` | `float` | Yes | `NULL` | 응답 시간(초) | `1.83` |  |
-| `execution_process` | `text` | No | `""` (app) | 실행 과정 로그 요약 | `request->parse->normalize` |  |
-| `error` | `text` | No | `""` (app) | 오류 메시지 | `timeout after 120000ms` |  |
-| `raw_json` | `text` | No | `""` (app) | 원본 응답(JSON 문자열) | `{"response":{...}}` | JSON string |
-| `logic_result` | `text` | No | `""` (app) | 로직 검증 결과 | `PASS` |  |
-| `llm_eval_json` | `text` | No | `""` (app) | LLM 평가 결과(JSON 문자열) | `{"score":84}` | JSON string |
-| `llm_eval_status` | `text` | No | `""` (app) | LLM 평가 상태 | `DONE` |  |
+| Column name         | Type          | Nullable | Default    | Description                | Example value                          | Notes       |
+| ------------------- | ------------- | -------- | ---------- | -------------------------- | -------------------------------------- | ----------- |
+| `id`                | `text`        | No       | UUID (app) | 실행 row ID                | `bb5d41f0-f2a0-4c95-9adb-2a159cd3f73d` | PK          |
+| `run_id`            | `varchar(36)` | No       | 없음       | 소속 실행 ID               | `c7b9c7d7-9a9d-4ae2-8850-4d153f7f1e21` | FK, index   |
+| `ordinal`           | `integer`     | No       | 없음       | 실행 내 순번               | `12`                                   |             |
+| `query_id`          | `text`        | No       | 없음       | 원본 입력의 질의 식별자    | `Q-012`                                |             |
+| `query`             | `text`        | No       | 없음       | 실제 질의 문구             | `강남구 1억 이하 전세 보여줘`          |             |
+| `llm_criteria`      | `text`        | No       | `""` (app) | LLM 평가 기준              | `정확성, 근거성`                       |             |
+| `field_path`        | `text`        | No       | `""` (app) | 로직 검증 대상 경로        | `results[0].price`                     |             |
+| `expected_value`    | `text`        | No       | `""` (app) | 기대값                     | `<=100000000`                          |             |
+| `response_text`     | `text`        | No       | `""` (app) | 에이전트 응답 텍스트       | `조건에 맞는 매물은 ...`               |             |
+| `response_time_sec` | `float`       | Yes      | `NULL`     | 응답 시간(초)              | `1.83`                                 |             |
+| `execution_process` | `text`        | No       | `""` (app) | 실행 과정 로그 요약        | `request->parse->normalize`            |             |
+| `error`             | `text`        | No       | `""` (app) | 오류 메시지                | `timeout after 120000ms`               |             |
+| `raw_json`          | `text`        | No       | `""` (app) | 원본 응답(JSON 문자열)     | `{"response":{...}}`                   | JSON string |
+| `logic_result`      | `text`        | No       | `""` (app) | 로직 검증 결과             | `PASS`                                 |             |
+| `llm_eval_json`     | `text`        | No       | `""` (app) | LLM 평가 결과(JSON 문자열) | `{"score":84}`                         | JSON string |
+| `llm_eval_status`   | `text`        | No       | `""` (app) | LLM 평가 상태              | `DONE`                                 |             |
 
 ### 인덱스/제약조건
 
@@ -122,16 +122,16 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `text` | No | UUID (app) | 감사 로그 ID | `f82494b4-b8ab-46af-8f84-a8336f95729c` | PK |
-| `environment` | `enum` | No | 없음 | 변경 대상 환경 | `dev` | 값: `dev/st2/st/pr` |
-| `worker_type` | `text` | No | 없음 | 워커 종류 | `ORCHESTRATOR_WORKER_V3` |  |
-| `action` | `text` | No | 없음 | 수행 액션 | `UPDATE` | 예: `UPDATE`, `RESET` |
-| `before_len` | `integer` | No | `0` (app) | 변경 전 프롬프트 길이 | `1240` |  |
-| `after_len` | `integer` | No | `0` (app) | 변경 후 프롬프트 길이 | `1331` |  |
-| `actor` | `text` | No | `system` (app) | 변경 주체 | `pm_kim` |  |
-| `created_at` | `datetime` | No | UTC now (app) | 로그 생성 시각 | `2026-02-18 09:14:22` |  |
+| Column name   | Type       | Nullable | Default        | Description           | Example value                          | Notes                 |
+| ------------- | ---------- | -------- | -------------- | --------------------- | -------------------------------------- | --------------------- |
+| `id`          | `text`     | No       | UUID (app)     | 감사 로그 ID          | `f82494b4-b8ab-46af-8f84-a8336f95729c` | PK                    |
+| `environment` | `enum`     | No       | 없음           | 변경 대상 환경        | `dev`                                  | 값: `dev/st2/st/pr`   |
+| `worker_type` | `text`     | No       | 없음           | 워커 종류             | `ORCHESTRATOR_WORKER_V3`               |                       |
+| `action`      | `text`     | No       | 없음           | 수행 액션             | `UPDATE`                               | 예: `UPDATE`, `RESET` |
+| `before_len`  | `integer`  | No       | `0` (app)      | 변경 전 프롬프트 길이 | `1240`                                 |                       |
+| `after_len`   | `integer`  | No       | `0` (app)      | 변경 후 프롬프트 길이 | `1331`                                 |                       |
+| `actor`       | `text`     | No       | `system` (app) | 변경 주체             | `pm_kim`                               |                       |
+| `created_at`  | `datetime` | No       | UTC now (app)  | 로그 생성 시각        | `2026-02-18 09:14:22`                  |                       |
 
 ### 인덱스/제약조건
 
@@ -154,15 +154,15 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `text` | No | UUID (app) | 스냅샷 ID | `1880a306-79a2-41db-95c6-f06559f03004` | PK |
-| `environment` | `enum` | No | 없음 | 대상 환경 | `dev` | 값: `dev/st2/st/pr` |
-| `worker_type` | `text` | No | 없음 | 워커 종류 | `RECRUIT_PLAN_WORKER_V3` | unique 제약 포함 |
-| `current_prompt` | `text` | No | `""` (app) | ATS 기준 현재 프롬프트 | `You are ...` |  |
-| `previous_prompt` | `text` | No | `""` (app) | 바로 직전 프롬프트 | `You are previous ...` |  |
-| `actor` | `text` | No | `system` (app) | 마지막 갱신 주체 | `pm_kim` |  |
-| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 마지막 갱신 시각 | `2026-02-19 11:03:14` |  |
+| Column name       | Type       | Nullable | Default                | Description            | Example value                          | Notes               |
+| ----------------- | ---------- | -------- | ---------------------- | ---------------------- | -------------------------------------- | ------------------- |
+| `id`              | `text`     | No       | UUID (app)             | 스냅샷 ID              | `1880a306-79a2-41db-95c6-f06559f03004` | PK                  |
+| `environment`     | `enum`     | No       | 없음                   | 대상 환경              | `dev`                                  | 값: `dev/st2/st/pr` |
+| `worker_type`     | `text`     | No       | 없음                   | 워커 종류              | `RECRUIT_PLAN_WORKER_V3`               | unique 제약 포함    |
+| `current_prompt`  | `text`     | No       | `""` (app)             | ATS 기준 현재 프롬프트 | `You are ...`                          |                     |
+| `previous_prompt` | `text`     | No       | `""` (app)             | 바로 직전 프롬프트     | `You are previous ...`                 |                     |
+| `actor`           | `text`     | No       | `system` (app)         | 마지막 갱신 주체       | `pm_kim`                               |                     |
+| `updated_at`      | `datetime` | No       | UTC now/onupdate (app) | 마지막 갱신 시각       | `2026-02-19 11:03:14`                  |                     |
 
 ### 인덱스/제약조건
 
@@ -186,15 +186,15 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 질의 그룹 ID | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | PK |
-| `group_name` | `varchar(140)` | No | 없음 | 그룹 표시 이름 | `아파트 매매` | unique + index |
-| `description` | `text` | No | `""` (app) | 그룹 설명 | `수요자 검색 시나리오 중심` |  |
-| `default_target_assistant` | `text` | No | `""` (app) | 그룹 기본 대상 어시스턴트 | `real_estate_assistant` | startup 보정 컬럼 |
-| `llm_eval_criteria_default_json` | `text` | No | `""` (app) | 그룹 공통 LLM 평가 기준(JSON 문자열) | `[{"name":"정확성","weight":0.4}]` | JSON string |
-| `created_at` | `datetime` | No | UTC now (app) | 생성 시각 | `2026-02-10 16:11:02` |  |
-| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 수정 시각 | `2026-02-18 10:02:44` |  |
+| Column name                      | Type           | Nullable | Default                | Description                          | Example value                          | Notes             |
+| -------------------------------- | -------------- | -------- | ---------------------- | ------------------------------------ | -------------------------------------- | ----------------- |
+| `id`                             | `varchar(36)`  | No       | UUID (app)             | 질의 그룹 ID                         | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | PK                |
+| `group_name`                     | `varchar(140)` | No       | 없음                   | 그룹 표시 이름                       | `아파트 매매`                          | unique + index    |
+| `description`                    | `text`         | No       | `""` (app)             | 그룹 설명                            | `수요자 검색 시나리오 중심`            |                   |
+| `default_target_assistant`       | `text`         | No       | `""` (app)             | 그룹 기본 대상 어시스턴트            | `real_estate_assistant`                | startup 보정 컬럼 |
+| `llm_eval_criteria_default_json` | `text`         | No       | `""` (app)             | 그룹 공통 LLM 평가 기준(JSON 문자열) | `[{"name":"정확성","weight":0.4}]`     | JSON string       |
+| `created_at`                     | `datetime`     | No       | UTC now (app)          | 생성 시각                            | `2026-02-10 16:11:02`                  |                   |
+| `updated_at`                     | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                            | `2026-02-18 10:02:44`                  |                   |
 
 ### 인덱스/제약조건
 
@@ -221,21 +221,21 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 질의 ID | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | PK |
-| `query_text` | `text` | No | 없음 | 실제 사용자 질의 문구 | `잠실 30평대 매매 찾아줘` |  |
-| `expected_result` | `text` | No | `""` (app) | 기대 결과 설명 | `잠실/매매/30평대 매물 반환` |  |
-| `category` | `varchar(40)` | No | `Happy path` (app) | 시나리오 분류 | `Edge case` | index |
-| `group_id` | `varchar(36)` | No | 없음 | 소속 질의 그룹 ID | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index |
-| `llm_eval_criteria_json` | `text` | No | `""` (app) | 질의별 LLM 평가 기준(JSON 문자열) | `[{"metric":"정확성","weight":0.5}]` | JSON string |
-| `logic_field_path` | `text` | No | `""` (app) | 로직 검증 필드 경로 | `items[0].dealType` |  |
-| `logic_expected_value` | `text` | No | `""` (app) | 로직 기대값 | `SALE` |  |
-| `context_json` | `text` | No | `""` (app) | 질의별 실행 컨텍스트(JSON 문자열) | `{"region":"seoul"}` | startup 보정 컬럼 |
-| `target_assistant` | `text` | No | `""` (app) | 질의별 대상 어시스턴트 | `apt_sales_bot` | startup 보정 컬럼 |
-| `created_by` | `varchar(120)` | No | `unknown` (app) | 작성자 | `pm_lee` |  |
-| `created_at` | `datetime` | No | UTC now (app) | 생성 시각 | `2026-02-12 15:01:41` |  |
-| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 수정 시각 | `2026-02-18 11:10:20` |  |
+| Column name              | Type           | Nullable | Default                | Description                       | Example value                          | Notes             |
+| ------------------------ | -------------- | -------- | ---------------------- | --------------------------------- | -------------------------------------- | ----------------- |
+| `id`                     | `varchar(36)`  | No       | UUID (app)             | 질의 ID                           | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | PK                |
+| `query_text`             | `text`         | No       | 없음                   | 실제 사용자 질의 문구             | `잠실 30평대 매매 찾아줘`              |                   |
+| `expected_result`        | `text`         | No       | `""` (app)             | 기대 결과 설명                    | `잠실/매매/30평대 매물 반환`           |                   |
+| `category`               | `varchar(40)`  | No       | `Happy path` (app)     | 시나리오 분류                     | `Edge case`                            | index             |
+| `group_id`               | `varchar(36)`  | No       | 없음                   | 소속 질의 그룹 ID                 | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index         |
+| `llm_eval_criteria_json` | `text`         | No       | `""` (app)             | 질의별 LLM 평가 기준(JSON 문자열) | `[{"metric":"정확성","weight":0.5}]`   | JSON string       |
+| `logic_field_path`       | `text`         | No       | `""` (app)             | 로직 검증 필드 경로               | `items[0].dealType`                    |                   |
+| `logic_expected_value`   | `text`         | No       | `""` (app)             | 로직 기대값                       | `SALE`                                 |                   |
+| `context_json`           | `text`         | No       | `""` (app)             | 질의별 실행 컨텍스트(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
+| `target_assistant`       | `text`         | No       | `""` (app)             | 질의별 대상 어시스턴트            | `apt_sales_bot`                        | startup 보정 컬럼 |
+| `created_by`             | `varchar(120)` | No       | `unknown` (app)        | 작성자                            | `pm_lee`                               |                   |
+| `created_at`             | `datetime`     | No       | UTC now (app)          | 생성 시각                         | `2026-02-12 15:01:41`                  |                   |
+| `updated_at`             | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                         | `2026-02-18 11:10:20`                  |                   |
 
 ### 인덱스/제약조건
 
@@ -269,18 +269,18 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 설정 ID | `6fe2bf53-240d-4880-8125-1da616495ca6` | PK |
-| `environment` | `enum` | No | 없음 | 설정 대상 환경 | `pr` | unique + index |
-| `repeat_in_conversation_default` | `integer` | No | `1` (app) | 같은 방에서 반복 실행 기본 횟수 | `2` |  |
-| `conversation_room_count_default` | `integer` | No | `1` (app) | 대화 방 개수 기본값 | `3` |  |
-| `agent_parallel_calls_default` | `integer` | No | `3` (app) | 에이전트 병렬 호출 기본값 | `5` |  |
-| `timeout_ms_default` | `integer` | No | `120000` (app) | 타임아웃 기본값(ms) | `180000` |  |
-| `test_model_default` | `varchar(120)` | No | `gpt-5.2` (app) | 실행 모델 기본값 | `gpt-5.2` |  |
-| `eval_model_default` | `varchar(120)` | No | `gpt-5.2` (app) | 평가 모델 기본값 | `gpt-5.2` |  |
-| `pagination_page_size_limit_default` | `integer` | No | `100` (DB/app) | 페이지당 최대 조회 기본값 | `200` | startup 보정 컬럼 |
-| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 수정 시각 | `2026-02-18 08:55:30` |  |
+| Column name                          | Type           | Nullable | Default                | Description                     | Example value                          | Notes             |
+| ------------------------------------ | -------------- | -------- | ---------------------- | ------------------------------- | -------------------------------------- | ----------------- |
+| `id`                                 | `varchar(36)`  | No       | UUID (app)             | 설정 ID                         | `6fe2bf53-240d-4880-8125-1da616495ca6` | PK                |
+| `environment`                        | `enum`         | No       | 없음                   | 설정 대상 환경                  | `pr`                                   | unique + index    |
+| `repeat_in_conversation_default`     | `integer`      | No       | `1` (app)              | 같은 방에서 반복 실행 기본 횟수 | `2`                                    |                   |
+| `conversation_room_count_default`    | `integer`      | No       | `1` (app)              | 대화 방 개수 기본값             | `3`                                    |                   |
+| `agent_parallel_calls_default`       | `integer`      | No       | `3` (app)              | 에이전트 병렬 호출 기본값       | `5`                                    |                   |
+| `timeout_ms_default`                 | `integer`      | No       | `120000` (app)         | 타임아웃 기본값(ms)             | `180000`                               |                   |
+| `test_model_default`                 | `varchar(120)` | No       | `gpt-5.2` (app)        | 실행 모델 기본값                | `gpt-5.2`                              |                   |
+| `eval_model_default`                 | `varchar(120)` | No       | `gpt-5.2` (app)        | 평가 모델 기본값                | `gpt-5.2`                              |                   |
+| `pagination_page_size_limit_default` | `integer`      | No       | `100` (DB/app)         | 페이지당 최대 조회 기본값       | `200`                                  | startup 보정 컬럼 |
+| `updated_at`                         | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                       | `2026-02-18 08:55:30`                  |                   |
 
 ### 인덱스/제약조건
 
@@ -305,14 +305,14 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | PK |
-| `name` | `varchar(120)` | No | 없음 | 테스트 세트 이름 | `서울 아파트 기본 시나리오` | index |
-| `description` | `text` | No | `""` (app) | 테스트 세트 설명 | `핵심 질의 30개 구성` |  |
-| `config_json` | `text` | No | `{}` (app) | 테스트 세트 기본 파라미터(JSON 문자열) | `{"timeoutMs":120000,"repeat":1}` | JSON string |
-| `created_at` | `datetime` | No | UTC now (app) | 생성 시각 | `2026-02-14 10:10:05` |  |
-| `updated_at` | `datetime` | No | UTC now/onupdate (app) | 수정 시각 | `2026-02-18 09:31:27` |  |
+| Column name   | Type           | Nullable | Default                | Description                            | Example value                          | Notes       |
+| ------------- | -------------- | -------- | ---------------------- | -------------------------------------- | -------------------------------------- | ----------- |
+| `id`          | `varchar(36)`  | No       | UUID (app)             | 테스트 세트 ID                         | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | PK          |
+| `name`        | `varchar(120)` | No       | 없음                   | 테스트 세트 이름                       | `서울 아파트 기본 시나리오`            | index       |
+| `description` | `text`         | No       | `""` (app)             | 테스트 세트 설명                       | `핵심 질의 30개 구성`                  |             |
+| `config_json` | `text`         | No       | `{}` (app)             | 테스트 세트 기본 파라미터(JSON 문자열) | `{"timeoutMs":120000,"repeat":1}`      | JSON string |
+| `created_at`  | `datetime`     | No       | UTC now (app)          | 생성 시각                              | `2026-02-14 10:10:05`                  |             |
+| `updated_at`  | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                              | `2026-02-18 09:31:27`                  |             |
 
 ### 인덱스/제약조건
 
@@ -338,13 +338,13 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 매핑 ID | `3d8f8428-809a-465d-bf57-acf0d763f6ff` | PK |
-| `test_set_id` | `varchar(36)` | No | 없음 | 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index |
-| `query_id` | `varchar(36)` | No | 없음 | 질의 ID | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | FK, index |
-| `ordinal` | `integer` | No | `1` (app) | 테스트 세트 내 질의 순서 | `7` | index |
-| `created_at` | `datetime` | No | UTC now (app) | 매핑 생성 시각 | `2026-02-14 10:11:55` |  |
+| Column name   | Type          | Nullable | Default       | Description              | Example value                          | Notes     |
+| ------------- | ------------- | -------- | ------------- | ------------------------ | -------------------------------------- | --------- |
+| `id`          | `varchar(36)` | No       | UUID (app)    | 매핑 ID                  | `3d8f8428-809a-465d-bf57-acf0d763f6ff` | PK        |
+| `test_set_id` | `varchar(36)` | No       | 없음          | 테스트 세트 ID           | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index |
+| `query_id`    | `varchar(36)` | No       | 없음          | 질의 ID                  | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | FK, index |
+| `ordinal`     | `integer`     | No       | `1` (app)     | 테스트 세트 내 질의 순서 | `7`                                    | index     |
+| `created_at`  | `datetime`    | No       | UTC now (app) | 매핑 생성 시각           | `2026-02-14 10:11:55`                  |           |
 
 ### 인덱스/제약조건
 
@@ -376,28 +376,29 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 실행(run) ID | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | PK |
-| `mode` | `varchar(20)` | No | `REGISTERED` (app) | 실행 모드 | `REGISTERED` |  |
-| `environment` | `enum` | No | 없음 | 실행 대상 환경 | `st2` | index |
-| `status` | `enum` | No | `PENDING` (app) | 실행 상태 | `DONE` | index |
-| `base_run_id` | `varchar(36)` | Yes | `NULL` | 비교 기준 run ID | `f97a8927-a89a-4f95-ae6e-f3a690b9af2d` | FK(self) |
-| `test_set_id` | `varchar(36)` | Yes | `NULL` | 실행에 사용한 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index |
-| `agent_id` | `varchar(120)` | No | `ORCHESTRATOR_WORKER_V3` (app) | 실행 워커 ID | `ORCHESTRATOR_WORKER_V3` |  |
-| `test_model` | `varchar(120)` | No | `gpt-5.2` (app) | 실행 모델 | `gpt-5.2` |  |
-| `eval_model` | `varchar(120)` | No | `gpt-5.2` (app) | 평가 모델 | `gpt-5.2` |  |
-| `repeat_in_conversation` | `integer` | No | `1` (app) | 동일 방 반복 횟수 | `2` |  |
-| `conversation_room_count` | `integer` | No | `1` (app) | 대화 방 수 | `3` |  |
-| `agent_parallel_calls` | `integer` | No | `3` (app) | 병렬 호출 수 | `4` |  |
-| `timeout_ms` | `integer` | No | `120000` (app) | 실행 타임아웃(ms) | `180000` |  |
-| `options_json` | `text` | No | `{}` (app) | 실행 옵션(JSON 문자열) | `{"batchSize":20}` | JSON string |
-| `created_at` | `datetime` | No | UTC now (app) | run 생성 시각 | `2026-02-18 10:41:01` |  |
-| `started_at` | `datetime` | Yes | `NULL` | 실행 시작 시각 | `2026-02-18 10:41:10` |  |
-| `finished_at` | `datetime` | Yes | `NULL` | 실행 종료 시각 | `2026-02-18 10:44:55` |  |
-| `eval_status` | `enum` | No | `PENDING` (app) | 평가 상태 | `RUNNING` | index, 값: `PENDING/RUNNING/DONE/FAILED` |
-| `eval_started_at` | `datetime` | Yes | `NULL` | 평가 시작 시각 | `2026-02-20 09:10:05` |  |
-| `eval_finished_at` | `datetime` | Yes | `NULL` | 평가 종료 시각 | `2026-02-20 09:12:12` |  |
+| Column name               | Type           | Nullable | Default                        | Description                  | Example value                                  | Notes                                    |
+| ------------------------- | -------------- | -------- | ------------------------------ | ---------------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `id`                      | `varchar(36)`  | No       | UUID (app)                     | 실행(run) ID                 | `35efe819-03de-468a-8f3a-0c5f68a9f1d0`         | PK                                       |
+| `mode`                    | `varchar(20)`  | No       | `REGISTERED` (app)             | 실행 모드                    | `REGISTERED`                                   |                                          |
+| `environment`             | `enum`         | No       | 없음                           | 실행 대상 환경               | `st2`                                          | index                                    |
+| `status`                  | `enum`         | No       | `PENDING` (app)                | 실행 상태                    | `DONE`                                         | index                                    |
+| `base_run_id`             | `varchar(36)`  | Yes      | `NULL`                         | 비교 기준 run ID             | `f97a8927-a89a-4f95-ae6e-f3a690b9af2d`         | FK(self)                                 |
+| `name`                    | `varchar(120)` | No       | `""` (app)                     | Run 이름                     | `서울 아파트 기본 시나리오 (2026-02-20 10:30)` | 식별성 보완                              |
+| `test_set_id`             | `varchar(36)`  | Yes      | `NULL`                         | 실행에 사용한 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a`         | FK, index                                |
+| `agent_id`                | `varchar(120)` | No       | `ORCHESTRATOR_WORKER_V3` (app) | 실행 워커 ID                 | `ORCHESTRATOR_WORKER_V3`                       |                                          |
+| `test_model`              | `varchar(120)` | No       | `gpt-5.2` (app)                | 실행 모델                    | `gpt-5.2`                                      |                                          |
+| `eval_model`              | `varchar(120)` | No       | `gpt-5.2` (app)                | 평가 모델                    | `gpt-5.2`                                      |                                          |
+| `repeat_in_conversation`  | `integer`      | No       | `1` (app)                      | 동일 방 반복 횟수            | `2`                                            |                                          |
+| `conversation_room_count` | `integer`      | No       | `1` (app)                      | 대화 방 수                   | `3`                                            |                                          |
+| `agent_parallel_calls`    | `integer`      | No       | `3` (app)                      | 동시 실행 수                 | `4`                                            |                                          |
+| `timeout_ms`              | `integer`      | No       | `120000` (app)                 | 실행 타임아웃(ms)            | `180000`                                       |                                          |
+| `options_json`            | `text`         | No       | `{}` (app)                     | 실행 옵션(JSON 문자열)       | `{"batchSize":20}`                             | JSON string                              |
+| `created_at`              | `datetime`     | No       | UTC now (app)                  | run 생성 시각                | `2026-02-18 10:41:01`                          |                                          |
+| `started_at`              | `datetime`     | Yes      | `NULL`                         | 실행 시작 시각               | `2026-02-18 10:41:10`                          |                                          |
+| `finished_at`             | `datetime`     | Yes      | `NULL`                         | 실행 종료 시각               | `2026-02-18 10:44:55`                          |                                          |
+| `eval_status`             | `enum`         | No       | `PENDING` (app)                | 평가 상태                    | `RUNNING`                                      | index, 값: `PENDING/RUNNING/DONE/FAILED` |
+| `eval_started_at`         | `datetime`     | Yes      | `NULL`                         | 평가 시작 시각               | `2026-02-20 09:10:05`                          |                                          |
+| `eval_finished_at`        | `datetime`     | Yes      | `NULL`                         | 평가 종료 시각               | `2026-02-20 09:12:12`                          |                                          |
 
 ### 인덱스/제약조건
 
@@ -430,28 +431,28 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | run item ID | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | PK |
-| `run_id` | `varchar(36)` | No | 없음 | 소속 run ID | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index |
-| `query_id` | `varchar(36)` | Yes | `NULL` | 원본 질의 ID(연결 불가 시 null) | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | FK, index |
-| `ordinal` | `integer` | No | 없음 | run 내 순번 | `41` | index |
-| `query_text_snapshot` | `text` | No | 없음 | 실행 시점 질의문 스냅샷 | `잠실 30평대 매매 찾아줘` | snapshot |
-| `expected_result_snapshot` | `text` | No | `""` (app) | 실행 시점 기대결과 스냅샷 | `잠실/매매/30평대` | snapshot |
-| `category_snapshot` | `varchar(40)` | No | `Happy path` (app) | 실행 시점 카테고리 스냅샷 | `Edge case` | snapshot |
-| `applied_criteria_json` | `text` | No | `""` (app) | 실행 적용 평가기준(JSON 문자열) | `[{"metric":"정확성"}]` | snapshot JSON |
-| `logic_field_path_snapshot` | `text` | No | `""` (app) | 실행 적용 로직 경로 스냅샷 | `items[0].dealType` | snapshot |
-| `logic_expected_value_snapshot` | `text` | No | `""` (app) | 실행 적용 로직 기대값 스냅샷 | `SALE` | snapshot |
-| `context_json_snapshot` | `text` | No | `""` (app) | 실행 컨텍스트 스냅샷(JSON 문자열) | `{"region":"seoul"}` | startup 보정 컬럼 |
-| `target_assistant_snapshot` | `text` | No | `""` (app) | 실행 대상 어시스턴트 스냅샷 | `apt_sales_bot` | startup 보정 컬럼 |
-| `conversation_room_index` | `integer` | No | `1` (app) | 대화 방 번호 | `2` |  |
-| `repeat_index` | `integer` | No | `1` (app) | 반복 실행 번호 | `1` |  |
-| `conversation_id` | `varchar(120)` | No | `""` (app) | 대화방 식별자 | `conv_20260218_001` |  |
-| `raw_response` | `text` | No | `""` (app) | 원문 응답 텍스트 | `조건에 맞는 매물 3건입니다...` |  |
-| `latency_ms` | `integer` | Yes | `NULL` | 응답 지연시간(ms) | `1820` |  |
-| `error` | `text` | No | `""` (app) | 실행 오류 메시지 | `HTTP 504 gateway timeout` |  |
-| `raw_json` | `text` | No | `""` (app) | 원본 응답(JSON 문자열) | `{"answer":...,"debug":...}` | JSON string |
-| `executed_at` | `datetime` | Yes | `NULL` | 실제 실행 시각 | `2026-02-18 10:42:37` |  |
+| Column name                     | Type           | Nullable | Default            | Description                       | Example value                          | Notes             |
+| ------------------------------- | -------------- | -------- | ------------------ | --------------------------------- | -------------------------------------- | ----------------- |
+| `id`                            | `varchar(36)`  | No       | UUID (app)         | run item ID                       | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | PK                |
+| `run_id`                        | `varchar(36)`  | No       | 없음               | 소속 run ID                       | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index         |
+| `query_id`                      | `varchar(36)`  | Yes      | `NULL`             | 원본 질의 ID(연결 불가 시 null)   | `db128f9a-65fd-451f-aa3b-f994f97c6f8a` | FK, index         |
+| `ordinal`                       | `integer`      | No       | 없음               | run 내 순번                       | `41`                                   | index             |
+| `query_text_snapshot`           | `text`         | No       | 없음               | 실행 시점 질의문 스냅샷           | `잠실 30평대 매매 찾아줘`              | snapshot          |
+| `expected_result_snapshot`      | `text`         | No       | `""` (app)         | 실행 시점 기대결과 스냅샷         | `잠실/매매/30평대`                     | snapshot          |
+| `category_snapshot`             | `varchar(40)`  | No       | `Happy path` (app) | 실행 시점 카테고리 스냅샷         | `Edge case`                            | snapshot          |
+| `applied_criteria_json`         | `text`         | No       | `""` (app)         | 실행 적용 평가기준(JSON 문자열)   | `[{"metric":"정확성"}]`                | snapshot JSON     |
+| `logic_field_path_snapshot`     | `text`         | No       | `""` (app)         | 실행 적용 로직 경로 스냅샷        | `items[0].dealType`                    | snapshot          |
+| `logic_expected_value_snapshot` | `text`         | No       | `""` (app)         | 실행 적용 로직 기대값 스냅샷      | `SALE`                                 | snapshot          |
+| `context_json_snapshot`         | `text`         | No       | `""` (app)         | 실행 컨텍스트 스냅샷(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
+| `target_assistant_snapshot`     | `text`         | No       | `""` (app)         | 실행 대상 어시스턴트 스냅샷       | `apt_sales_bot`                        | startup 보정 컬럼 |
+| `conversation_room_index`       | `integer`      | No       | `1` (app)          | 대화 방 번호                      | `2`                                    |                   |
+| `repeat_index`                  | `integer`      | No       | `1` (app)          | 반복 실행 번호                    | `1`                                    |                   |
+| `conversation_id`               | `varchar(120)` | No       | `""` (app)         | 대화방 식별자                     | `conv_20260218_001`                    |                   |
+| `raw_response`                  | `text`         | No       | `""` (app)         | 원문 응답 텍스트                  | `조건에 맞는 매물 3건입니다...`        |                   |
+| `latency_ms`                    | `integer`      | Yes      | `NULL`             | 응답 지연시간(ms)                 | `1820`                                 |                   |
+| `error`                         | `text`         | No       | `""` (app)         | 실행 오류 메시지                  | `HTTP 504 gateway timeout`             |                   |
+| `raw_json`                      | `text`         | No       | `""` (app)         | 원본 응답(JSON 문자열)            | `{"answer":...,"debug":...}`           | JSON string       |
+| `executed_at`                   | `datetime`     | Yes      | `NULL`             | 실제 실행 시각                    | `2026-02-18 10:42:37`                  |                   |
 
 ### 인덱스/제약조건
 
@@ -480,16 +481,16 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | LLM 평가 ID | `54e0cbcf-d32d-4640-9d1e-1d1656f7473a` | PK |
-| `run_item_id` | `varchar(36)` | No | 없음 | 대상 run item ID | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | FK, unique index |
-| `eval_model` | `varchar(120)` | No | `gpt-5.2` (app) | 평가에 사용된 모델 | `gpt-5.2` |  |
-| `metric_scores_json` | `text` | No | `""` (app) | 메트릭 점수(JSON 문자열) | `{"정확성":88,"근거성":81}` | JSON string |
-| `total_score` | `float` | Yes | `NULL` | 총점 | `84.5` |  |
-| `llm_comment` | `text` | No | `""` (app) | LLM 평가 코멘트 | `의도는 맞지만 근거 문장이 부족` |  |
-| `status` | `varchar(40)` | No | `PENDING` (app) | 평가 상태 | `DONE` | index |
-| `evaluated_at` | `datetime` | No | UTC now (app) | 평가 시각 | `2026-02-18 10:45:15` |  |
+| Column name          | Type           | Nullable | Default         | Description              | Example value                          | Notes            |
+| -------------------- | -------------- | -------- | --------------- | ------------------------ | -------------------------------------- | ---------------- |
+| `id`                 | `varchar(36)`  | No       | UUID (app)      | LLM 평가 ID              | `54e0cbcf-d32d-4640-9d1e-1d1656f7473a` | PK               |
+| `run_item_id`        | `varchar(36)`  | No       | 없음            | 대상 run item ID         | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | FK, unique index |
+| `eval_model`         | `varchar(120)` | No       | `gpt-5.2` (app) | 평가에 사용된 모델       | `gpt-5.2`                              |                  |
+| `metric_scores_json` | `text`         | No       | `""` (app)      | 메트릭 점수(JSON 문자열) | `{"정확성":88,"근거성":81}`            | JSON string      |
+| `total_score`        | `float`        | Yes      | `NULL`          | 총점                     | `84.5`                                 |                  |
+| `llm_comment`        | `text`         | No       | `""` (app)      | LLM 평가 코멘트          | `의도는 맞지만 근거 문장이 부족`       |                  |
+| `status`             | `varchar(40)`  | No       | `PENDING` (app) | 평가 상태                | `DONE`                                 | index            |
+| `evaluated_at`       | `datetime`     | No       | UTC now (app)   | 평가 시각                | `2026-02-18 10:45:15`                  |                  |
 
 ### 인덱스/제약조건
 
@@ -516,14 +517,14 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 로직 평가 ID | `33ea03de-b887-4f68-8170-b4318a8d840a` | PK |
-| `run_item_id` | `varchar(36)` | No | 없음 | 대상 run item ID | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | FK, unique index |
-| `eval_items_json` | `text` | No | `""` (app) | 로직 평가 항목(JSON 문자열) | `[{"field":"dealType","expected":"SALE","actual":"SALE"}]` | JSON string |
-| `result` | `varchar(20)` | No | `SKIPPED` (app) | 로직 평가 결과 | `PASS` | index |
-| `fail_reason` | `text` | No | `""` (app) | 실패 사유 | `가격 필드 누락` |  |
-| `evaluated_at` | `datetime` | No | UTC now (app) | 평가 시각 | `2026-02-18 10:45:16` |  |
+| Column name       | Type          | Nullable | Default         | Description                 | Example value                                              | Notes            |
+| ----------------- | ------------- | -------- | --------------- | --------------------------- | ---------------------------------------------------------- | ---------------- |
+| `id`              | `varchar(36)` | No       | UUID (app)      | 로직 평가 ID                | `33ea03de-b887-4f68-8170-b4318a8d840a`                     | PK               |
+| `run_item_id`     | `varchar(36)` | No       | 없음            | 대상 run item ID            | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7`                     | FK, unique index |
+| `eval_items_json` | `text`        | No       | `""` (app)      | 로직 평가 항목(JSON 문자열) | `[{"field":"dealType","expected":"SALE","actual":"SALE"}]` | JSON string      |
+| `result`          | `varchar(20)` | No       | `SKIPPED` (app) | 로직 평가 결과              | `PASS`                                                     | index            |
+| `fail_reason`     | `text`        | No       | `""` (app)      | 실패 사유                   | `가격 필드 누락`                                           |                  |
+| `evaluated_at`    | `datetime`    | No       | UTC now (app)   | 평가 시각                   | `2026-02-18 10:45:16`                                      |                  |
 
 ### 인덱스/제약조건
 
@@ -552,21 +553,21 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | 스냅샷 ID | `58ca91d4-6f9b-4b16-b36e-8f9bfcc3e4e9` | PK |
-| `run_id` | `varchar(36)` | No | 없음 | 대상 run ID | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index |
-| `test_set_id` | `varchar(36)` | Yes | `NULL` | 대상 테스트 세트 ID | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index |
-| `query_group_id` | `varchar(36)` | Yes | `NULL` | 그룹 단위 스냅샷 키 | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index |
-| `total_items` | `integer` | No | `0` (app) | 집계 대상 item 수 | `120` |  |
-| `executed_items` | `integer` | No | `0` (app) | 실행 완료 item 수 | `117` |  |
-| `error_items` | `integer` | No | `0` (app) | 오류 item 수 | `3` |  |
-| `logic_pass_items` | `integer` | No | `0` (app) | 로직 PASS item 수 | `98` |  |
-| `logic_pass_rate` | `float` | No | `0` (app) | 로직 PASS 비율(%) | `81.6667` |  |
-| `llm_done_items` | `integer` | No | `0` (app) | LLM 평가 완료 item 수 | `110` |  |
-| `llm_metric_averages_json` | `text` | No | `{}` (app) | LLM 메트릭 평균(JSON 문자열) | `{"정확성":4.12}` | JSON string |
-| `llm_total_score_avg` | `float` | Yes | `NULL` | LLM 총점 평균 | `4.03` |  |
-| `evaluated_at` | `datetime` | No | UTC now (app) | 스냅샷 계산 시각 | `2026-02-20 09:12:12` | index |
+| Column name                | Type          | Nullable | Default       | Description                  | Example value                          | Notes       |
+| -------------------------- | ------------- | -------- | ------------- | ---------------------------- | -------------------------------------- | ----------- |
+| `id`                       | `varchar(36)` | No       | UUID (app)    | 스냅샷 ID                    | `58ca91d4-6f9b-4b16-b36e-8f9bfcc3e4e9` | PK          |
+| `run_id`                   | `varchar(36)` | No       | 없음          | 대상 run ID                  | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index   |
+| `test_set_id`              | `varchar(36)` | Yes      | `NULL`        | 대상 테스트 세트 ID          | `b8da4b5e-e2ef-4ffa-b6a5-2ba9ac27c07a` | FK, index   |
+| `query_group_id`           | `varchar(36)` | Yes      | `NULL`        | 그룹 단위 스냅샷 키          | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index   |
+| `total_items`              | `integer`     | No       | `0` (app)     | 집계 대상 item 수            | `120`                                  |             |
+| `executed_items`           | `integer`     | No       | `0` (app)     | 실행 완료 item 수            | `117`                                  |             |
+| `error_items`              | `integer`     | No       | `0` (app)     | 오류 item 수                 | `3`                                    |             |
+| `logic_pass_items`         | `integer`     | No       | `0` (app)     | 로직 PASS item 수            | `98`                                   |             |
+| `logic_pass_rate`          | `float`       | No       | `0` (app)     | 로직 PASS 비율(%)            | `81.6667`                              |             |
+| `llm_done_items`           | `integer`     | No       | `0` (app)     | LLM 평가 완료 item 수        | `110`                                  |             |
+| `llm_metric_averages_json` | `text`        | No       | `{}` (app)    | LLM 메트릭 평균(JSON 문자열) | `{"정확성":4.12}`                      | JSON string |
+| `llm_total_score_avg`      | `float`       | Yes      | `NULL`        | LLM 총점 평균                | `4.03`                                 |             |
+| `evaluated_at`             | `datetime`    | No       | UTC now (app) | 스냅샷 계산 시각             | `2026-02-20 09:12:12`                  | index       |
 
 ### 인덱스/제약조건
 
@@ -596,17 +597,17 @@
 
 ### 컬럼 정의
 
-| Column name | Type | Nullable | Default | Description | Example value | Notes |
-|---|---|---|---|---|---|---|
-| `id` | `varchar(36)` | No | UUID (app) | job ID | `73d4bda8-9f8a-4995-a50e-efce347c35c4` | PK |
-| `job_type` | `varchar(80)` | No | 없음 | 작업 종류 | `QUERY_GENERATION` | index |
-| `status` | `varchar(20)` | No | `PENDING` (app) | 작업 상태 | `DONE` | index |
-| `payload_json` | `text` | No | `{}` (app) | 요청 파라미터(JSON 문자열) | `{"testSetId":"...","limit":5}` | JSON string |
-| `result_json` | `text` | No | `""` (app) | 작업 결과(JSON 문자열) | `{"summary":"..."}` | JSON string |
-| `error` | `text` | No | `""` (app) | 실패 사유 | `timeout` |  |
-| `created_at` | `datetime` | No | UTC now (app) | 생성 시각 | `2026-02-20 09:45:00` |  |
-| `started_at` | `datetime` | Yes | `NULL` | 시작 시각 | `2026-02-20 09:45:01` |  |
-| `finished_at` | `datetime` | Yes | `NULL` | 종료 시각 | `2026-02-20 09:45:03` |  |
+| Column name    | Type          | Nullable | Default         | Description                | Example value                          | Notes       |
+| -------------- | ------------- | -------- | --------------- | -------------------------- | -------------------------------------- | ----------- |
+| `id`           | `varchar(36)` | No       | UUID (app)      | job ID                     | `73d4bda8-9f8a-4995-a50e-efce347c35c4` | PK          |
+| `job_type`     | `varchar(80)` | No       | 없음            | 작업 종류                  | `QUERY_GENERATION`                     | index       |
+| `status`       | `varchar(20)` | No       | `PENDING` (app) | 작업 상태                  | `DONE`                                 | index       |
+| `payload_json` | `text`        | No       | `{}` (app)      | 요청 파라미터(JSON 문자열) | `{"testSetId":"...","limit":5}`        | JSON string |
+| `result_json`  | `text`        | No       | `""` (app)      | 작업 결과(JSON 문자열)     | `{"summary":"..."}`                    | JSON string |
+| `error`        | `text`        | No       | `""` (app)      | 실패 사유                  | `timeout`                              |             |
+| `created_at`   | `datetime`    | No       | UTC now (app)   | 생성 시각                  | `2026-02-20 09:45:00`                  |             |
+| `started_at`   | `datetime`    | Yes      | `NULL`          | 시작 시각                  | `2026-02-20 09:45:01`                  |             |
+| `finished_at`  | `datetime`    | Yes      | `NULL`          | 종료 시각                  | `2026-02-20 09:45:03`                  |             |
 
 ### 인덱스/제약조건
 

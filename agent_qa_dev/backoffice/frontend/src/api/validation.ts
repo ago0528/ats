@@ -242,7 +242,12 @@ export async function compareValidationRun(runId: string, baseRunId?: string) {
   return data;
 }
 
-export async function listValidationTestSets(params?: { q?: string; offset?: number; limit?: number }) {
+export async function listValidationTestSets(params?: {
+  q?: string;
+  environment?: Environment;
+  offset?: number;
+  limit?: number;
+}) {
   const { data } = await api.get<{ items: ValidationTestSet[]; total: number }>('/validation-test-sets', { params });
   return data;
 }
@@ -298,6 +303,7 @@ export async function appendQueriesToValidationTestSet(
 export async function createRunFromValidationTestSet(
   testSetId: string,
   payload: {
+    name?: string;
     environment: Environment;
     agentId?: string;
     testModel?: string;

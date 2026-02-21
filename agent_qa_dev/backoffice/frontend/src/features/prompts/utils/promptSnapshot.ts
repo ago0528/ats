@@ -12,8 +12,14 @@ type ApiResponse = {
   previousPrompt?: unknown;
 };
 
+const LINE_TERMINATOR_REGEX = /\r\n|\r|\u2028|\u2029/g;
+
+export function normalizePromptText(text: string): string {
+  return text.replace(LINE_TERMINATOR_REGEX, '\n');
+}
+
 function asString(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+  return typeof value === 'string' ? normalizePromptText(value) : '';
 }
 
 export function normalizePromptSnapshot(data: ApiResponse | null | undefined): PromptSnapshotData {

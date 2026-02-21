@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Button, Typography } from 'antd';
+import { Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 
 import type { ValidationRun, ValidationRunItem } from '../../../api/types/validation';
@@ -21,11 +21,7 @@ function renderEllipsisCell(value?: string, type?: 'danger') {
   );
 }
 
-export function useValidationColumns({
-  handleAddToTestSet,
-}: {
-  handleAddToTestSet: (item: ValidationRunItem) => void;
-}) {
+export function useValidationColumns() {
   const runItemColumns = useMemo<ColumnsType<ValidationRunItem>>(
     () => [
       {
@@ -76,18 +72,8 @@ export function useValidationColumns({
         width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.llm,
         render: (_, row: ValidationRunItem) => row.llmEvaluation?.status || '-',
       },
-      {
-        key: 'actions',
-        title: '작업',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.actions,
-        render: (_, row: ValidationRunItem) => (
-          <Button onClick={() => handleAddToTestSet(row)} disabled={!row.queryId}>
-            테스트 세트 추가
-          </Button>
-        ),
-      },
     ],
-    [handleAddToTestSet],
+    [],
   );
 
   const historyDetailItemColumns = useMemo<ColumnsType<ValidationRunItem>>(

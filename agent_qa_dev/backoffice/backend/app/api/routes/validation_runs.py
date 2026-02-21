@@ -41,6 +41,7 @@ class AdHocQueryPayload(BaseModel):
 class ValidationRunCreateRequest(BaseModel):
     mode: str = "REGISTERED"
     environment: Environment
+    name: Optional[str] = None
     testSetId: Optional[str] = None
     agentId: Optional[str] = None
     testModel: Optional[str] = None
@@ -120,6 +121,87 @@ def _serialize_json(value: str) -> Any:
         return text
 
 
+def _normalize_run_name(name: str | None, fallback: str) -> str:
+    normalized = (name or "").strip()
+    return normalized if normalized else fallback
+
+
+DEFAULT_RUN_AGENT_ID = "ORCHESTRATOR_WORKER_V3"
+
+
+def _coalesce_text(value: Optional[str], default: str) -> tuple[str, bool]:
+    normalized = (value or "").strip()
+    if normalized:
+        return normalized, False
+    default_normalized = (default or "").strip()
+    return default_normalized, not normalized
+
+
+def _coalesce_int(value: Optional[int], default: int, min_value: int = 1) -> tuple[int, bool]:
+    try:
+        parsed = int(value or 0)
+    except (TypeError, ValueError):
+        parsed = 0
+    if parsed >= min_value:
+        return parsed, False
+    return int(default or min_value), True
+
+
+def _normalize_run_defaults(
+    run,
+    *,
+    test_model_default: str,
+    eval_model_default: str,
+    repeat_in_conversation_default: int,
+    conversation_room_count_default: int,
+    agent_parallel_calls_default: int,
+    timeout_ms_default: int,
+) -> bool:
+    changed = False
+    created_at = run.created_at if isinstance(run.created_at, dt.datetime) else dt.datetime.utcnow()
+    run.name, changed_name = _coalesce_text(
+        run.name,
+        _normalize_run_name(None, f"Run {created_at.strftime('%Y-%m-%d %H:%M:%S')}"),
+    )
+    changed |= changed_name
+
+    run.agent_id, has_agent_changed = _coalesce_text(run.agent_id, DEFAULT_RUN_AGENT_ID)
+    changed |= has_agent_changed
+
+    run.test_model, changed_test_model = _coalesce_text(run.test_model, test_model_default)
+    changed |= changed_test_model
+
+    run.eval_model, changed_eval_model = _coalesce_text(run.eval_model, eval_model_default)
+    changed |= changed_eval_model
+
+    run.repeat_in_conversation, changed_repeat = _coalesce_int(
+        run.repeat_in_conversation,
+        repeat_in_conversation_default,
+    )
+    changed |= changed_repeat
+
+    run.conversation_room_count, changed_room = _coalesce_int(
+        run.conversation_room_count,
+        conversation_room_count_default,
+    )
+    changed |= changed_room
+
+    run.agent_parallel_calls, changed_parallel = _coalesce_int(
+        run.agent_parallel_calls,
+        agent_parallel_calls_default,
+    )
+    changed |= changed_parallel
+
+    run.timeout_ms, changed_timeout = _coalesce_int(
+        run.timeout_ms,
+        timeout_ms_default,
+        min_value=1000,
+    )
+    changed |= changed_timeout
+
+    return changed
+
+
 @router.get("/validation-runs")
 def list_validation_runs(
     environment: Optional[Environment] = Query(default=None),
@@ -130,7 +212,27 @@ def list_validation_runs(
     db: Session = Depends(get_db),
 ):
     repo = ValidationRunRepository(db)
+    setting_repo = ValidationSettingsRepository(db)
     rows = repo.list_runs(environment=environment, test_set_id=testSetId, status=status, offset=offset, limit=limit)
+    settings_by_env: dict[Environment, object] = {}
+    defaults_changed = False
+    for row in rows:
+        cached_setting = settings_by_env.get(row.environment)
+        if cached_setting is None:
+            cached_setting = setting_repo.get_or_create(row.environment)
+            settings_by_env[row.environment] = cached_setting
+        if _normalize_run_defaults(
+            row,
+            test_model_default=cached_setting.test_model_default,
+            eval_model_default=cached_setting.eval_model_default,
+            repeat_in_conversation_default=cached_setting.repeat_in_conversation_default,
+            conversation_room_count_default=cached_setting.conversation_room_count_default,
+            agent_parallel_calls_default=cached_setting.agent_parallel_calls_default,
+            timeout_ms_default=cached_setting.timeout_ms_default,
+        ):
+            defaults_changed = True
+    if defaults_changed:
+        db.commit()
     return {
         "items": [repo.build_run_payload(row) for row in rows],
         "total": repo.count_runs(environment=environment, test_set_id=testSetId, status=status),
@@ -154,10 +256,16 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
     timeout_ms = body.timeoutMs if body.timeoutMs is not None else setting.timeout_ms_default
 
     options: dict[str, Any] = {}
+    run_name = _normalize_run_name(
+        body.name,
+        f"Run {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+    )
+
     run = run_repo.create_run(
         environment=body.environment,
         mode=body.mode,
         test_set_id=body.testSetId,
+        name=run_name,
         agent_id=agent_id,
         test_model=test_model,
         eval_model=eval_model,
@@ -234,9 +342,22 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
 @router.get("/validation-runs/{run_id}")
 def get_validation_run(run_id: str, db: Session = Depends(get_db)):
     repo = ValidationRunRepository(db)
+    setting_repo = ValidationSettingsRepository(db)
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
+
+    setting = setting_repo.get_or_create(run.environment)
+    if _normalize_run_defaults(
+        run,
+        test_model_default=setting.test_model_default,
+        eval_model_default=setting.eval_model_default,
+        repeat_in_conversation_default=setting.repeat_in_conversation_default,
+        conversation_room_count_default=setting.conversation_room_count_default,
+        agent_parallel_calls_default=setting.agent_parallel_calls_default,
+        timeout_ms_default=setting.timeout_ms_default,
+    ):
+        db.commit()
     return repo.build_run_payload(run)
 
 

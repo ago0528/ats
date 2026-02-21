@@ -17,4 +17,11 @@ describe('prompt diff utils', () => {
     expect(getLengthDelta('a', 'abc')).toBe('+2');
     expect(getLengthDelta('abc', 'a')).toBe('-2');
   });
+
+  it('treats LS/PS as line breaks', () => {
+    const result = calculateLineDiff('line-1\u2028line-2', 'line-1\nline-3');
+    expect(result.modified).toBe(1);
+    expect(result.added).toBe(0);
+    expect(result.removed).toBe(0);
+  });
 });

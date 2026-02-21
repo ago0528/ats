@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Card,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Popconfirm,
+  Select,
+  Space,
+  Typography,
+} from 'antd';
 import { useLocation } from 'react-router-dom';
 
 import {
@@ -11,7 +23,10 @@ import {
   listValidationTestSets,
   updateValidationTestSet,
 } from '../../api/validation';
-import type { ValidationQuery, ValidationTestSet } from '../../api/types/validation';
+import type {
+  ValidationQuery,
+  ValidationTestSet,
+} from '../../api/types/validation';
 import type { Environment } from '../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../app/types';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
@@ -69,7 +84,10 @@ export function TestSetManagementPage({
   const loadTestSets = async () => {
     setLoading(true);
     try {
-      const data = await listValidationTestSets({ q: search || undefined, limit: 300 });
+      const data = await listValidationTestSets({
+        q: search || undefined,
+        limit: 300,
+      });
       setItems(data.items);
       setTotal(data.total);
       setSelectedTestSetId((prev) => {
@@ -114,7 +132,12 @@ export function TestSetManagementPage({
       .map((queryId) => queryId.trim())
       .filter(Boolean);
     const signature = `${mode || ''}:${queryIds.join(',')}`;
-    if (mode !== 'create' || queryIds.length === 0 || handledCreateParam === signature) return;
+    if (
+      mode !== 'create' ||
+      queryIds.length === 0 ||
+      handledCreateParam === signature
+    )
+      return;
     setHandledCreateParam(signature);
     setEditing(null);
     form.setFieldsValue({
@@ -133,7 +156,11 @@ export function TestSetManagementPage({
   }, [form, handledCreateParam, location.search, queries.length]);
 
   const queryOptions = useMemo(
-    () => queries.map((query) => ({ label: `${query.queryText} (${query.id})`, value: query.id })),
+    () =>
+      queries.map((query) => ({
+        label: `${query.queryText} (${query.id})`,
+        value: query.id,
+      })),
     [queries],
   );
 
@@ -252,7 +279,11 @@ export function TestSetManagementPage({
           />
           <Button onClick={openCreate}>테스트 세트 생성</Button>
           <Button onClick={onOpenValidationHistory}>검증 이력으로 이동</Button>
-          <Button type="primary" disabled={!selectedTestSetId} onClick={() => onOpenValidationRun?.(selectedTestSetId)}>
+          <Button
+            type="primary"
+            disabled={!selectedTestSetId}
+            onClick={() => onOpenValidationRun?.(selectedTestSetId)}
+          >
             검증 실행으로 이동
           </Button>
         </Space>
@@ -301,7 +332,10 @@ export function TestSetManagementPage({
               dataIndex: 'updatedAt',
               width: TEST_SET_COLUMN_WIDTHS.updatedAt,
               render: (value?: string) => formatDateTime(value),
-              sorter: (a, b) => String(a.updatedAt || '').localeCompare(String(b.updatedAt || '')),
+              sorter: (a, b) =>
+                String(a.updatedAt || '').localeCompare(
+                  String(b.updatedAt || ''),
+                ),
             },
             {
               key: 'actions',
@@ -309,9 +343,26 @@ export function TestSetManagementPage({
               width: TEST_SET_COLUMN_WIDTHS.actions,
               render: (_, row: ValidationTestSet) => (
                 <Space size="small">
-                  <Button onClick={() => { void openEdit(row); }}>수정</Button>
-                  <Button onClick={() => { void handleClone(row.id); }}>복제</Button>
-                  <Popconfirm title="테스트 세트를 삭제할까요?" onConfirm={() => { void handleDelete(row.id); }}>
+                  <Button
+                    onClick={() => {
+                      void openEdit(row);
+                    }}
+                  >
+                    수정
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      void handleClone(row.id);
+                    }}
+                  >
+                    복제
+                  </Button>
+                  <Popconfirm
+                    title="테스트 세트를 삭제할까요?"
+                    onConfirm={() => {
+                      void handleDelete(row.id);
+                    }}
+                  >
                     <Button danger>삭제</Button>
                   </Popconfirm>
                 </Space>
@@ -325,14 +376,20 @@ export function TestSetManagementPage({
         open={modalOpen}
         title={editing ? '테스트 세트 수정' : '테스트 세트 생성'}
         onCancel={() => setModalOpen(false)}
-        onOk={() => { void handleSave(); }}
+        onOk={() => {
+          void handleSave();
+        }}
         okText={editing ? '수정' : '생성'}
         confirmLoading={saving}
         width={860}
         destroyOnHidden
       >
         <Form form={form} layout="vertical">
-          <Form.Item label="이름" name="name" rules={[{ required: true, message: '이름을 입력해 주세요.' }]}>
+          <Form.Item
+            label="이름"
+            name="name"
+            rules={[{ required: true, message: '이름을 입력해 주세요.' }]}
+          >
             <Input />
           </Form.Item>
           <Form.Item label="설명" name="description">
@@ -341,7 +398,14 @@ export function TestSetManagementPage({
           <Form.Item
             label="질의 선택"
             name="queryIds"
-            rules={[{ required: true, type: 'array', min: 1, message: '최소 1개 질의를 선택해 주세요.' }]}
+            rules={[
+              {
+                required: true,
+                type: 'array',
+                min: 1,
+                message: '최소 1개 질의를 선택해 주세요.',
+              },
+            ]}
           >
             <Select
               mode="multiple"
@@ -363,16 +427,32 @@ export function TestSetManagementPage({
             <Form.Item label="Eval Model" name="evalModel" style={{ flex: 1 }}>
               <Input placeholder="gpt-5.2" />
             </Form.Item>
-            <Form.Item label="반복 수" name="repeatInConversation" style={{ flex: 1 }}>
+            <Form.Item
+              label="반복 수"
+              name="repeatInConversation"
+              style={{ flex: 1 }}
+            >
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="대화 방 수" name="conversationRoomCount" style={{ flex: 1 }}>
+            <Form.Item
+              label="대화 방 수"
+              name="conversationRoomCount"
+              style={{ flex: 1 }}
+            >
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="병렬 호출 수" name="agentParallelCalls" style={{ flex: 1 }}>
+            <Form.Item
+              label="동시 실행 수"
+              name="agentParallelCalls"
+              style={{ flex: 1 }}
+            >
               <InputNumber min={1} />
             </Form.Item>
-            <Form.Item label="타임아웃(ms)" name="timeoutMs" style={{  flex: 1 }}>
+            <Form.Item
+              label="타임아웃(ms)"
+              name="timeoutMs"
+              style={{ flex: 1 }}
+            >
               <InputNumber min={1000} />
             </Form.Item>
           </Space>

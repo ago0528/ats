@@ -10,6 +10,13 @@ export function canExecuteRun(currentRun: ValidationRun | null) {
 
 export function canEvaluateRun(currentRun: ValidationRun | null) {
   if (!currentRun) return false;
+  const evalStatus = String(currentRun.evalStatus || '').toUpperCase();
+  if (currentRun.status === 'PENDING' || currentRun.status === 'RUNNING') {
+    return false;
+  }
+  if (evalStatus === 'RUNNING') {
+    return false;
+  }
   return currentRun.doneItems + currentRun.errorItems > 0;
 }
 

@@ -19,7 +19,7 @@ import type { Environment } from '../../app/EnvironmentScope';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
 import { StandardModal, StandardModalMetaBlock } from '../../components/common/StandardModal';
 import { calculateLineDiff, getLengthDelta } from './utils/promptDiff';
-import { normalizePromptSnapshot, type PromptSnapshotData } from './utils/promptSnapshot';
+import { normalizePromptSnapshot, normalizePromptText, type PromptSnapshotData } from './utils/promptSnapshot';
 
 type Worker = {
   workerType: string;
@@ -48,6 +48,7 @@ const DIFF_EDITOR_OPTIONS = {
   fontSize: 13,
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
   automaticLayout: true,
+  unusualLineTerminators: 'off' as const,
 };
 
 function getApiHeaders(tokens: RuntimeSecrets) {
@@ -123,7 +124,10 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const diffWrapperRef = useRef<HTMLDivElement | null>(null);
 
   const hasTokens = Boolean(tokens.bearer && tokens.cms && tokens.mrs);
-  const hasUnsavedChanges = draft !== promptData.currentPrompt;
+  const hasUnsavedChanges = useMemo(
+    () => normalizePromptText(draft) !== normalizePromptText(promptData.currentPrompt),
+    [draft, promptData.currentPrompt],
+  );
   const viewDiffSummary = useMemo(
     () => calculateLineDiff(promptData.previousPrompt, promptData.currentPrompt),
     [promptData.previousPrompt, promptData.currentPrompt],
@@ -195,7 +199,9 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   const updatePrompt = async () => {
     if (!selectedWorker) return;
-    if (draft === promptData.currentPrompt) {
+    const normalizedDraft = normalizePromptText(draft);
+    const normalizedCurrentPrompt = normalizePromptText(promptData.currentPrompt);
+    if (normalizedDraft === normalizedCurrentPrompt) {
       message.warning('프롬프트 수정사항이 없어요.');
       return;
     }
@@ -203,7 +209,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     try {
       const response = await api.put(
         `/prompts/${environment}/${selectedWorker}`,
-        { prompt: draft },
+        { prompt: normalizedDraft },
         getApiHeaders(tokens),
       );
       const nextData = normalizePromptSnapshot(response.data);
@@ -214,7 +220,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
         console.error(verifyError);
       }
 
-      if (syncedData.currentPrompt === draft) {
+      if (syncedData.currentPrompt === normalizedDraft) {
         message.success('프롬프트가 수정되었습니다.');
       } else {
         message.warning('저장 후 다시 조회된 프롬프트가 입력값과 달라 확인이 필요합니다.');
@@ -520,6 +526,8 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 language="markdown"
                 original={promptData.previousPrompt}
                 modified={promptData.currentPrompt}
+                keepCurrentOriginalModel={true}
+                keepCurrentModifiedModel={true}
                 originalModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-original/${editorSessionKey}`}
                 modifiedModelPath={`inmemory://prompt/${environment}/${encodeURIComponent(selectedWorker || 'unspecified')}/view-modified/${editorSessionKey}`}
                 onMount={(editor) => {
@@ -626,6 +634,8 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
                 language="markdown"
                 original={promptData.currentPrompt}
                 modified={draft}
+                keepCurrentOriginalModel={true}
+                keepCurrentModifiedModel={true}
                 originalModelPath={diffModelPaths.originalModelPath}
                 modifiedModelPath={diffModelPaths.modifiedModelPath}
                 onMount={(editor) => {

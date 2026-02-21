@@ -9,11 +9,9 @@ import {
   executeValidationRun,
   getValidationTestSetDashboard,
   getValidationRun,
-  getValidationTestSet,
   listValidationRunItems,
   listValidationRuns,
   listValidationTestSets,
-  updateValidationTestSet,
 } from '../../api/validation';
 import type {
   ValidationRun,
@@ -77,7 +75,7 @@ export function AgentValidationManagementPage({
 
   const loadGroupsAndTestSets = async () => {
     try {
-      const testSetData = await listValidationTestSets({ limit: 500 });
+      const testSetData = await listValidationTestSets({ limit: 500, environment });
       setTestSets(testSetData.items);
       setDashboardTestSetId((prev) => prev || testSetData.items[0]?.id || '');
       setSelectedTestSetId((prev) => {
@@ -171,10 +169,25 @@ export function AgentValidationManagementPage({
 
   useEffect(() => {
     if (section !== 'run') return;
-    if (!selectedRunId) return;
-    if (!runs.some((run) => run.id === selectedRunId)) return;
+    if (!selectedRunId) {
+      setCompareResult(null);
+      return;
+    }
+    if (!runs.some((run) => run.id === selectedRunId)) {
+      setCompareResult(null);
+      return;
+    }
+    setCompareResult(null);
     void loadRunDetail(selectedRunId);
   }, [selectedRunId]);
+
+  useEffect(() => {
+    if (section !== 'run') return;
+    if (!baseRunId) return;
+    if (baseRunId === selectedRunId || !runs.some((run) => run.id === baseRunId)) {
+      setBaseRunId('');
+    }
+  }, [baseRunId, runs, selectedRunId, section]);
 
   useEffect(() => {
     if (currentRun?.status !== 'RUNNING') return;
@@ -199,21 +212,23 @@ export function AgentValidationManagementPage({
     }
   }, [runs.length, historyPageSize, historyCurrentPage]);
 
-  const handleCreateRun = async (overrides: RunCreateOverrides) => {
-    if (!selectedTestSetId) {
+  const handleCreateRunFromTestSet = async (testSetId: string, overrides: RunCreateOverrides) => {
+    if (!testSetId) {
       message.warning('테스트 세트를 먼저 선택해 주세요.');
       return;
     }
     try {
       setLoading(true);
-      const created = await createRunFromValidationTestSet(selectedTestSetId, {
+      const created = await createRunFromValidationTestSet(testSetId, {
         environment,
         ...overrides,
       });
+      setSelectedTestSetId(testSetId);
       setCurrentRun(created);
       setSelectedRunId(created.id);
       setBaseRunId('');
-      await loadRuns({ testSetId: selectedTestSetId });
+      setCompareResult(null);
+      await loadRuns({ testSetId });
       await loadRunDetail(created.id);
       message.success('Run을 생성했습니다.');
     } catch (error) {
@@ -246,6 +261,27 @@ export function AgentValidationManagementPage({
 
   const handleEvaluate = async () => {
     if (!currentRun) return;
+    const readErrorMessage = (error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        const typed = error as {
+          response?: { data?: { detail?: string; message?: string } | string };
+          message?: string;
+        };
+        if (typed.response?.data) {
+          const detail = typed.response.data;
+          if (typeof detail === 'string' && detail) {
+            return detail;
+          }
+          if (detail && typeof detail === 'object' && (detail.detail || detail.message)) {
+            return String(detail.detail || detail.message);
+          }
+        }
+        if (typed.message) {
+          return typed.message;
+        }
+      }
+      return '';
+    };
     try {
       setLoading(true);
       await evaluateValidationRun(currentRun.id, { maxChars: 15000 });
@@ -254,7 +290,10 @@ export function AgentValidationManagementPage({
       await loadRuns({ testSetId: selectedTestSetId });
     } catch (error) {
       console.error(error);
-      message.error('평가 요청에 실패했습니다.');
+      const detail = readErrorMessage(error);
+      message.error(
+        detail ? `평가 요청에 실패했습니다. (${detail})` : '평가 요청에 실패했습니다.',
+      );
     } finally {
       setLoading(false);
     }
@@ -288,41 +327,7 @@ export function AgentValidationManagementPage({
     }
   };
 
-  const handleAddToTestSet = async (item: ValidationRunItem) => {
-    if (!selectedTestSetId) {
-      message.warning('추가할 테스트 세트를 먼저 선택해 주세요.');
-      return;
-    }
-    const queryId = item.queryId?.trim();
-    if (!queryId) {
-      message.warning('원본 질의가 없는 항목은 테스트 세트에 추가할 수 없습니다.');
-      return;
-    }
-    try {
-      const testSet = await getValidationTestSet(selectedTestSetId);
-      const queryIds = testSet.queryIds || [];
-      if (queryIds.includes(queryId)) {
-        message.info('이미 선택된 테스트 세트에 포함된 질의입니다.');
-        return;
-      }
-      await updateValidationTestSet(selectedTestSetId, { queryIds: [...queryIds, queryId] });
-      setTestSets((prev) => prev.map((row) => (
-        row.id === selectedTestSetId
-          ? { ...row, itemCount: queryIds.length + 1 }
-          : row
-      )));
-      message.success('선택한 테스트 세트에 질의를 추가했습니다.');
-    } catch (error) {
-      console.error(error);
-      message.error('테스트 세트에 질의를 추가하지 못했습니다.');
-    }
-  };
-
-  const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns({
-    handleAddToTestSet: (item) => {
-      void handleAddToTestSet(item);
-    },
-  });
+  const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns();
 
   const { sectionTitle, isHistoryDetailMatched } = useValidationSectionMeta({
     section,
@@ -345,7 +350,7 @@ export function AgentValidationManagementPage({
           runItems={runItems}
           baseRunId={baseRunId}
           setBaseRunId={setBaseRunId}
-          handleCreateRun={handleCreateRun}
+          handleCreateRun={handleCreateRunFromTestSet}
           handleExecute={handleExecute}
           handleEvaluate={handleEvaluate}
           handleCompare={handleCompare}

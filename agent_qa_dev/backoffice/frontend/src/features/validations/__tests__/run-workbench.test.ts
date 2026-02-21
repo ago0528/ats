@@ -32,8 +32,10 @@ describe('run workbench gates', () => {
     expect(canExecuteRun(run({ status: 'DONE' }))).toBe(false);
 
     expect(canEvaluateRun(run({ doneItems: 0, errorItems: 0 }))).toBe(false);
-    expect(canEvaluateRun(run({ doneItems: 1, errorItems: 0 }))).toBe(true);
-    expect(canEvaluateRun(run({ doneItems: 0, errorItems: 1 }))).toBe(true);
+    expect(canEvaluateRun(run({ status: 'DONE', doneItems: 1, errorItems: 0 }))).toBe(true);
+    expect(canEvaluateRun(run({ status: 'DONE', doneItems: 0, errorItems: 1 }))).toBe(true);
+    expect(canEvaluateRun(run({ status: 'RUNNING', doneItems: 10, errorItems: 0 }))).toBe(false);
+    expect(canEvaluateRun(run({ status: 'PENDING', doneItems: 10, errorItems: 0 }))).toBe(false);
 
     expect(canCompareRun(run(), '')).toBe(false);
     expect(canCompareRun(run(), 'base-run-1')).toBe(true);

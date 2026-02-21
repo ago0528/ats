@@ -52,6 +52,7 @@ def startup() -> None:
     _ensure_sqlite_column("validation_run_items", "context_json_snapshot", "context_json_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_run_items", "target_assistant_snapshot", "target_assistant_snapshot TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_runs", "test_set_id", "test_set_id TEXT")
+    _ensure_sqlite_column("validation_runs", "name", "name TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_runs", "eval_status", "eval_status TEXT NOT NULL DEFAULT 'PENDING'")
     _ensure_sqlite_column("validation_runs", "eval_started_at", "eval_started_at DATETIME")
     _ensure_sqlite_column("validation_runs", "eval_finished_at", "eval_finished_at DATETIME")

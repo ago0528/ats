@@ -7,7 +7,7 @@ export type DiffSummary = {
 
 function normalizeLines(text: string): string[] {
   if (!text) return [];
-  return text.replace(/\r\n/g, '\n').split('\n');
+  return text.replace(/\r\n|\r|\u2028|\u2029/g, '\n').split('\n');
 }
 
 export function calculateLineDiff(before: string, after: string): DiffSummary {

@@ -1,4 +1,7 @@
-import type { ValidationRun, ValidationRunItem } from '../../../api/types/validation';
+import type {
+  ValidationRun,
+  ValidationRunItem,
+} from '../../../api/types/validation';
 
 export type ValidationRunStage = 'TEST_SET' | 'EXECUTE' | 'EVALUATE' | 'RESULT';
 
@@ -15,7 +18,10 @@ function countLlmEvaluated(runItems: ValidationRunItem[]) {
   return runItems.filter((item) => Boolean(item.llmEvaluation)).length;
 }
 
-export function getRunStageAvailability(currentRun: ValidationRun | null, runItems: ValidationRunItem[]) {
+export function getRunStageAvailability(
+  currentRun: ValidationRun | null,
+  runItems: ValidationRunItem[],
+) {
   if (!currentRun) {
     return {
       executeEnabled: false,
@@ -24,7 +30,10 @@ export function getRunStageAvailability(currentRun: ValidationRun | null, runIte
     };
   }
 
-  const executed = hasExecutionResults(runItems) || currentRun.status === 'DONE' || currentRun.status === 'FAILED';
+  const executed =
+    hasExecutionResults(runItems) ||
+    currentRun.status === 'DONE' ||
+    currentRun.status === 'FAILED';
   const evaluated = countLlmEvaluated(runItems) > 0;
   return {
     executeEnabled: true,
@@ -36,14 +45,17 @@ export function getRunStageAvailability(currentRun: ValidationRun | null, runIte
 export function getExecutionStateLabel(currentRun: ValidationRun | null) {
   if (!currentRun) return '미생성';
   const status = String(currentRun.status || '').toUpperCase();
-  if (status === 'PENDING') return '생성됨';
+  if (status === 'PENDING') return '실행대기';
   if (status === 'RUNNING') return '실행중';
   if (status === 'DONE') return '실행완료';
   if (status === 'FAILED') return '실행실패';
   return status || '-';
 }
 
-export function getEvaluationStateLabel(currentRun: ValidationRun | null, runItems: ValidationRunItem[]) {
+export function getEvaluationStateLabel(
+  currentRun: ValidationRun | null,
+  runItems: ValidationRunItem[],
+) {
   if (!currentRun) return '평가대기';
   if (runItems.length === 0) return '평가대기';
 
@@ -56,4 +68,27 @@ export function getEvaluationStateLabel(currentRun: ValidationRun | null, runIte
 export function getEvaluationProgressText(runItems: ValidationRunItem[]) {
   const llmEvaluated = countLlmEvaluated(runItems);
   return `${llmEvaluated} / ${runItems.length}`;
+}
+
+export function getCombinedRunStateLabel(
+  currentRun: ValidationRun | null,
+  runItems: ValidationRunItem[],
+) {
+  if (!currentRun) return '미생성';
+
+  const status = String(currentRun.status || '').toUpperCase();
+  if (status === 'PENDING') return '실행대기';
+  if (status === 'RUNNING') return '실행중';
+  if (status === 'FAILED') return '실행실패';
+  if (status !== 'DONE') return getExecutionStateLabel(currentRun);
+
+  const runEvalStatus = String(currentRun.evalStatus || '').toUpperCase();
+  const totalItems = currentRun.totalItems || 0;
+  const llmEvaluated = countLlmEvaluated(runItems);
+
+  if (runEvalStatus === 'RUNNING') return '평가중';
+  if (runItems.length === 0 && totalItems > 0) return '평가대기';
+  if (llmEvaluated === 0) return '실행완료';
+  if (runItems.length > 0 && llmEvaluated < runItems.length) return '평가중';
+  return '평가완료';
 }

@@ -82,6 +82,7 @@ export type QueryBulkUpdateResult = {
 
 export type ValidationRun = {
   id: string;
+  name?: string;
   mode: ValidationRunMode;
   environment: Environment;
   status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
@@ -159,6 +160,7 @@ export type ValidationSettings = {
 export type ValidationRunCreateRequest = {
   mode: ValidationRunMode;
   environment: Environment;
+  name?: string;
   testSetId?: string;
   agentId?: string;
   testModel?: string;

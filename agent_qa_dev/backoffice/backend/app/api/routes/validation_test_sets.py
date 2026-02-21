@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import datetime as dt
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +18,7 @@ from app.repositories.validation_test_sets import ValidationTestSetRepository
 
 router = APIRouter(tags=["validation-test-sets"])
 QUERY_SELECTION_LIMIT = 5000
+DEFAULT_TEST_SET_AGENT_ID = "ORCHESTRATOR_WORKER_V3"
 
 
 def _parse_json_text(value: str) -> dict[str, Any]:
@@ -118,6 +120,73 @@ def _resolve_config_value(
     return default
 
 
+def _coalesce_text(value: Any, default: str) -> tuple[str, bool]:
+    normalized = ("" if value is None else str(value)).strip()
+    if normalized:
+        return normalized, False
+    return ("" if default is None else str(default)), True
+
+
+def _coalesce_int(value: Any, default: int, min_value: int = 1) -> tuple[int, bool]:
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        parsed = 0
+    if parsed >= min_value:
+        return parsed, False
+    return int(default), True
+
+
+def _normalize_test_set_config(
+    config: dict[str, Any],
+    *,
+    test_model_default: str,
+    eval_model_default: str,
+    repeat_in_conversation_default: int,
+    conversation_room_count_default: int,
+    agent_parallel_calls_default: int,
+    timeout_ms_default: int,
+) -> tuple[dict[str, Any], bool]:
+    normalized = dict(config or {})
+    changed = False
+
+    normalized["agentId"], changed_agent = _coalesce_text(normalized.get("agentId"), DEFAULT_TEST_SET_AGENT_ID)
+    changed |= changed_agent
+
+    normalized["testModel"], changed_model = _coalesce_text(normalized.get("testModel"), test_model_default)
+    changed |= changed_model
+
+    normalized["evalModel"], changed_eval = _coalesce_text(normalized.get("evalModel"), eval_model_default)
+    changed |= changed_eval
+
+    normalized["repeatInConversation"], changed_repeat = _coalesce_int(
+        normalized.get("repeatInConversation"),
+        repeat_in_conversation_default,
+    )
+    changed |= changed_repeat
+
+    normalized["conversationRoomCount"], changed_room = _coalesce_int(
+        normalized.get("conversationRoomCount"),
+        conversation_room_count_default,
+    )
+    changed |= changed_room
+
+    normalized["agentParallelCalls"], changed_parallel = _coalesce_int(
+        normalized.get("agentParallelCalls"),
+        agent_parallel_calls_default,
+    )
+    changed |= changed_parallel
+
+    normalized["timeoutMs"], changed_timeout = _coalesce_int(
+        normalized.get("timeoutMs"),
+        timeout_ms_default,
+        min_value=1000,
+    )
+    changed |= changed_timeout
+
+    return normalized, changed
+
+
 class ValidationTestSetConfig(BaseModel):
     agentId: Optional[str] = None
     testModel: Optional[str] = None
@@ -167,6 +236,7 @@ class ValidationTestSetAppendQueriesRequest(BaseModel):
 
 class ValidationTestSetRunCreateRequest(BaseModel):
     environment: Environment
+    name: Optional[str] = None
     agentId: Optional[str] = None
     testModel: Optional[str] = None
     evalModel: Optional[str] = None
@@ -178,13 +248,36 @@ class ValidationTestSetRunCreateRequest(BaseModel):
 
 @router.get("/validation-test-sets")
 def list_validation_test_sets(
+    environment: Optional[Environment] = Query(default=None),
     q: Optional[str] = Query(default=None),
     offset: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
     repo = ValidationTestSetRepository(db)
+    setting_repo = ValidationSettingsRepository(db)
+    setting = setting_repo.get_or_create(environment) if environment is not None else None
+
     rows = repo.list(q=q, offset=offset, limit=limit)
+    defaults_changed = False
+    if setting is not None:
+        for row in rows:
+            config = _parse_json_text(row.config_json)
+            normalized_config, has_change = _normalize_test_set_config(
+                config,
+                test_model_default=setting.test_model_default,
+                eval_model_default=setting.eval_model_default,
+                repeat_in_conversation_default=setting.repeat_in_conversation_default,
+                conversation_room_count_default=setting.conversation_room_count_default,
+                agent_parallel_calls_default=setting.agent_parallel_calls_default,
+                timeout_ms_default=setting.timeout_ms_default,
+            )
+            if has_change:
+                row.config_json = json.dumps(normalized_config, ensure_ascii=False)
+                defaults_changed = True
+    if defaults_changed:
+        db.commit()
+
     counts = repo.count_items_by_test_set_ids([row.id for row in rows])
     return {
         "items": [repo.build_payload(row, item_count=counts.get(row.id, 0)) for row in rows],
@@ -214,13 +307,35 @@ def create_validation_test_set(body: ValidationTestSetCreateRequest, db: Session
 
 
 @router.get("/validation-test-sets/{test_set_id}")
-def get_validation_test_set(test_set_id: str, db: Session = Depends(get_db)):
+def get_validation_test_set(
+    test_set_id: str,
+    environment: Optional[Environment] = Query(default=None),
+    db: Session = Depends(get_db),
+):
     repo = ValidationTestSetRepository(db)
     query_repo = ValidationQueryRepository(db)
     group_repo = ValidationQueryGroupRepository(db)
+    setting_repo = ValidationSettingsRepository(db)
+
     entity = repo.get(test_set_id)
     if entity is None:
         raise HTTPException(status_code=404, detail="Test set not found")
+
+    if environment is not None:
+        setting = setting_repo.get_or_create(environment)
+        config = _parse_json_text(entity.config_json)
+        normalized_config, has_change = _normalize_test_set_config(
+            config,
+            test_model_default=setting.test_model_default,
+            eval_model_default=setting.eval_model_default,
+            repeat_in_conversation_default=setting.repeat_in_conversation_default,
+            conversation_room_count_default=setting.conversation_room_count_default,
+            agent_parallel_calls_default=setting.agent_parallel_calls_default,
+            timeout_ms_default=setting.timeout_ms_default,
+        )
+        if has_change:
+            entity.config_json = json.dumps(normalized_config, ensure_ascii=False)
+            db.commit()
 
     items = repo.list_items(test_set_id)
     query_rows = query_repo.list_by_ids([item.query_id for item in items])
@@ -334,6 +449,18 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
 
     setting = setting_repo.get_or_create(body.environment)
     config = _parse_json_text(test_set.config_json)
+    normalized_config, has_change = _normalize_test_set_config(
+        config,
+        test_model_default=setting.test_model_default,
+        eval_model_default=setting.eval_model_default,
+        repeat_in_conversation_default=setting.repeat_in_conversation_default,
+        conversation_room_count_default=setting.conversation_room_count_default,
+        agent_parallel_calls_default=setting.agent_parallel_calls_default,
+        timeout_ms_default=setting.timeout_ms_default,
+    )
+    if has_change:
+        test_set.config_json = json.dumps(normalized_config, ensure_ascii=False)
+        config = normalized_config
 
     agent_id = str(_resolve_config_value(override=body.agentId, config=config, key="agentId", default="ORCHESTRATOR_WORKER_V3")).strip() or "ORCHESTRATOR_WORKER_V3"
     test_model = str(_resolve_config_value(override=body.testModel, config=config, key="testModel", default=setting.test_model_default)).strip() or setting.test_model_default
@@ -372,9 +499,14 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
 
     groups = {row.id: row for row in query_group_repo.list(limit=100000)}
 
+    run_name = (body.name or "").strip()
+    if not run_name:
+        run_name = f"{test_set.name} ({dt.datetime.now().strftime('%Y-%m-%d %H:%M')})"
+
     run = run_repo.create_run(
         environment=body.environment,
         mode="REGISTERED",
+        name=run_name,
         agent_id=agent_id,
         test_model=test_model,
         eval_model=eval_model,

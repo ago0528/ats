@@ -34,6 +34,7 @@ class ValidationRunRepository:
         environment: Environment,
         mode: str,
         test_set_id: Optional[str] = None,
+        name: str = "",
         agent_id: str,
         test_model: str,
         eval_model: str,
@@ -48,6 +49,7 @@ class ValidationRunRepository:
             environment=environment,
             mode=mode,
             test_set_id=test_set_id,
+            name=name,
             status=RunStatus.PENDING,
             base_run_id=base_run_id,
             agent_id=agent_id,
@@ -294,10 +296,13 @@ class ValidationRunRepository:
         if base is None:
             raise ValueError("Run not found")
 
+        base_name = (base.name or "").strip()
+        cloned_name = f"{base_name} (재실행)" if base_name else "재실행"
         cloned = self.create_run(
             environment=base.environment,
             mode=base.mode,
             test_set_id=base.test_set_id,
+            name=cloned_name,
             agent_id=base.agent_id,
             test_model=base.test_model,
             eval_model=base.eval_model,
@@ -381,6 +386,7 @@ class ValidationRunRepository:
     def build_run_payload(self, run: ValidationRun) -> dict[str, Any]:
         return {
             "id": run.id,
+            "name": run.name,
             "mode": run.mode,
             "environment": run.environment.value,
             "status": run.status.value,

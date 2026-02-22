@@ -80,7 +80,8 @@ async def execute_validation_run(
                     error = ""
                     result = {}
                     item_context = _parse_context_json(item.context_json_snapshot) or default_context
-                    item_target_assistant = (item.target_assistant_snapshot or "").strip() or default_target_assistant
+                    default_target = (default_target_assistant or "").strip()
+                    item_target_assistant = default_target or (item.target_assistant_snapshot or "").strip()
                     try:
                         async with sem:
                             result = await asyncio.wait_for(

@@ -5,7 +5,10 @@ import { StandardModal } from '../../../components/common/StandardModal';
 type CreateTestSetFromSelectionFormValues = {
   name: string;
   description: string;
+  contextJson?: string;
 };
+
+const CONTEXT_SAMPLE = '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
 
 export function CreateTestSetFromSelectionModal({
   open,
@@ -44,7 +47,7 @@ export function CreateTestSetFromSelectionModal({
       }
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" initialValues={{ name: '', description: '' }}>
+      <Form form={form} layout="vertical" initialValues={{ name: '', description: '', contextJson: '' }}>
         <Typography.Text type="secondary">선택된 질의 {selectedCount}건으로 테스트 세트를 생성합니다.</Typography.Text>
         <Form.Item
           label="이름"
@@ -56,6 +59,13 @@ export function CreateTestSetFromSelectionModal({
         </Form.Item>
         <Form.Item label="설명" name="description">
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
+        </Form.Item>
+        <Form.Item
+          label="Context"
+          name="contextJson"
+          help="API 호출 context에 전달할 JSON"
+        >
+          <Input.TextArea rows={5} placeholder={CONTEXT_SAMPLE} />
         </Form.Item>
       </Form>
     </StandardModal>

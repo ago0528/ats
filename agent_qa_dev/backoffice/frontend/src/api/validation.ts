@@ -306,6 +306,7 @@ export async function createRunFromValidationTestSet(
   payload: {
     name?: string;
     environment: Environment;
+    context?: Record<string, unknown>;
     agentId?: string;
     testModel?: string;
     evalModel?: string;

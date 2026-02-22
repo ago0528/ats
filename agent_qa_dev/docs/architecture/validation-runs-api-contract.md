@@ -11,14 +11,14 @@
 
 ## 2) Query Parameters
 
-| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
-|---|---|---|---|---|
-| `environment` | `string` | N | - | 실행 환경 필터 (`dev` \| `st2` \| `st` \| `pr`) |
-| `testSetId` | `string` | N | - | 테스트 세트 ID로 필터. 빈값이 아닌 특정 ID를 전달 |
-| `status` | `string` | N | - | 실행 상태 필터 (`PENDING` \| `RUNNING` \| `DONE` \| `FAILED`) |
-| `evaluationStatus` | `string` | N | - | 평가 상태 파생 필터. 아래 값 허용 (한글/영문 모두) |
-| `offset` | `integer` | N | `0` | 시작 offset |
-| `limit` | `integer` | N | `50` | 페이지 크기 |
+| 파라미터           | 타입      | 필수 | 기본값 | 설명                                                          |
+| ------------------ | --------- | ---- | ------ | ------------------------------------------------------------- |
+| `environment`      | `string`  | N    | -      | 실행 환경 필터 (`dev` \| `st2` \| `st` \| `pr`)               |
+| `testSetId`        | `string`  | N    | -      | 테스트 세트 ID로 필터. 빈값이 아닌 특정 ID를 전달             |
+| `status`           | `string`  | N    | -      | 실행 상태 필터 (`PENDING` \| `RUNNING` \| `DONE` \| `FAILED`) |
+| `evaluationStatus` | `string`  | N    | -      | 평가 상태 파생 필터. 아래 값 허용 (한글/영문 모두)            |
+| `offset`           | `integer` | N    | `0`    | 시작 offset                                                   |
+| `limit`            | `integer` | N    | `50`   | 페이지 크기                                                   |
 
 ### `testSetId` 특이 동작
 
@@ -91,4 +91,3 @@
 - 정렬: `createdAt DESC` (최신순)
 - `GET /validation-runs`는 `offset`/`limit` 적용한 부분 집합을 반환
 - 응답은 프런트/백엔드에서 필드 추가 가능성이 있는 공통 객체 형태를 유지
-

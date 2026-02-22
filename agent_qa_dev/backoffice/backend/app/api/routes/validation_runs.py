@@ -42,6 +42,7 @@ class ValidationRunCreateRequest(BaseModel):
     environment: Environment
     name: Optional[str] = None
     testSetId: Optional[str] = None
+    context: Optional[dict[str, Any]] = None
     agentId: Optional[str] = None
     testModel: Optional[str] = None
     evalModel: Optional[str] = None
@@ -77,16 +78,22 @@ class SaveQueryPayload(BaseModel):
     logicExpectedValue: Optional[str] = None
 
 
-def _parse_context_json(raw: Optional[str]) -> Optional[dict]:
-    text = (raw or "").strip()
-    if not text:
+def _parse_context_json(raw: Optional[Any]) -> Optional[dict]:
+    if raw is None:
         return None
-    try:
-        payload = json.loads(text)
-    except Exception:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return None
+        try:
+            payload = json.loads(text)
+        except Exception:
+            return None
+        if isinstance(payload, dict):
+            return payload
         return None
-    if isinstance(payload, dict):
-        return payload
     return None
 
 
@@ -118,6 +125,14 @@ def _normalize_run_name(name: str | None, fallback: str) -> str:
 
 
 DEFAULT_RUN_AGENT_ID = "ORCHESTRATOR_WORKER_V3"
+NORMALIZED_RUN_AGENT_ID = "ORCHESTRATOR_ASSISTANT"
+
+
+def _normalize_agent_mode_value(value: Optional[str]) -> str:
+    normalized = (value or "").strip()
+    if not normalized or normalized == DEFAULT_RUN_AGENT_ID:
+        return NORMALIZED_RUN_AGENT_ID
+    return normalized
 
 
 def _coalesce_text(value: Optional[str], default: str) -> tuple[str, bool]:
@@ -156,8 +171,12 @@ def _normalize_run_defaults(
     )
     changed |= changed_name
 
-    run.agent_id, has_agent_changed = _coalesce_text(run.agent_id, DEFAULT_RUN_AGENT_ID)
+    run.agent_id, has_agent_changed = _coalesce_text(run.agent_id, NORMALIZED_RUN_AGENT_ID)
     changed |= has_agent_changed
+    normalized_agent_id = _normalize_agent_mode_value(run.agent_id)
+    if normalized_agent_id != run.agent_id:
+        run.agent_id = normalized_agent_id
+        changed = True
 
     run.test_model, changed_test_model = _coalesce_text(run.test_model, test_model_default)
     changed |= changed_test_model
@@ -251,7 +270,7 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
     setting_repo = ValidationSettingsRepository(db)
 
     setting = setting_repo.get_or_create(body.environment)
-    agent_id = (body.agentId or "ORCHESTRATOR_WORKER_V3").strip()
+    agent_id = _normalize_agent_mode_value(body.agentId)
     test_model = (body.testModel or setting.test_model_default).strip()
     eval_model = (body.evalModel or setting.eval_model_default).strip()
     repeat_in_conversation = body.repeatInConversation if body.repeatInConversation is not None else setting.repeat_in_conversation_default
@@ -259,7 +278,11 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
     agent_parallel_calls = body.agentParallelCalls if body.agentParallelCalls is not None else setting.agent_parallel_calls_default
     timeout_ms = body.timeoutMs if body.timeoutMs is not None else setting.timeout_ms_default
 
-    options: dict[str, Any] = {}
+    options: dict[str, Any] = {
+        "targetAssistant": agent_id,
+    }
+    if body.context is not None:
+        options["context"] = body.context
     run_name = _normalize_run_name(
         body.name,
         f"Run {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -439,7 +462,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
 
     options = json.loads(run.options_json or "{}")
     cfg = get_env_config(run.environment)
-    default_context = _parse_context_json(options.get("contextJson"))
+    default_context = _parse_context_json(options.get("context") or options.get("contextJson"))
     default_target_assistant = options.get("targetAssistant")
 
     job_id = str(uuid.uuid4())

@@ -51,6 +51,7 @@ type QueryFormValues = {
 type CreateTestSetFromSelectionValues = {
   name: string;
   description: string;
+  contextJson?: string;
 };
 
 type AppendToTestSetValues = {
@@ -101,6 +102,28 @@ function buildSelectionSignature(filter: QuerySelectionFilter): string {
   };
   return JSON.stringify(normalized);
 }
+
+const parseContextJson = (raw?: string) => {
+  const text = String(raw || '').trim();
+  if (!text) {
+    return { parsedContext: undefined as Record<string, unknown> | undefined };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {
+        parsedContext: undefined,
+        parseError: 'context는 JSON 객체 형태여야 합니다.',
+      };
+    }
+    return { parsedContext: parsed as Record<string, unknown> };
+  } catch (error) {
+    return {
+      parsedContext: undefined,
+      parseError: `context JSON 형식이 올바르지 않습니다. ${error instanceof Error ? error.message : ''}`.trim(),
+    };
+  }
+};
 
 function toQuerySelectionPayload(selection: {
   mode: 'manual' | 'filtered';
@@ -822,10 +845,18 @@ export function useQueryManagement({
 
     try {
       setCreatingTestSet(true);
+      const parsedContext = parseContextJson(values.contextJson || '');
+      if (parsedContext.parseError) {
+        message.error(parsedContext.parseError);
+        return;
+      }
       const data = await createValidationTestSet({
         name: String(values.name || '').trim(),
         description: String(values.description || '').trim(),
         querySelection: payload,
+        ...(parsedContext.parsedContext === undefined
+          ? {}
+          : { config: { context: parsedContext.parsedContext } }),
       });
       message.success(`테스트 세트를 생성했습니다. (${data.itemCount}건)`);
       setCreateTestSetModalOpen(false);

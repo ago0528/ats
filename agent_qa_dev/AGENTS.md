@@ -18,6 +18,7 @@
 - 비즈니스 로직은 `hooks/`, UI 블록은 `components/`로 분리한다.
 - 공통 유틸은 `backoffice/frontend/src/shared/utils`를 우선 재사용한다.
 - 공통 UI 패턴은 `backoffice/frontend/src/components/common`을 우선 재사용한다.
+- 컴포넌트를 새로 만들 때는 우선 `backoffice/frontend/src/components/common` 및 기존 `features` 내 지역 공통 컴포넌트에 해당 기능이 있는지 먼저 확인해 재사용한다.
 - 상태 관리는 기본적으로 `useState/useEffect + custom hooks`를 유지한다.
 - 리팩토링 시 UI/동작/문구를 임의 변경하지 않는다.
 - 백엔드 API 계약(엔드포인트, 요청/응답 시그니처)을 프론트에서 임의 변경하지 않는다.

@@ -10,6 +10,7 @@ import type {
   ValidationQuery,
   ValidationRun,
   ValidationRunCreateRequest,
+  ValidationRunUpdateRequest,
   ValidationRunItem,
   ValidationSettings,
 } from './types/validation';
@@ -23,8 +24,6 @@ export async function listQueryGroups(params?: { q?: string; offset?: number; li
 export async function createQueryGroup(payload: {
   groupName: string;
   description?: string;
-  llmEvalCriteriaDefault?: Record<string, unknown> | string;
-  defaultTargetAssistant?: string;
 }) {
   const { data } = await api.post<QueryGroup>('/query-groups', payload);
   return data;
@@ -32,7 +31,7 @@ export async function createQueryGroup(payload: {
 
 export async function updateQueryGroup(
   groupId: string,
-  payload: Partial<{ groupName: string; description: string; llmEvalCriteriaDefault: Record<string, unknown> | string; defaultTargetAssistant: string }>,
+  payload: Partial<{ groupName: string; description: string }>,
 ) {
   const { data } = await api.patch<QueryGroup>(`/query-groups/${groupId}`, payload);
   return data;
@@ -186,6 +185,16 @@ export async function createValidationRun(payload: ValidationRunCreateRequest) {
 
 export async function getValidationRun(runId: string) {
   const { data } = await api.get<ValidationRun>(`/validation-runs/${runId}`);
+  return data;
+}
+
+export async function updateValidationRun(runId: string, payload: ValidationRunUpdateRequest) {
+  const { data } = await api.patch<ValidationRun>(`/validation-runs/${runId}`, payload);
+  return data;
+}
+
+export async function deleteValidationRun(runId: string) {
+  const { data } = await api.delete<{ ok: boolean }>(`/validation-runs/${runId}`);
   return data;
 }
 

@@ -6,8 +6,6 @@ export type QueryGroup = {
   id: string;
   groupName: string;
   description: string;
-  llmEvalCriteriaDefault: Record<string, unknown> | string;
-  defaultTargetAssistant: string;
   queryCount: number;
   createdAt?: string;
   updatedAt?: string;
@@ -115,6 +113,17 @@ export type ValidationRun = {
   finishedAt?: string | null;
   evalStartedAt?: string | null;
   evalFinishedAt?: string | null;
+};
+
+export type ValidationRunUpdateRequest = {
+  name?: string;
+  agentId?: string;
+  evalModel?: string;
+  repeatInConversation?: number;
+  conversationRoomCount?: number;
+  agentParallelCalls?: number;
+  timeoutMs?: number;
+  context?: Record<string, unknown> | null;
 };
 
 export type ValidationRunItem = {

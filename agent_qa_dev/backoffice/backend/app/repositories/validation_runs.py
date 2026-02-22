@@ -4,7 +4,7 @@ import datetime as dt
 import json
 from typing import Any, Optional
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, delete, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.enums import Environment, EvalStatus, RunStatus
@@ -168,6 +168,55 @@ class ValidationRunRepository:
 
     def get_run(self, run_id: str) -> Optional[ValidationRun]:
         return self.db.get(ValidationRun, run_id)
+
+    def update_run(
+        self,
+        run_id: str,
+        *,
+        name: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        eval_model: Optional[str] = None,
+        repeat_in_conversation: Optional[int] = None,
+        conversation_room_count: Optional[int] = None,
+        agent_parallel_calls: Optional[int] = None,
+        timeout_ms: Optional[int] = None,
+        context: Optional[dict[str, Any]] = None,
+        update_context: bool = False,
+    ) -> Optional[ValidationRun]:
+        run = self.get_run(run_id)
+        if run is None:
+            return None
+
+        if name is not None:
+            run.name = (name or "").strip()
+        if agent_id is not None:
+            run.agent_id = (agent_id or "").strip()
+        if eval_model is not None:
+            run.eval_model = (eval_model or "").strip()
+        if repeat_in_conversation is not None:
+            run.repeat_in_conversation = max(1, int(repeat_in_conversation))
+        if conversation_room_count is not None:
+            run.conversation_room_count = max(1, int(conversation_room_count))
+        if agent_parallel_calls is not None:
+            run.agent_parallel_calls = max(1, int(agent_parallel_calls))
+        if timeout_ms is not None:
+            run.timeout_ms = max(1000, int(timeout_ms))
+
+        if update_context:
+            try:
+                options = json.loads(run.options_json or "{}")
+                if not isinstance(options, dict):
+                    options = {}
+            except Exception:
+                options = {}
+            if context is None:
+                options.pop("context", None)
+            else:
+                options["context"] = context
+            run.options_json = json.dumps(options, ensure_ascii=False)
+
+        self.db.flush()
+        return run
 
     def list_runs(
         self,
@@ -465,8 +514,54 @@ class ValidationRunRepository:
         return cloned
 
     def clear_score_snapshots_for_run(self, run_id: str) -> None:
-        self.db.query(ValidationScoreSnapshot).filter(ValidationScoreSnapshot.run_id == run_id).delete()
+        self.db.execute(
+            delete(ValidationScoreSnapshot).where(ValidationScoreSnapshot.run_id == run_id)
+        )
         self.db.flush()
+
+    def delete_run(self, run_id: str) -> bool:
+        run = self.get_run(run_id)
+        if run is None:
+            return False
+
+        if run.status != RunStatus.PENDING:
+            raise ValueError("Only PENDING runs can be deleted")
+
+        if self.count_done_items(run.id) > 0 or self.count_error_items(run.id) > 0:
+            raise ValueError("Runs with execution history cannot be deleted")
+
+        has_dependent_run = (
+            self.db.query(ValidationRun.id)
+            .filter(ValidationRun.base_run_id == run_id)
+            .first()
+            is not None
+        )
+        if has_dependent_run:
+            raise ValueError("Run cannot be deleted because it is referenced by other runs")
+
+        item_rows = self.db.query(ValidationRunItem.id).filter(ValidationRunItem.run_id == run_id).all()
+        item_ids = [row[0] if not isinstance(row, str) else row for row in item_rows]
+        item_ids = [item_id for item_id in item_ids if item_id is not None]
+
+        self.clear_score_snapshots_for_run(run_id)
+        if item_ids:
+            self.db.execute(
+                delete(ValidationLogicEvaluation).where(
+                    ValidationLogicEvaluation.run_item_id.in_(item_ids)
+                )
+            )
+            self.db.execute(
+                delete(ValidationLlmEvaluation).where(
+                    ValidationLlmEvaluation.run_item_id.in_(item_ids)
+                )
+            )
+            self.db.execute(
+                delete(ValidationRunItem).where(ValidationRunItem.id.in_(item_ids))
+            )
+
+        self.db.execute(delete(ValidationRun).where(ValidationRun.id == run.id))
+        self.db.flush()
+        return True
 
     def upsert_score_snapshot(
         self,

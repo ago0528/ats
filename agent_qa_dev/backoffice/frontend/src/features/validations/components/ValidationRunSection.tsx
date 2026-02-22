@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  App,
   Button,
   Card,
   Descriptions,
@@ -20,6 +21,7 @@ import type {
   ValidationRun,
   ValidationRunItem,
   ValidationTestSet,
+  ValidationRunUpdateRequest,
 } from '../../../api/types/validation';
 import { StandardDataTable } from '../../../components/common/StandardDataTable';
 import { StandardModal } from '../../../components/common/StandardModal';
@@ -39,6 +41,8 @@ import {
   canCompareRun,
   canEvaluateRun,
   canExecuteRun,
+  canDeleteRun,
+  canUpdateRun,
 } from '../utils/runWorkbench';
 import {
   getRunDisplayName,
@@ -142,6 +146,8 @@ export function ValidationRunSection({
   handleExecute,
   handleEvaluate,
   handleCompare,
+  handleUpdateRun,
+  handleDeleteRun,
   compareResult,
   runItemsCurrentPage,
   runItemsPageSize,
@@ -164,9 +170,14 @@ export function ValidationRunSection({
     testSetId: string,
     overrides: RunCreateOverrides,
   ) => Promise<void>;
+  handleUpdateRun: (
+    runId: string,
+    payload: ValidationRunUpdateRequest,
+  ) => Promise<void>;
   handleExecute: () => Promise<void>;
   handleEvaluate: () => Promise<void>;
   handleCompare: () => Promise<void>;
+  handleDeleteRun: (runId: string) => Promise<void>;
   compareResult: Record<string, unknown> | null;
   runItemsCurrentPage: number;
   runItemsPageSize: number;
@@ -177,6 +188,9 @@ export function ValidationRunSection({
   const [activeTab, setActiveTab] = useState<string>(WORKBENCH_TAB_KEY);
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
   const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideModalMode, setOverrideModalMode] = useState<'create' | 'edit'>('create');
+  const [overrideRunId, setOverrideRunId] = useState('');
+  const [overrideContextSnapshot, setOverrideContextSnapshot] = useState('');
   const [form] = Form.useForm<OverrideFormValues>();
 
   const executionStateLabel = useMemo(
@@ -191,11 +205,14 @@ export function ValidationRunSection({
     () => getEvaluationProgressText(runItems),
     [runItems],
   );
+  const { modal } = App.useApp();
 
   const runCreateEnabled = testSets.length > 0;
   const runExecuteEnabled = canExecuteRun(currentRun);
   const runEvaluateEnabled = canEvaluateRun(currentRun);
   const runCompareEnabled = canCompareRun(currentRun, baseRunId);
+  const runUpdateEnabled = canUpdateRun(currentRun);
+  const runDeleteEnabled = canDeleteRun(currentRun);
 
   const runOptions = runs.map((run) => ({
     label: (
@@ -247,6 +264,9 @@ export function ValidationRunSection({
   };
 
   const openCreateRunModal = () => {
+    setOverrideModalMode('create');
+    setOverrideRunId('');
+    setOverrideContextSnapshot('');
     form.resetFields();
     const initialTestSetId = selectedTestSetId || testSets[0]?.id || '';
     form.setFieldsValue({
@@ -257,7 +277,28 @@ export function ValidationRunSection({
     setOverrideModalOpen(true);
   };
 
-  const submitCreateRun = async () => {
+  const openEditRunModal = () => {
+    if (!currentRun) return;
+    setOverrideModalMode('edit');
+    setOverrideRunId(currentRun.id);
+    const contextText = stringifyContext(currentRun.options?.context);
+    setOverrideContextSnapshot(contextText);
+    setOverrideModalOpen(true);
+    form.resetFields();
+    form.setFieldsValue({
+      name: currentRun.name || '',
+      agentId: normalizeAgentModeValue(currentRun.agentId),
+      evalModel: currentRun.evalModel || DEFAULT_EVAL_MODEL_VALUE,
+      repeatInConversation: currentRun.repeatInConversation,
+      conversationRoomCount: currentRun.conversationRoomCount,
+      agentParallelCalls: currentRun.agentParallelCalls,
+      timeoutMs: currentRun.timeoutMs,
+      contextJson: contextText,
+      testSetId: currentRun.testSetId || selectedTestSetId || '',
+    });
+  };
+
+  const submitRunModal = async () => {
     try {
       const values = await form.validateFields();
       const parsedContext = parseContextJson(values.contextJson || '');
@@ -273,21 +314,61 @@ export function ValidationRunSection({
       form.setFields([{ name: 'contextJson', errors: [] }]);
       setOverrideSaving(true);
       const { testSetId, contextJson, ...overrides } = values;
+      const baseOverrides = overrides as RunCreateOverrides & {
+        name?: string;
+      };
+      const trimmedName = baseOverrides.name?.trim();
+      if (!trimmedName) {
+        baseOverrides.name = undefined;
+      }
+      const contextText = (contextJson || '').trim();
+      const updatePayload: ValidationRunUpdateRequest = {
+        ...baseOverrides,
+        ...(trimmedName ? { name: trimmedName } : {}),
+      };
+
+      if (overrideModalMode === 'edit') {
+        if (!overrideRunId) return;
+        const shouldUpdateContext = contextText !== overrideContextSnapshot;
+        const updatePayloadWithContext: ValidationRunUpdateRequest = shouldUpdateContext
+          ? {
+              ...updatePayload,
+              context: parsedContext.parsedContext ?? null,
+            }
+          : updatePayload;
+        await handleUpdateRun(overrideRunId, updatePayloadWithContext);
+        setOverrideModalOpen(false);
+        return;
+      }
+
       if (!testSetId) {
         return;
       }
       if (parsedContext.parsedContext !== undefined) {
-        (overrides as RunCreateOverrides).context = parsedContext.parsedContext;
+        (baseOverrides as RunCreateOverrides).context = parsedContext.parsedContext;
       }
-      const trimmedName = overrides.name?.trim();
       await handleCreateRun(testSetId, {
-        ...overrides,
+        ...baseOverrides,
         ...(trimmedName ? { name: trimmedName } : {}),
       });
       setOverrideModalOpen(false);
     } finally {
       setOverrideSaving(false);
     }
+  };
+
+  const handleDeleteCurrentRun = () => {
+    if (!currentRun) return;
+    modal.confirm({
+      title: 'Run 삭제',
+      content: '실행 기록이 없는 PENDING 상태의 Run만 삭제할 수 있습니다. 삭제하시겠습니까?',
+      okText: '삭제',
+      cancelText: '취소',
+      okType: 'danger',
+      onOk: async () => {
+        await handleDeleteRun(currentRun.id);
+      },
+    });
   };
 
   return (
@@ -320,6 +401,23 @@ export function ValidationRunSection({
                       disabled={!runCreateEnabled}
                     >
                       Run 생성
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void openEditRunModal();
+                      }}
+                      disabled={!runUpdateEnabled}
+                    >
+                      Run 수정
+                    </Button>
+                    <Button
+                      danger
+                      onClick={() => {
+                        void handleDeleteCurrentRun();
+                      }}
+                      disabled={!runDeleteEnabled}
+                    >
+                      Run 삭제
                     </Button>
                     <Button
                       loading={loading}
@@ -475,20 +573,29 @@ export function ValidationRunSection({
 
       <StandardModal
         open={overrideModalOpen}
-        title="Run 생성"
+        title={overrideModalMode === 'edit' ? 'Run 정보 수정' : 'Run 생성'}
         onCancel={() => setOverrideModalOpen(false)}
         onOk={() => {
-          void submitCreateRun();
+          void submitRunModal();
         }}
-        okText="생성"
+        okText={overrideModalMode === 'edit' ? '저장' : '생성'}
         cancelText="취소"
         confirmLoading={overrideSaving}
         width={760}
         destroyOnHidden
       >
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
-          테스트를 실행하기 위한 런(Run)을 생성합니다. <br />
-          항목에는 선택한 테스트 세트의 기본값이 미리 입력되어 있어요.
+          {overrideModalMode === 'edit' ? (
+            <>
+              현재 Run의 실행 구성, 평가 모델 정보를 수정합니다. 실행 대기 상태만 수정할 수
+              있습니다.
+            </>
+          ) : (
+            <>
+              테스트를 실행하기 위한 런(Run)을 생성합니다. <br />
+              항목에는 선택한 테스트 세트의 기본값이 미리 입력되어 있어요.
+            </>
+          )}
         </Typography.Paragraph>
 
         <Form
@@ -496,19 +603,21 @@ export function ValidationRunSection({
           layout="vertical"
           className="standard-modal-field-stack"
         >
-          <Form.Item
-            label="테스트 세트"
-            name="testSetId"
-            rules={[{ required: true, message: '필수 항목입니다.' }]}
-          >
-            <Select
-              options={testSets.map((testSet) => ({
-                label: `${testSet.name} (${testSet.itemCount}개 질의)`,
-                value: testSet.id,
-              }))}
-              onChange={(value) => applySelectedTestSetDefaults(value)}
-            />
-          </Form.Item>
+          {overrideModalMode === 'create' ? (
+            <Form.Item
+              label="테스트 세트"
+              name="testSetId"
+              rules={[{ required: true, message: '필수 항목입니다.' }]}
+            >
+              <Select
+                options={testSets.map((testSet) => ({
+                  label: `${testSet.name} (${testSet.itemCount}개 질의)`,
+                  value: testSet.id,
+                }))}
+                onChange={(value) => applySelectedTestSetDefaults(value)}
+              />
+            </Form.Item>
+          ) : null}
 
           <Form.Item
             label="Run 이름"

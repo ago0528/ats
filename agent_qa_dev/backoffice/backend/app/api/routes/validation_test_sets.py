@@ -478,7 +478,6 @@ def clone_validation_test_set(test_set_id: str, body: ValidationTestSetCloneRequ
 def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSetRunCreateRequest, db: Session = Depends(get_db)):
     test_set_repo = ValidationTestSetRepository(db)
     run_repo = ValidationRunRepository(db)
-    query_group_repo = ValidationQueryGroupRepository(db)
     setting_repo = ValidationSettingsRepository(db)
 
     test_set = test_set_repo.get(test_set_id)
@@ -542,8 +541,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
     if len(ordered_queries) != len(test_set_items):
         raise HTTPException(status_code=409, detail="Test set includes missing queries")
 
-    groups = {row.id: row for row in query_group_repo.list(limit=100000)}
-
     run_name = (body.name or "").strip()
     if not run_name:
         run_name = f"{test_set.name} ({dt.datetime.now().strftime('%Y-%m-%d %H:%M')})"
@@ -553,7 +550,7 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
             config=config,
             key="context",
             default=None,
-        ),
+        )
     )
     run_options = {"source": "validation-test-set", "targetAssistant": agent_id}
     if context:
@@ -578,10 +575,8 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
     for room_index in range(1, int(conversation_room_count) + 1):
         for repeat_index in range(1, int(repeat_in_conversation) + 1):
             for query in ordered_queries:
-                group_default = groups.get(query.group_id).llm_eval_criteria_default_json if query.group_id in groups else ""
-                group_default_target = groups.get(query.group_id).default_target_assistant if query.group_id in groups else ""
-                criteria = query.llm_eval_criteria_json or group_default or ""
-                target_assistant = (query.target_assistant or "").strip() or (group_default_target or "").strip()
+                criteria = query.llm_eval_criteria_json
+                target_assistant = (query.target_assistant or "").strip()
                 items_payload.append(
                     {
                         "ordinal": ordinal,

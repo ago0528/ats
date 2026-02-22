@@ -176,12 +176,12 @@
 ### 테이블 개요
 
 - Table name: `validation_query_groups`
-- Business purpose: 질의를 묶는 상위 카테고리(도메인 그룹)와 그룹 기본 평가 기준을 관리
+- Business purpose: 질의를 묶는 상위 카테고리(도메인 그룹) 관리
 - Primary key: `id`
 - Important relationships:
   - `validation_queries.group_id -> validation_query_groups.id` (1:N)
 - Data lifecycle:
-  - 생성/수정: 운영자가 그룹명, 기본 타겟 어시스턴트, 기본 평가 기준 관리
+- 생성/수정: 운영자가 그룹명, 설명 관리
   - 삭제: 하위 query가 있으면 정합성 확인 후 진행 필요
 
 ### 컬럼 정의
@@ -191,8 +191,6 @@
 | `id`                             | `varchar(36)`  | No       | UUID (app)             | 질의 그룹 ID                         | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | PK                |
 | `group_name`                     | `varchar(140)` | No       | 없음                   | 그룹 표시 이름                       | `아파트 매매`                          | unique + index    |
 | `description`                    | `text`         | No       | `""` (app)             | 그룹 설명                            | `수요자 검색 시나리오 중심`            |                   |
-| `default_target_assistant`       | `text`         | No       | `""` (app)             | 그룹 기본 대상 어시스턴트            | `real_estate_assistant`                | startup 보정 컬럼 |
-| `llm_eval_criteria_default_json` | `text`         | No       | `""` (app)             | 그룹 공통 LLM 평가 기준(JSON 문자열) | `[{"name":"정확성","weight":0.4}]`     | JSON string       |
 | `created_at`                     | `datetime`     | No       | UTC now (app)          | 생성 시각                            | `2026-02-10 16:11:02`                  |                   |
 | `updated_at`                     | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                            | `2026-02-18 10:02:44`                  |                   |
 

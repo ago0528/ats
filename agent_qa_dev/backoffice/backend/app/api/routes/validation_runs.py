@@ -78,6 +78,17 @@ class SaveQueryPayload(BaseModel):
     logicExpectedValue: Optional[str] = None
 
 
+class ValidationRunUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    agentId: Optional[str] = None
+    evalModel: Optional[str] = None
+    repeatInConversation: Optional[int] = None
+    conversationRoomCount: Optional[int] = None
+    agentParallelCalls: Optional[int] = None
+    timeoutMs: Optional[int] = None
+    context: Optional[dict[str, Any] | None] = None
+
+
 def _parse_context_json(raw: Optional[Any]) -> Optional[dict]:
     if raw is None:
         return None
@@ -266,7 +277,6 @@ def list_validation_runs(
 def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depends(get_db)):
     run_repo = ValidationRunRepository(db)
     query_repo = ValidationQueryRepository(db)
-    group_repo = ValidationQueryGroupRepository(db)
     setting_repo = ValidationSettingsRepository(db)
 
     setting = setting_repo.get_or_create(body.environment)
@@ -315,15 +325,11 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
         selected_queries = query_repo.list_by_ids(body.queryIds)
         if len(selected_queries) != len(body.queryIds):
             raise HTTPException(status_code=404, detail="Some queries were not found")
-        groups = {row.id: row for row in group_repo.list(limit=100000)}
-
         for room_index in range(1, int(conversation_room_count) + 1):
             for repeat_index in range(1, int(repeat_in_conversation) + 1):
                 for query in selected_queries:
-                    group_default = groups.get(query.group_id).llm_eval_criteria_default_json if query.group_id in groups else ""
-                    group_default_target = groups.get(query.group_id).default_target_assistant if query.group_id in groups else ""
-                    criteria = query.llm_eval_criteria_json or group_default or ""
-                    target_assistant = (query.target_assistant or "").strip() or (group_default_target or "").strip()
+                    criteria = query.llm_eval_criteria_json
+                    target_assistant = (query.target_assistant or "").strip()
                     items_payload.append(
                         {
                             "ordinal": ordinal,
@@ -338,7 +344,7 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                             "target_assistant_snapshot": target_assistant,
                             "conversation_room_index": room_index,
                             "repeat_index": repeat_index,
-                        }
+                        },
                     )
                     ordinal += 1
     else:
@@ -387,6 +393,47 @@ def get_validation_run(run_id: str, db: Session = Depends(get_db)):
     ):
         db.commit()
     return repo.build_run_payload(run)
+
+
+@router.patch("/validation-runs/{run_id}")
+def update_validation_run(run_id: str, body: ValidationRunUpdateRequest, db: Session = Depends(get_db)):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status != RunStatus.PENDING:
+        raise HTTPException(status_code=409, detail="Only PENDING runs can be updated")
+
+    payload = body.model_dump(exclude_unset=True)
+    updated = repo.update_run(
+        run_id,
+        name=payload.get("name"),
+        agent_id=payload.get("agentId"),
+        eval_model=payload.get("evalModel"),
+        repeat_in_conversation=payload.get("repeatInConversation"),
+        conversation_room_count=payload.get("conversationRoomCount"),
+        agent_parallel_calls=payload.get("agentParallelCalls"),
+        timeout_ms=payload.get("timeoutMs"),
+        context=payload.get("context"),
+        update_context="context" in payload,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    db.commit()
+    return repo.build_run_payload(updated)
+
+
+@router.delete("/validation-runs/{run_id}")
+def delete_validation_run(run_id: str, db: Session = Depends(get_db)):
+    repo = ValidationRunRepository(db)
+    try:
+        deleted = repo.delete_run(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Run not found")
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/validation-runs/{run_id}/items")
@@ -463,7 +510,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
     options = json.loads(run.options_json or "{}")
     cfg = get_env_config(run.environment)
     default_context = _parse_context_json(options.get("context") or options.get("contextJson"))
-    default_target_assistant = options.get("targetAssistant")
+    run_default_target_assistant = options.get("targetAssistant")
 
     job_id = str(uuid.uuid4())
 
@@ -477,7 +524,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
             body.cms,
             body.mrs,
             default_context,
-            default_target_assistant,
+            run_default_target_assistant,
             run.agent_parallel_calls,
             run.timeout_ms,
         )

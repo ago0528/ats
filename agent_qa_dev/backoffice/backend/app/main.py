@@ -115,7 +115,6 @@ def startup() -> None:
     logger.info("Resolved BACKOFFICE_DB_PATH=%s", get_db_path())
     _log_openai_key_status()
     Base.metadata.create_all(_ENGINE)
-    _ensure_sqlite_column("validation_query_groups", "default_target_assistant", "default_target_assistant TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_queries", "context_json", "context_json TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_queries", "target_assistant", "target_assistant TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_run_items", "context_json_snapshot", "context_json_snapshot TEXT NOT NULL DEFAULT ''")

@@ -7,8 +7,10 @@ import {
   createRunFromValidationTestSet,
   evaluateValidationRun,
   executeValidationRun,
+  deleteValidationRun,
   getValidationTestSetDashboard,
   getValidationRun,
+  updateValidationRun,
   listValidationRunItems,
   listValidationRuns,
   listValidationTestSets,
@@ -16,6 +18,7 @@ import {
 import type {
   ValidationRun,
   ValidationRunItem,
+  ValidationRunUpdateRequest,
   ValidationTestSet,
 } from '../../api/types/validation';
 import type { Environment } from '../../app/EnvironmentScope';
@@ -346,6 +349,58 @@ export function AgentValidationManagementPage({
     }
   };
 
+  const handleUpdateRun = async (runId: string, payload: ValidationRunUpdateRequest) => {
+    try {
+      setLoading(true);
+      await updateValidationRun(runId, payload);
+      message.success('Run 정보를 수정했습니다.');
+      if (section === 'run') {
+        await loadRuns({ testSetId: selectedTestSetId });
+      } else {
+        await loadRuns({ forceAll: true });
+      }
+      await loadRunDetail(runId);
+    } catch (error) {
+      console.error(error);
+      message.error('Run 정보 수정에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRun = async (runId: string) => {
+    try {
+      setLoading(true);
+      await deleteValidationRun(runId);
+      message.success('Run을 삭제했습니다.');
+
+      if (section === 'run') {
+        const refreshedRuns = await loadRuns({ testSetId: selectedTestSetId || undefined });
+        setCompareResult((prev) => (selectedRunId === runId ? null : prev));
+        if (selectedRunId === runId) {
+          setBaseRunId('');
+          if (refreshedRuns.length > 0) {
+            setSelectedRunId(refreshedRuns[0].id);
+            await loadRunDetail(refreshedRuns[0].id);
+          } else {
+            setCurrentRun(null);
+            setRunItems([]);
+            setSelectedRunId('');
+            setRunItemsCurrentPage(1);
+          }
+        }
+      } else {
+        await loadRuns({ forceAll: true });
+        onBackToHistory?.();
+      }
+    } catch (error) {
+      console.error(error);
+      message.error('Run 삭제에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCompare = async () => {
     if (!currentRun || !baseRunId) {
       message.warning('비교 기준 run을 선택해 주세요.');
@@ -503,6 +558,8 @@ export function AgentValidationManagementPage({
           handleExecute={handleExecute}
           handleEvaluate={handleEvaluate}
           handleCompare={handleCompare}
+          handleUpdateRun={handleUpdateRun}
+          handleDeleteRun={handleDeleteRun}
           compareResult={compareResult}
           runItemsCurrentPage={runItemsCurrentPage}
           runItemsPageSize={runItemsPageSize}
@@ -620,8 +677,10 @@ export function AgentValidationManagementPage({
           setRunItemsPageSize={setRunItemsPageSize}
           onBackToHistory={onBackToHistory}
           onOpenInRunWorkspace={onOpenRunWorkspace}
+          onDeleteRun={handleDeleteRun}
           testSetNameById={testSetNameById}
           historyDetailItemColumns={historyDetailItemColumns}
+          onUpdateRun={handleUpdateRun}
         />
       ) : null}
 

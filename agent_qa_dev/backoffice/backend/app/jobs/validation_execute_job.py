@@ -36,7 +36,7 @@ async def execute_validation_run(
     cms: str,
     mrs: str,
     default_context: Optional[dict],
-    default_target_assistant: Optional[str],
+    run_default_target_assistant: Optional[str],
     max_parallel: int,
     timeout_ms: int,
 ):
@@ -80,7 +80,7 @@ async def execute_validation_run(
                     error = ""
                     result = {}
                     item_context = _parse_context_json(item.context_json_snapshot) or default_context
-                    default_target = (default_target_assistant or "").strip()
+                    default_target = (run_default_target_assistant or "").strip()
                     item_target_assistant = default_target or (item.target_assistant_snapshot or "").strip()
                     try:
                         async with sem:

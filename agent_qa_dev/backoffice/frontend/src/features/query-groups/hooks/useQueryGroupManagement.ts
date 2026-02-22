@@ -8,13 +8,10 @@ import type { QueryGroup } from '../../../api/types/validation';
 import type { Environment } from '../../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../../app/types';
 import { getRequestErrorMessage } from '../../../shared/utils/error';
-import { parseJsonOrOriginal, stringifyPretty } from '../../../shared/utils/json';
 
 type QueryGroupFormValues = {
   groupName: string;
   description: string;
-  defaultTargetAssistant: string;
-  llmEvalCriteriaDefault: string;
 };
 
 export function useQueryGroupManagement({
@@ -55,18 +52,13 @@ export function useQueryGroupManagement({
 
   const openCreate = () => {
     setEditing(null);
-    form.setFieldsValue({ groupName: '', description: '', defaultTargetAssistant: '', llmEvalCriteriaDefault: '' });
+    form.setFieldsValue({ groupName: '', description: '' });
     setModalOpen(true);
   };
 
   const openEdit = (group: QueryGroup) => {
     setEditing(group);
-    form.setFieldsValue({
-      groupName: group.groupName,
-      description: group.description,
-      defaultTargetAssistant: group.defaultTargetAssistant || '',
-      llmEvalCriteriaDefault: stringifyPretty(group.llmEvalCriteriaDefault),
-    });
+    form.setFieldsValue({ groupName: group.groupName, description: group.description });
     setModalOpen(true);
   };
 
@@ -74,22 +66,17 @@ export function useQueryGroupManagement({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const criteria = parseJsonOrOriginal<Record<string, unknown>>(values.llmEvalCriteriaDefault);
 
       if (editing) {
         await updateQueryGroup(editing.id, {
           groupName: values.groupName,
           description: values.description,
-          defaultTargetAssistant: values.defaultTargetAssistant,
-          llmEvalCriteriaDefault: criteria,
         });
         message.success('그룹을 수정했습니다.');
       } else {
         await createQueryGroup({
           groupName: values.groupName,
           description: values.description,
-          defaultTargetAssistant: values.defaultTargetAssistant,
-          llmEvalCriteriaDefault: criteria,
         });
         message.success('그룹을 생성했습니다.');
       }

@@ -68,10 +68,8 @@ validation_queries,12,updated_at,DATETIME,No,,No
 validation_query_groups,0,id,VARCHAR(36),No,,Yes
 validation_query_groups,1,group_name,VARCHAR(140),No,,No
 validation_query_groups,2,description,TEXT,No,,No
-validation_query_groups,3,default_target_assistant,TEXT,No,,No
-validation_query_groups,4,llm_eval_criteria_default_json,TEXT,No,,No
-validation_query_groups,5,created_at,DATETIME,No,,No
-validation_query_groups,6,updated_at,DATETIME,No,,No
+validation_query_groups,3,created_at,DATETIME,No,,No
+validation_query_groups,4,updated_at,DATETIME,No,,No
 validation_run_items,0,id,VARCHAR(36),No,,Yes
 validation_run_items,1,run_id,VARCHAR(36),No,,No
 validation_run_items,2,query_id,VARCHAR(36),Yes,,No

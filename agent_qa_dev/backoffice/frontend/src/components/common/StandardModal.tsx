@@ -6,7 +6,7 @@ type StandardModalStyles = NonNullable<ModalProps['styles']>;
 
 const DEFAULT_MODAL_STYLES = {
   content: {
-    height: '80vh',
+    height: 'fit-content',
     maxHeight: '80vh',
     display: 'flex',
     flexDirection: 'column' as const,
@@ -39,6 +39,8 @@ export function StandardModal({
   styles,
   bodyPadding,
   contentHeight,
+  okText = '저장',
+  cancelText = '취소',
   ...props
 }: StandardModalProps) {
   const mergedStyles: StandardModalStyles = {
@@ -47,7 +49,7 @@ export function StandardModal({
     content: {
       ...DEFAULT_MODAL_STYLES.content,
       ...(styles?.content || {}),
-      ...(contentHeight ? { height: contentHeight, maxHeight: contentHeight } : {}),
+      ...(contentHeight ? { maxHeight: contentHeight } : {}),
     },
     body: {
       ...DEFAULT_MODAL_STYLES.body,
@@ -56,7 +58,15 @@ export function StandardModal({
     },
   };
 
-  return <Modal {...props} styles={mergedStyles} destroyOnHidden={props.destroyOnHidden ?? true} />;
+  return (
+    <Modal
+      {...props}
+      okText={okText}
+      cancelText={cancelText}
+      styles={mergedStyles}
+      destroyOnHidden={props.destroyOnHidden ?? true}
+    />
+  );
 }
 
 export function StandardModalMetaBlock({

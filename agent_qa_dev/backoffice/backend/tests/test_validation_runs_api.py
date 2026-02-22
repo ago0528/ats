@@ -13,7 +13,7 @@ def test_validation_runs_flow(monkeypatch):
 
     group_resp = client.post(
         "/api/v1/query-groups",
-        json={"groupName": "검증그룹", "description": "desc", "defaultTargetAssistant": "ORCHESTRATOR_WORKER_V3"},
+        json={"groupName": "검증그룹", "description": "desc"},
     )
     group_id = group_resp.json()["id"]
 
@@ -45,7 +45,7 @@ def test_validation_runs_flow(monkeypatch):
 
     items_resp = client.get(f"/api/v1/validation-runs/{run_id}/items")
     assert items_resp.status_code == 200
-    assert items_resp.json()["items"][0]["targetAssistant"] == "ORCHESTRATOR_WORKER_V3"
+    assert items_resp.json()["items"][0]["targetAssistant"] == "ORCHESTRATOR_ASSISTANT"
     item_id = items_resp.json()["items"][0]["id"]
 
     def fake_runner_run(job_id, job_coro_factory):
@@ -112,7 +112,7 @@ def test_validation_run_evaluate_gate(monkeypatch):
 
     group_resp = client.post(
         "/api/v1/query-groups",
-        json={"groupName": "검증그룹-게이트", "description": "desc", "defaultTargetAssistant": "ORCHESTRATOR_WORKER_V3"},
+        json={"groupName": "검증그룹-게이트", "description": "desc"},
     )
     group_id = group_resp.json()["id"]
 

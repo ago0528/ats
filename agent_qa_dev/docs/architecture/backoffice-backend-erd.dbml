@@ -61,8 +61,6 @@ Table validation_query_groups {
   id varchar(36) [pk, not null]
   group_name varchar(140) [not null]
   description text [not null]
-  default_target_assistant text [not null]
-  llm_eval_criteria_default_json text [not null, note: "Stored as JSON string"]
   created_at datetime [not null]
   updated_at datetime [not null]
 

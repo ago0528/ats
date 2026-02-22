@@ -51,7 +51,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 검증 이력 상세 | `/validation/history/:runId` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세 조회 및 실행 워크벤치 연결 |
 | 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 테스트 세트 기준 성과/실패 패턴 조회 |
 | 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
-| 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD, 기본 대상 어시스턴트/기준 관리 |
+| 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD(질의 묶기) |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |
 | Validation Settings | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값 관리 |
 | Prompt | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
@@ -61,7 +61,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 
 ### 3.1 주요 객체
 
-- `QueryGroup`: 질의 분류 + 기본 대상 어시스턴트/기본 평가 기준
+- `QueryGroup`: 질의 분류
 - `ValidationQuery`: 검증 대상 질의 단위
 - `ValidationTestSet`: 실행 설계 단위(질의 묶음 + 기본 파라미터)
 - `ValidationTestSetItem`: 테스트 세트 내 질의 순서

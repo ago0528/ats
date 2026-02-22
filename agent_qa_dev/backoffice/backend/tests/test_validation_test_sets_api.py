@@ -19,7 +19,7 @@ def _create_group_and_query(
 ) -> tuple[str, str]:
     group_resp = client.post(
         "/api/v1/query-groups",
-        json={"groupName": group_name, "description": "desc", "defaultTargetAssistant": "ORCHESTRATOR_WORKER_V3"},
+        json={"groupName": group_name, "description": "desc"},
     )
     assert group_resp.status_code == 200
     group_id = group_resp.json()["id"]

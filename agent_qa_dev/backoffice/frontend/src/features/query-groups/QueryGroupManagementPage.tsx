@@ -10,7 +10,6 @@ import { useQueryGroupManagement } from './hooks/useQueryGroupManagement';
 
 const QUERY_GROUP_INITIAL_COLUMN_WIDTHS = {
   groupName: 260,
-  defaultTargetAssistant: 220,
   description: 420,
   queryCount: 100,
   actions: 180,
@@ -37,14 +36,6 @@ export function QueryGroupManagementPage({ environment, tokens }: { environment:
   const columns = useMemo(
     () => [
       { key: 'groupName', title: '그룹명', dataIndex: 'groupName', width: QUERY_GROUP_INITIAL_COLUMN_WIDTHS.groupName, ellipsis: true },
-      {
-        key: 'defaultTargetAssistant',
-        title: '기본 대상 어시스턴트',
-        dataIndex: 'defaultTargetAssistant',
-        width: QUERY_GROUP_INITIAL_COLUMN_WIDTHS.defaultTargetAssistant,
-        ellipsis: true,
-        render: (value?: string) => value || '-',
-      },
       { key: 'description', title: '설명', dataIndex: 'description', width: QUERY_GROUP_INITIAL_COLUMN_WIDTHS.description, ellipsis: true },
       { key: 'queryCount', title: '질의 수', dataIndex: 'queryCount', width: QUERY_GROUP_INITIAL_COLUMN_WIDTHS.queryCount, ellipsis: true },
       {

@@ -13,6 +13,7 @@ export function QueryPickerModal({
   handleImportQueries,
   queryPickerSearchInput,
   setQueryPickerSearchInput,
+  queryPickerSearchKeyword,
   setQueryPickerSearchKeyword,
   setQueryPickerPage,
   queryPickerCategory,
@@ -35,6 +36,7 @@ export function QueryPickerModal({
   handleImportQueries: () => void;
   queryPickerSearchInput: string;
   setQueryPickerSearchInput: (value: string) => void;
+  queryPickerSearchKeyword?: string;
   setQueryPickerSearchKeyword: (value: string) => void;
   setQueryPickerPage: (page: number) => void;
   queryPickerCategory?: string;

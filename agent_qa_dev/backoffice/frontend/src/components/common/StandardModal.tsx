@@ -6,7 +6,7 @@ type StandardModalStyles = NonNullable<ModalProps['styles']>;
 
 const DEFAULT_MODAL_STYLES = {
   content: {
-    height: '100%',
+    height: '80vh',
     maxHeight: '80vh',
     display: 'flex',
     flexDirection: 'column' as const,
@@ -14,7 +14,8 @@ const DEFAULT_MODAL_STYLES = {
   },
   body: {
     padding: 0,
-    overflow: 'hidden',
+    overflowX: 'hidden',
+    overflowY: 'auto',
     display: 'flex',
     flexDirection: 'column' as const,
     flex: 1,

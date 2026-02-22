@@ -23,7 +23,13 @@ import type {
 } from '../../../api/types/validation';
 import { StandardDataTable } from '../../../components/common/StandardDataTable';
 import { StandardModal } from '../../../components/common/StandardModal';
-import { RUN_ITEM_INITIAL_COLUMN_WIDTHS } from '../constants';
+import {
+  AGENT_MODE_OPTIONS,
+  DEFAULT_AGENT_MODE_VALUE,
+  DEFAULT_EVAL_MODEL_VALUE,
+  EVAL_MODEL_OPTIONS,
+  RUN_ITEM_INITIAL_COLUMN_WIDTHS,
+} from '../constants';
 import {
   getEvaluationProgressText,
   getEvaluationStateLabel,
@@ -34,10 +40,14 @@ import {
   canEvaluateRun,
   canExecuteRun,
 } from '../utils/runWorkbench';
-import { getRunDisplayName, getRunExecutionConfigText } from '../utils/runDisplay';
+import {
+  getRunDisplayName,
+  getRunExecutionConfigText,
+} from '../utils/runDisplay';
 
 export type RunCreateOverrides = {
   name?: string;
+  context?: Record<string, unknown>;
   agentId?: string;
   evalModel?: string;
   repeatInConversation?: number;
@@ -46,8 +56,64 @@ export type RunCreateOverrides = {
   timeoutMs?: number;
 };
 
+const normalizeAgentModeValue = (value?: string) => {
+  const trimmed = (value || '').trim();
+  if (!trimmed) {
+    return DEFAULT_AGENT_MODE_VALUE;
+  }
+  if (trimmed === 'ORCHESTRATOR_WORKER_V3') {
+    return DEFAULT_AGENT_MODE_VALUE;
+  }
+  return trimmed;
+};
+
+const CONTEXT_SAMPLE =
+  '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
+
+const parseContextJson = (raw?: string) => {
+  const text = (raw || '').trim();
+  if (!text) {
+    return { parsedContext: undefined as Record<string, unknown> | undefined };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      return {
+        parsedContext: undefined,
+        parseError: 'context는 JSON 객체 형태여야 합니다.',
+      };
+    }
+    return { parsedContext: parsed as Record<string, unknown> };
+  } catch (error) {
+    return {
+      parsedContext: undefined,
+      parseError:
+        `context JSON 형식이 올바르지 않습니다. ${error instanceof Error ? error.message : ''}`.trim(),
+    };
+  }
+};
+
+const stringifyContext = (value?: unknown) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+};
+
 type OverrideFormValues = RunCreateOverrides & {
   testSetId?: string;
+  contextJson?: string;
 };
 
 const WORKBENCH_TAB_KEY = 'workbench';
@@ -170,8 +236,9 @@ export function ValidationRunSection({
       return parsed;
     };
     form.setFieldsValue({
-      agentId: config?.agentId || '',
-      evalModel: config?.evalModel || '',
+      agentId: normalizeAgentModeValue(config?.agentId),
+      contextJson: stringifyContext(config?.context),
+      evalModel: config?.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: toNumber(config?.repeatInConversation),
       conversationRoomCount: toNumber(config?.conversationRoomCount),
       agentParallelCalls: toNumber(config?.agentParallelCalls),
@@ -193,10 +260,24 @@ export function ValidationRunSection({
   const submitCreateRun = async () => {
     try {
       const values = await form.validateFields();
+      const parsedContext = parseContextJson(values.contextJson || '');
+      if (parsedContext.parseError) {
+        form.setFields([
+          {
+            name: 'contextJson',
+            errors: [parsedContext.parseError],
+          },
+        ]);
+        return;
+      }
+      form.setFields([{ name: 'contextJson', errors: [] }]);
       setOverrideSaving(true);
-      const { testSetId, ...overrides } = values;
+      const { testSetId, contextJson, ...overrides } = values;
       if (!testSetId) {
         return;
+      }
+      if (parsedContext.parsedContext !== undefined) {
+        (overrides as RunCreateOverrides).context = parsedContext.parsedContext;
       }
       const trimmedName = overrides.name?.trim();
       await handleCreateRun(testSetId, {
@@ -402,6 +483,7 @@ export function ValidationRunSection({
         okText="생성"
         cancelText="취소"
         confirmLoading={overrideSaving}
+        width={760}
         destroyOnHidden
       >
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
@@ -409,7 +491,11 @@ export function ValidationRunSection({
           항목에는 선택한 테스트 세트의 기본값이 미리 입력되어 있어요.
         </Typography.Paragraph>
 
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          className="standard-modal-field-stack"
+        >
           <Form.Item
             label="테스트 세트"
             name="testSetId"
@@ -437,15 +523,16 @@ export function ValidationRunSection({
             name="agentId"
             rules={[{ required: true, message: '필수 항목입니다.' }]}
           >
-            <Input />
+            <Select options={AGENT_MODE_OPTIONS} />
           </Form.Item>
           <Form.Item
             label="평가 모델"
             name="evalModel"
             rules={[{ required: true, message: '필수 항목입니다.' }]}
           >
-            <Input />
+            <Select options={EVAL_MODEL_OPTIONS} />
           </Form.Item>
+
           <Space style={{ width: '100%' }} wrap>
             <Form.Item
               label="반복 수"
@@ -476,6 +563,13 @@ export function ValidationRunSection({
               <InputNumber min={1000} />
             </Form.Item>
           </Space>
+          <Form.Item
+            label="Context"
+            name="contextJson"
+            extra="API 호출 context에 전달할 JSON"
+          >
+            <Input.TextArea rows={5} placeholder={CONTEXT_SAMPLE} />
+          </Form.Item>
         </Form>
       </StandardModal>
     </Space>

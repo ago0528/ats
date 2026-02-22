@@ -171,6 +171,7 @@ export type ValidationRunCreateRequest = {
   environment: Environment;
   name?: string;
   testSetId?: string;
+  context?: Record<string, unknown>;
   agentId?: string;
   testModel?: string;
   evalModel?: string;
@@ -193,6 +194,7 @@ export type ValidationTestSetConfig = {
   agentId?: string;
   testModel?: string;
   evalModel?: string;
+  context?: Record<string, unknown>;
   repeatInConversation?: number;
   conversationRoomCount?: number;
   agentParallelCalls?: number;

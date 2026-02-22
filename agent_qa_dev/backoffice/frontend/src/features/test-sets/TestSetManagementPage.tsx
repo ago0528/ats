@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   App,
   Button,
@@ -6,7 +6,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -19,31 +18,98 @@ import {
   createValidationTestSet,
   deleteValidationTestSet,
   getValidationTestSet,
+  listQueryGroups,
   listQueries,
   listValidationTestSets,
   updateValidationTestSet,
 } from '../../api/validation';
 import type {
+  QueryGroup,
   ValidationQuery,
   ValidationTestSet,
 } from '../../api/types/validation';
 import type { Environment } from '../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../app/types';
+import {
+  AGENT_MODE_OPTIONS,
+  DEFAULT_AGENT_MODE_VALUE,
+  DEFAULT_EVAL_MODEL_VALUE,
+  EVAL_MODEL_OPTIONS,
+} from '../validations/constants';
+import { QueryPickerModal } from '../validations/components/QueryPickerModal';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
+import { StandardModal } from '../../components/common/StandardModal';
 import { formatDateTime } from '../../shared/utils/dateTime';
 
 type TestSetFormValues = {
   name: string;
   description: string;
-  queryIds: string[];
   agentId?: string;
-  testModel?: string;
+  contextJson?: string;
   evalModel?: string;
   repeatInConversation?: number;
   conversationRoomCount?: number;
   agentParallelCalls?: number;
   timeoutMs?: number;
 };
+
+const QUERY_PICKER_PAGE_SIZE_DEFAULT = 50;
+const CONTEXT_SAMPLE =
+  '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
+
+const normalizeAgentModeValue = (value?: string) => {
+  const trimmed = (value || '').trim();
+  if (!trimmed || trimmed === 'ORCHESTRATOR_WORKER_V3') {
+    return DEFAULT_AGENT_MODE_VALUE;
+  }
+  return trimmed;
+};
+
+const parseContextJson = (raw?: string) => {
+  const text = (raw || '').trim();
+  if (!text) {
+    return { parsedContext: undefined as Record<string, unknown> | undefined };
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      return {
+        parsedContext: undefined,
+        parseError: 'context는 JSON 객체 형태여야 합니다.',
+      };
+    }
+    return { parsedContext: parsed as Record<string, unknown> };
+  } catch (error) {
+    return {
+      parsedContext: undefined,
+      parseError:
+        `context JSON 형식이 올바르지 않습니다. ${error instanceof Error ? error.message : ''}`.trim(),
+    };
+  }
+};
+
+const stringifyContext = (value?: unknown) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+};
+
+const normalizeQueryIds = (queryIds: string[]) =>
+  Array.from(
+    new Set(queryIds.map((queryId) => String(queryId).trim()).filter(Boolean)),
+  );
 
 const TEST_SET_COLUMN_WIDTHS = {
   name: 260,
@@ -72,8 +138,28 @@ export function TestSetManagementPage({
   const [loading, setLoading] = useState(false);
   const [selectedTestSetId, setSelectedTestSetId] = useState<string>('');
 
-  const [queries, setQueries] = useState<ValidationQuery[]>([]);
-  const [queriesLoading, setQueriesLoading] = useState(false);
+  const [queryPickerOpen, setQueryPickerOpen] = useState(false);
+  const [queryPickerLoading, setQueryPickerLoading] = useState(false);
+  const [queryPickerSearchInput, setQueryPickerSearchInput] = useState('');
+  const [queryPickerSearchKeyword, setQueryPickerSearchKeyword] = useState('');
+  const [queryPickerCategory, setQueryPickerCategory] = useState<
+    string | undefined
+  >(undefined);
+  const [queryPickerGroupId, setQueryPickerGroupId] = useState<
+    string | undefined
+  >(undefined);
+  const [queryPickerSelectedIds, setQueryPickerSelectedIds] = useState<
+    string[]
+  >([]);
+  const [queryPickerItems, setQueryPickerItems] = useState<ValidationQuery[]>(
+    [],
+  );
+  const [queryPickerPage, setQueryPickerPage] = useState(1);
+  const [queryPickerPageSize, setQueryPickerPageSize] = useState(
+    QUERY_PICKER_PAGE_SIZE_DEFAULT,
+  );
+  const [queryPickerTotal, setQueryPickerTotal] = useState(0);
+  const [queryGroups, setQueryGroups] = useState<QueryGroup[]>([]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<ValidationTestSet | null>(null);
@@ -102,16 +188,42 @@ export function TestSetManagementPage({
     }
   };
 
-  const loadQueries = async () => {
-    setQueriesLoading(true);
+  const setQuerySelection = (queryIds: string[]) => {
+    const normalized = normalizeQueryIds(queryIds);
+    setQueryPickerSelectedIds(normalized);
+    return normalized;
+  };
+
+  const loadQueryGroups = async () => {
     try {
-      const data = await listQueries({ limit: 2000 });
-      setQueries(data.items);
+      const data = await listQueryGroups();
+      setQueryGroups(data.items);
     } catch (error) {
       console.error(error);
-      message.error('질의 목록 조회에 실패했습니다.');
+      message.error('질의 그룹 조회에 실패했습니다.');
+    }
+  };
+
+  const loadQueryPickerItems = async () => {
+    setQueryPickerLoading(true);
+    try {
+      const offset = Math.max(0, (queryPickerPage - 1) * queryPickerPageSize);
+      const data = await listQueries({
+        q: queryPickerSearchKeyword || undefined,
+        category: queryPickerCategory || undefined,
+        groupId: queryPickerGroupId || undefined,
+        limit: queryPickerPageSize,
+        offset,
+      });
+      setQueryPickerItems(data.items);
+      setQueryPickerTotal(data.total);
+    } catch (error) {
+      console.error(error);
+      message.error('질의 조회에 실패했습니다.');
+      setQueryPickerItems([]);
+      setQueryPickerTotal(0);
     } finally {
-      setQueriesLoading(false);
+      setQueryPickerLoading(false);
     }
   };
 
@@ -120,8 +232,20 @@ export function TestSetManagementPage({
   }, [search, environment, tokens.bearer, tokens.cms, tokens.mrs]);
 
   useEffect(() => {
-    void loadQueries();
-  }, [environment]);
+    void loadQueryGroups();
+  }, []);
+
+  useEffect(() => {
+    if (!queryPickerOpen) return;
+    void loadQueryPickerItems();
+  }, [
+    queryPickerOpen,
+    queryPickerPage,
+    queryPickerPageSize,
+    queryPickerSearchKeyword,
+    queryPickerCategory,
+    queryPickerGroupId,
+  ]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -140,39 +264,39 @@ export function TestSetManagementPage({
       return;
     setHandledCreateParam(signature);
     setEditing(null);
+    setQuerySelection(queryIds);
     form.setFieldsValue({
       name: '',
       description: '',
-      queryIds,
-      agentId: '',
-      testModel: '',
-      evalModel: '',
+      agentId: DEFAULT_AGENT_MODE_VALUE,
+      contextJson: '',
+      evalModel: DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: 1,
       conversationRoomCount: 1,
       agentParallelCalls: 3,
       timeoutMs: 120000,
     });
     setModalOpen(true);
-  }, [form, handledCreateParam, location.search, queries.length]);
-
-  const queryOptions = useMemo(
-    () =>
-      queries.map((query) => ({
-        label: `${query.queryText} (${query.id})`,
-        value: query.id,
-      })),
-    [queries],
-  );
+  }, [form, handledCreateParam, location.search]);
 
   const openCreate = () => {
     setEditing(null);
+    setQuerySelection([]);
+    setQueryPickerOpen(false);
+    setQueryPickerSearchInput('');
+    setQueryPickerSearchKeyword('');
+    setQueryPickerCategory(undefined);
+    setQueryPickerGroupId(undefined);
+    setQueryPickerPage(1);
+    setQueryPickerPageSize(QUERY_PICKER_PAGE_SIZE_DEFAULT);
+    setQueryPickerItems([]);
+    setQueryPickerTotal(0);
     form.setFieldsValue({
       name: '',
       description: '',
-      queryIds: [],
-      agentId: '',
-      testModel: '',
-      evalModel: '',
+      agentId: DEFAULT_AGENT_MODE_VALUE,
+      contextJson: '',
+      evalModel: DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: 1,
       conversationRoomCount: 1,
       agentParallelCalls: 3,
@@ -185,13 +309,20 @@ export function TestSetManagementPage({
     try {
       const detail = await getValidationTestSet(testSet.id);
       setEditing(detail);
+      setQuerySelection(detail.queryIds || []);
+      setQueryPickerOpen(false);
+      setQueryPickerSearchInput('');
+      setQueryPickerSearchKeyword('');
+      setQueryPickerCategory(undefined);
+      setQueryPickerGroupId(undefined);
+      setQueryPickerPage(1);
+      setQueryPickerPageSize(QUERY_PICKER_PAGE_SIZE_DEFAULT);
       form.setFieldsValue({
         name: detail.name,
         description: detail.description,
-        queryIds: detail.queryIds || [],
-        agentId: detail.config.agentId || '',
-        testModel: detail.config.testModel || '',
-        evalModel: detail.config.evalModel || '',
+        agentId: normalizeAgentModeValue(detail.config.agentId),
+        contextJson: stringifyContext(detail.config.context),
+        evalModel: detail.config.evalModel || DEFAULT_EVAL_MODEL_VALUE,
         repeatInConversation: detail.config.repeatInConversation ?? 1,
         conversationRoomCount: detail.config.conversationRoomCount ?? 1,
         agentParallelCalls: detail.config.agentParallelCalls ?? 3,
@@ -207,10 +338,20 @@ export function TestSetManagementPage({
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      const queryIds = queryPickerSelectedIds;
+      if (queryIds.length === 0) {
+        message.error('최소 1개 질의를 선택해 주세요.');
+        return;
+      }
+      const parsedContext = parseContextJson(values.contextJson || '');
+      if (parsedContext.parseError) {
+        message.error(parsedContext.parseError);
+        return;
+      }
       setSaving(true);
       const config = {
-        agentId: values.agentId || undefined,
-        testModel: values.testModel || undefined,
+        agentId: normalizeAgentModeValue(values.agentId),
+        context: parsedContext.parsedContext,
         evalModel: values.evalModel || undefined,
         repeatInConversation: values.repeatInConversation,
         conversationRoomCount: values.conversationRoomCount,
@@ -221,7 +362,7 @@ export function TestSetManagementPage({
         await updateValidationTestSet(editing.id, {
           name: values.name,
           description: values.description,
-          queryIds: values.queryIds,
+          queryIds,
           config,
         });
         message.success('테스트 세트를 수정했습니다.');
@@ -229,7 +370,7 @@ export function TestSetManagementPage({
         await createValidationTestSet({
           name: values.name,
           description: values.description,
-          queryIds: values.queryIds,
+          queryIds,
           config,
         });
         message.success('테스트 세트를 생성했습니다.');
@@ -372,19 +513,24 @@ export function TestSetManagementPage({
         />
       </Space>
 
-      <Modal
+      <StandardModal
         open={modalOpen}
         title={editing ? '테스트 세트 수정' : '테스트 세트 생성'}
+        cancelText="취소"
         onCancel={() => setModalOpen(false)}
         onOk={() => {
           void handleSave();
         }}
         okText={editing ? '수정' : '생성'}
         confirmLoading={saving}
-        width={860}
+        width={760}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical">
+        <Form
+          form={form}
+          layout="vertical"
+          className="standard-modal-field-stack"
+        >
           <Form.Item
             label="이름"
             name="name"
@@ -397,47 +543,63 @@ export function TestSetManagementPage({
           </Form.Item>
           <Form.Item
             label="질의 선택"
-            name="queryIds"
-            rules={[
-              {
-                required: true,
-                type: 'array',
-                min: 1,
-                message: '최소 1개 질의를 선택해 주세요.',
-              },
-            ]}
+            rules={[{ required: true, message: '필수 항목입니다.' }]}
           >
-            <Select
-              mode="multiple"
-              allowClear
-              loading={queriesLoading}
-              placeholder="테스트 세트에 포함할 질의를 선택하세요."
-              options={queryOptions}
-              optionFilterProp="label"
-            />
+            <Space
+              wrap
+              style={{ width: '100%', justifyContent: 'space-between' }}
+            >
+              <Typography.Text type="secondary">
+                선택 질의 {queryPickerSelectedIds.length}개
+              </Typography.Text>
+              <Space>
+                <Button
+                  onClick={() => {
+                    setQueryPickerOpen(true);
+                  }}
+                >
+                  질의 목록에서 선택
+                </Button>
+                <Button
+                  onClick={() => {
+                    setQuerySelection([]);
+                  }}
+                >
+                  초기화
+                </Button>
+              </Space>
+            </Space>
           </Form.Item>
-          <Typography.Text>기본 실행 파라미터</Typography.Text>
+          <Form.Item
+            label="에이전트 모드"
+            name="agentId"
+            style={{ flex: 1 }}
+            rules={[{ required: true, message: '필수 항목입니다.' }]}
+          >
+            <Select options={[...AGENT_MODE_OPTIONS]} />
+          </Form.Item>
+          <Form.Item
+            label="평가 모델"
+            name="evalModel"
+            style={{ flex: 1 }}
+            rules={[{ required: true, message: '필수 항목입니다.' }]}
+          >
+            <Select options={[...EVAL_MODEL_OPTIONS]} />
+          </Form.Item>
           <Space style={{ width: '100%' }} wrap>
-            <Form.Item label="Agent ID" name="agentId" style={{ flex: 1 }}>
-              <Input placeholder="ORCHESTRATOR_WORKER_V3" />
-            </Form.Item>
-            <Form.Item label="Test Model" name="testModel" style={{ flex: 1 }}>
-              <Input placeholder="gpt-5.2" />
-            </Form.Item>
-            <Form.Item label="Eval Model" name="evalModel" style={{ flex: 1 }}>
-              <Input placeholder="gpt-5.2" />
-            </Form.Item>
             <Form.Item
               label="반복 수"
               name="repeatInConversation"
               style={{ flex: 1 }}
+              rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1} />
             </Form.Item>
             <Form.Item
-              label="대화 방 수"
+              label="채팅방 수"
               name="conversationRoomCount"
               style={{ flex: 1 }}
+              rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1} />
             </Form.Item>
@@ -445,6 +607,7 @@ export function TestSetManagementPage({
               label="동시 실행 수"
               name="agentParallelCalls"
               style={{ flex: 1 }}
+              rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1} />
             </Form.Item>
@@ -452,12 +615,50 @@ export function TestSetManagementPage({
               label="타임아웃(ms)"
               name="timeoutMs"
               style={{ flex: 1 }}
+              rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1000} />
             </Form.Item>
           </Space>
+          <Form.Item
+            label="Context"
+            name="contextJson"
+            extra="API 호출 context에 전달할 JSON"
+          >
+            <Input.TextArea
+              autoSize={{ minRows: 4, maxRows: 6 }}
+              placeholder={CONTEXT_SAMPLE}
+            />
+          </Form.Item>
         </Form>
-      </Modal>
+      </StandardModal>
+
+      <QueryPickerModal
+        queryPickerOpen={queryPickerOpen}
+        setQueryPickerOpen={setQueryPickerOpen}
+        queryPickerSaving={saving}
+        handleImportQueries={() => {
+          setQueryPickerOpen(false);
+        }}
+        queryPickerSearchInput={queryPickerSearchInput}
+        setQueryPickerSearchInput={setQueryPickerSearchInput}
+        setQueryPickerSearchKeyword={setQueryPickerSearchKeyword}
+        queryPickerSearchKeyword={queryPickerSearchKeyword}
+        setQueryPickerPage={setQueryPickerPage}
+        queryPickerCategory={queryPickerCategory}
+        setQueryPickerCategory={setQueryPickerCategory}
+        queryPickerGroupId={queryPickerGroupId}
+        setQueryPickerGroupId={setQueryPickerGroupId}
+        groups={queryGroups}
+        queryPickerSelectedIds={queryPickerSelectedIds}
+        queryPickerLoading={queryPickerLoading}
+        queryPickerItems={queryPickerItems}
+        setQueryPickerSelectedIds={setQueryPickerSelectedIds}
+        queryPickerPage={queryPickerPage}
+        queryPickerPageSize={queryPickerPageSize}
+        setQueryPickerPageSize={setQueryPickerPageSize}
+        queryPickerTotal={queryPickerTotal}
+      />
     </Card>
   );
 }

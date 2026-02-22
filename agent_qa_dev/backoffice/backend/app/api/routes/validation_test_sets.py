@@ -19,6 +19,14 @@ from app.repositories.validation_test_sets import ValidationTestSetRepository
 router = APIRouter(tags=["validation-test-sets"])
 QUERY_SELECTION_LIMIT = 5000
 DEFAULT_TEST_SET_AGENT_ID = "ORCHESTRATOR_WORKER_V3"
+NORMALIZED_TEST_SET_AGENT_ID = "ORCHESTRATOR_ASSISTANT"
+
+
+def _normalize_agent_mode_value(value: Optional[str]) -> str:
+    normalized = (value or "").strip()
+    if not normalized or normalized == DEFAULT_TEST_SET_AGENT_ID:
+        return NORMALIZED_TEST_SET_AGENT_ID
+    return normalized
 
 
 def _parse_json_text(value: str) -> dict[str, Any]:
@@ -30,6 +38,25 @@ def _parse_json_text(value: str) -> dict[str, Any]:
         if isinstance(payload, dict):
             return payload
     except Exception:
+        return {}
+    return {}
+
+
+def _parse_context_value(raw: Any) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if not text:
+            return {}
+        try:
+            payload = json.loads(text)
+        except Exception:
+            return {}
+        if isinstance(payload, dict):
+            return payload
         return {}
     return {}
 
@@ -150,14 +177,23 @@ def _normalize_test_set_config(
     normalized = dict(config or {})
     changed = False
 
-    normalized["agentId"], changed_agent = _coalesce_text(normalized.get("agentId"), DEFAULT_TEST_SET_AGENT_ID)
+    normalized["agentId"], changed_agent = _coalesce_text(
+        normalized.get("agentId"),
+        NORMALIZED_TEST_SET_AGENT_ID,
+    )
     changed |= changed_agent
+    normalized_agent_id = _normalize_agent_mode_value(normalized["agentId"])
+    if normalized_agent_id != normalized["agentId"]:
+        normalized["agentId"] = normalized_agent_id
+        changed |= True
 
     normalized["testModel"], changed_model = _coalesce_text(normalized.get("testModel"), test_model_default)
     changed |= changed_model
 
     normalized["evalModel"], changed_eval = _coalesce_text(normalized.get("evalModel"), eval_model_default)
     changed |= changed_eval
+
+    normalized["context"] = _parse_context_value(normalized.get("context"))
 
     normalized["repeatInConversation"], changed_repeat = _coalesce_int(
         normalized.get("repeatInConversation"),
@@ -191,6 +227,7 @@ class ValidationTestSetConfig(BaseModel):
     agentId: Optional[str] = None
     testModel: Optional[str] = None
     evalModel: Optional[str] = None
+    context: Optional[dict[str, Any]] = None
     repeatInConversation: Optional[int] = None
     conversationRoomCount: Optional[int] = None
     agentParallelCalls: Optional[int] = None
@@ -237,6 +274,7 @@ class ValidationTestSetAppendQueriesRequest(BaseModel):
 class ValidationTestSetRunCreateRequest(BaseModel):
     environment: Environment
     name: Optional[str] = None
+    context: Optional[dict[str, Any]] = None
     agentId: Optional[str] = None
     testModel: Optional[str] = None
     evalModel: Optional[str] = None
@@ -462,7 +500,14 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
         test_set.config_json = json.dumps(normalized_config, ensure_ascii=False)
         config = normalized_config
 
-    agent_id = str(_resolve_config_value(override=body.agentId, config=config, key="agentId", default="ORCHESTRATOR_WORKER_V3")).strip() or "ORCHESTRATOR_WORKER_V3"
+    agent_id = _normalize_agent_mode_value(
+        _resolve_config_value(
+            override=body.agentId,
+            config=config,
+            key="agentId",
+            default=DEFAULT_TEST_SET_AGENT_ID,
+        ),
+    )
     test_model = str(_resolve_config_value(override=body.testModel, config=config, key="testModel", default=setting.test_model_default)).strip() or setting.test_model_default
     eval_model = str(_resolve_config_value(override=body.evalModel, config=config, key="evalModel", default=setting.eval_model_default)).strip() or setting.eval_model_default
     repeat_in_conversation = int(_resolve_config_value(
@@ -502,6 +547,17 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
     run_name = (body.name or "").strip()
     if not run_name:
         run_name = f"{test_set.name} ({dt.datetime.now().strftime('%Y-%m-%d %H:%M')})"
+    context = _parse_context_value(
+        _resolve_config_value(
+            override=body.context,
+            config=config,
+            key="context",
+            default=None,
+        ),
+    )
+    run_options = {"source": "validation-test-set", "targetAssistant": agent_id}
+    if context:
+        run_options["context"] = context
 
     run = run_repo.create_run(
         environment=body.environment,
@@ -513,7 +569,7 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
         conversation_room_count=conversation_room_count,
         agent_parallel_calls=agent_parallel_calls,
         timeout_ms=timeout_ms,
-        options={"source": "validation-test-set"},
+        options=run_options,
         test_set_id=test_set_id,
     )
 

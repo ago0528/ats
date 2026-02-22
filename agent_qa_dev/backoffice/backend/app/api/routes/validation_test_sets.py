@@ -505,7 +505,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
 
     run = run_repo.create_run(
         environment=body.environment,
-        mode="REGISTERED",
         name=run_name,
         agent_id=agent_id,
         test_model=test_model,

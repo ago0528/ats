@@ -26,7 +26,7 @@ import { StandardModal } from '../../../components/common/StandardModal';
 import { RUN_ITEM_INITIAL_COLUMN_WIDTHS } from '../constants';
 import {
   getEvaluationProgressText,
-  getCombinedRunStateLabel,
+  getEvaluationStateLabel,
   getExecutionStateLabel,
 } from '../utils/runProgress';
 import {
@@ -34,6 +34,7 @@ import {
   canEvaluateRun,
   canExecuteRun,
 } from '../utils/runWorkbench';
+import { getRunDisplayName, getRunExecutionConfigText } from '../utils/runDisplay';
 
 export type RunCreateOverrides = {
   name?: string;
@@ -52,40 +53,11 @@ type OverrideFormValues = RunCreateOverrides & {
 const WORKBENCH_TAB_KEY = 'workbench';
 const COMPARE_TAB_KEY = 'compare';
 
-const trimRunId = (id: string) => {
-  const normalized = String(id || '').trim();
-  if (!normalized) return '';
-  if (normalized.length <= 10) return normalized;
-  return `${normalized.slice(0, 8)}...`;
-};
-
-const getRunDisplayName = (run: ValidationRun) => {
-  const explicitName = run.name?.trim();
-  if (explicitName) {
-    return explicitName;
-  }
-
-  if (run.createdAt) {
-    const parsed = new Date(run.createdAt);
-    if (!Number.isNaN(parsed.getTime())) {
-      const createdText = parsed.toLocaleString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      return `Run ${createdText}`;
-    }
-  }
-
-  const shortId = trimRunId(run.id);
-  return shortId ? `Run ${shortId}` : 'Run';
-};
-
 const getRunSelectLabel = (run: ValidationRun) => {
   const displayName = getRunDisplayName(run);
-  return `${displayName} (${getExecutionStateLabel(run)})`;
+  const executionState = getExecutionStateLabel(run);
+  const evaluationState = getEvaluationStateLabel(run);
+  return `${displayName} (${executionState} / ${evaluationState})`;
 };
 
 export function ValidationRunSection({
@@ -141,8 +113,12 @@ export function ValidationRunSection({
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [form] = Form.useForm<OverrideFormValues>();
 
-  const runStateLabel = useMemo(
-    () => getCombinedRunStateLabel(currentRun, runItems),
+  const executionStateLabel = useMemo(
+    () => getExecutionStateLabel(currentRun),
+    [currentRun],
+  );
+  const evaluationStateLabel = useMemo(
+    () => getEvaluationStateLabel(currentRun, runItems),
     [currentRun, runItems],
   );
   const evaluationProgressText = useMemo(
@@ -305,13 +281,14 @@ export function ValidationRunSection({
                               ? currentRunTestSet?.name || currentRun.testSetId
                               : '-'}
                           </Descriptions.Item>
-                          <Descriptions.Item label="Run 상태">
-                            {runStateLabel}
+                          <Descriptions.Item label="실행 상태">
+                            {executionStateLabel}
+                          </Descriptions.Item>
+                          <Descriptions.Item label="평가 상태">
+                            {evaluationStateLabel}
                           </Descriptions.Item>
                           <Descriptions.Item label="실행 구성">
-                            반복 수: {currentRun.repeatInConversation}회 /
-                            채팅방 수 {currentRun.conversationRoomCount}개 /
-                            동시 실행 수: {currentRun.agentParallelCalls}번
+                            {getRunExecutionConfigText(currentRun)}
                           </Descriptions.Item>
                           <Descriptions.Item label="에이전트 모드">
                             {currentRun.agentId}

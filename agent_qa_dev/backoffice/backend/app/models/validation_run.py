@@ -15,7 +15,6 @@ class ValidationRun(Base):
     __tablename__ = "validation_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="REGISTERED")
     name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     environment: Mapped[Environment] = mapped_column(Enum(Environment), nullable=False, index=True)
     status: Mapped[RunStatus] = mapped_column(Enum(RunStatus), nullable=False, default=RunStatus.PENDING, index=True)

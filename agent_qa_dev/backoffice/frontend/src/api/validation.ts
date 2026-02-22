@@ -171,6 +171,7 @@ export async function listValidationRuns(params?: {
   environment?: Environment;
   testSetId?: string;
   status?: string;
+  evaluationStatus?: string;
   offset?: number;
   limit?: number;
 }) {

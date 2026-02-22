@@ -21,6 +21,7 @@ export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {
   roomRepeat: 96,
   executedAt: 160,
   rawResponse: 260,
+  responseTimeSec: 140,
   error: 220,
   logic: 90,
   llm: 110,
@@ -28,9 +29,13 @@ export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {
 
 export const HISTORY_INITIAL_COLUMN_WIDTHS = {
   runId: 260,
-  mode: 110,
-  status: 120,
-  agentId: 220,
+  runName: 220,
+  testSet: 240,
+  executionStatus: 130,
+  evaluationStatus: 130,
+  executionConfig: 240,
+  agentMode: 220,
   items: 180,
-  createdAt: 160,
+  llmEvalProgress: 140,
+  evalModel: 120,
 };

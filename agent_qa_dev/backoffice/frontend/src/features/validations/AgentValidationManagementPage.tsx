@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Card } from 'antd';
+import { App, Button, Card, Col, DatePicker, Input, Row, Select, Space, Typography } from 'antd';
 import { useLocation } from 'react-router-dom';
 
 import {
@@ -27,6 +27,7 @@ import { ValidationRunSection, type RunCreateOverrides } from './components/Vali
 import { useValidationColumns } from './hooks/useValidationColumns';
 import { useValidationSectionMeta } from './hooks/useValidationSectionMeta';
 import type { ValidationSection } from './types';
+import { getEvaluationStateLabel } from './utils/runStatus';
 
 export type { ValidationSection } from './types';
 
@@ -60,6 +61,16 @@ export function AgentValidationManagementPage({
   const [runItemsPageSize, setRunItemsPageSize] = useState<number>(50);
   const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
   const [historyPageSize, setHistoryPageSize] = useState<number>(50);
+  const [historyExecutionStatusFilter, setHistoryExecutionStatusFilter] =
+    useState<string>('');
+  const [historyEvaluationStatusFilter, setHistoryEvaluationStatusFilter] =
+    useState<string>('');
+  const [historyTestSetFilter, setHistoryTestSetFilter] = useState<string>('');
+  const [historyKeywordFilter, setHistoryKeywordFilter] = useState<string>('');
+  const [historyCreatedAtFilter, setHistoryCreatedAtFilter] = useState<[Date | null, Date | null]>([null, null]);
+  const [historySortOrder, setHistorySortOrder] = useState<'createdAt_desc' | 'createdAt_asc'>(
+    'createdAt_desc',
+  );
   const [loading, setLoading] = useState(false);
   const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null);
   const [dashboardTestSetId, setDashboardTestSetId] = useState<string>('');
@@ -83,17 +94,30 @@ export function AgentValidationManagementPage({
         if (prev && testSetData.items.some((item) => item.id === prev)) return prev;
         return testSetData.items[0]?.id || '';
       });
+      setHistoryTestSetFilter((prev) => {
+        if (prev && testSetData.items.some((item) => item.id === prev)) {
+          return prev;
+        }
+        return '';
+      });
     } catch (error) {
       console.error(error);
       message.error('검증 메타 데이터 조회에 실패했습니다.');
     }
   };
 
-  const loadRuns = async (options?: { testSetId?: string; forceAll?: boolean }) => {
+  const loadRuns = async (options?: {
+    testSetId?: string;
+    forceAll?: boolean;
+    status?: string;
+    evaluationStatus?: string;
+  }) => {
     try {
       const runData = await listValidationRuns({
         environment,
         testSetId: options?.forceAll ? undefined : (options?.testSetId ?? selectedTestSetId) || undefined,
+        status: options?.status || undefined,
+        evaluationStatus: options?.evaluationStatus || undefined,
         limit: 300,
       });
       setRuns(runData.items);
@@ -132,7 +156,11 @@ export function AgentValidationManagementPage({
 
   useEffect(() => {
     if (section === 'history') {
-      void loadRuns({ forceAll: true });
+      void loadRuns({
+        forceAll: true,
+        status: historyExecutionStatusFilter,
+        evaluationStatus: historyEvaluationStatusFilter,
+      });
       return;
     }
     if (section === 'history-detail' && historyRunId) {
@@ -165,7 +193,22 @@ export function AgentValidationManagementPage({
         setRunItems([]);
       }
     })();
-  }, [section, selectedTestSetId, environment, historyRunId, runQueryParams.runId]);
+  }, [
+    section,
+    selectedTestSetId,
+    environment,
+    historyRunId,
+    runQueryParams.runId,
+    historyExecutionStatusFilter,
+    historyEvaluationStatusFilter,
+  ]);
+
+  const historyTestSetFilterOptions = useMemo(() => {
+    return [
+      { label: '전체 테스트 세트', value: '' },
+      ...testSets.map((testSet) => ({ label: testSet.name, value: testSet.id })),
+    ];
+  }, [testSets]);
 
   useEffect(() => {
     if (section !== 'run') return;
@@ -190,13 +233,17 @@ export function AgentValidationManagementPage({
   }, [baseRunId, runs, selectedRunId, section]);
 
   useEffect(() => {
-    if (currentRun?.status !== 'RUNNING') return;
+    if (section !== 'run') return;
+    if (!currentRun) return;
+    const isExecutionRunning = currentRun.status === 'RUNNING';
+    const isEvaluationRunning = String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
+    if (!isExecutionRunning && !isEvaluationRunning) return;
     const timer = window.setInterval(() => {
       void loadRunDetail(currentRun.id);
       void loadRuns({ testSetId: selectedTestSetId });
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [currentRun?.id, currentRun?.status, selectedTestSetId]);
+  }, [section, currentRun?.id, currentRun?.status, currentRun?.evalStatus, selectedTestSetId]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(runItems.length / runItemsPageSize));
@@ -327,7 +374,109 @@ export function AgentValidationManagementPage({
     }
   };
 
-  const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns();
+  const testSetNameById = useMemo(
+    () =>
+      testSets.reduce<Record<string, string>>((acc, testSet) => {
+        acc[testSet.id] = testSet.name;
+        return acc;
+      }, {}),
+    [testSets],
+  );
+
+  const getHistoryEvaluationState = (run: ValidationRun) => getEvaluationStateLabel(run);
+
+  const filteredHistoryRuns = useMemo(() => {
+    if (section !== 'history') return runs;
+
+    const keyword = historyKeywordFilter.trim().toLowerCase();
+    const [startAt, endAt] = historyCreatedAtFilter;
+    const startBoundary = startAt
+      ? new Date(startAt.getFullYear(), startAt.getMonth(), startAt.getDate())
+      : null;
+    const endBoundary = endAt
+      ? new Date(endAt.getFullYear(), endAt.getMonth(), endAt.getDate(), 23, 59, 59, 999)
+      : null;
+
+    const filtered = runs.filter((run) => {
+      if (historyExecutionStatusFilter && run.status !== historyExecutionStatusFilter) {
+        return false;
+      }
+      if (
+        historyEvaluationStatusFilter &&
+        getHistoryEvaluationState(run) !== historyEvaluationStatusFilter
+      ) {
+        return false;
+      }
+      if (historyTestSetFilter && run.testSetId !== historyTestSetFilter) {
+        return false;
+      }
+      if (startBoundary || endBoundary) {
+        const createdAt = run.createdAt ? new Date(run.createdAt) : null;
+        if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+        if (startBoundary && createdAt < startBoundary) return false;
+        if (endBoundary && createdAt > endBoundary) return false;
+      }
+      if (!keyword) return true;
+
+      const testSetName = run.testSetId ? testSetNameById[run.testSetId] || run.testSetId : '';
+      const haystack = [run.id, run.name, testSetName].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(keyword);
+    });
+
+    return filtered.sort((a, b) => {
+      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
+      if (historySortOrder === 'createdAt_asc') {
+        return aCreated - bCreated;
+      }
+      return bCreated - aCreated;
+    });
+  }, [
+    section,
+    runs,
+    historyKeywordFilter,
+    historyEvaluationStatusFilter,
+    historyExecutionStatusFilter,
+    historyTestSetFilter,
+    historyCreatedAtFilter,
+    historySortOrder,
+    testSetNameById,
+  ]);
+
+  useEffect(() => {
+    if (section !== 'history') return;
+    const maxPage = Math.max(1, Math.ceil(filteredHistoryRuns.length / historyPageSize));
+    if (historyCurrentPage > maxPage) {
+      setHistoryCurrentPage(maxPage);
+    }
+  }, [filteredHistoryRuns.length, historyCurrentPage, historyPageSize, section]);
+
+  useEffect(() => {
+    if (section !== 'history') return;
+    setHistoryCurrentPage(1);
+  }, [
+    historyEvaluationStatusFilter,
+    historyExecutionStatusFilter,
+    historyTestSetFilter,
+    historyKeywordFilter,
+    historyCreatedAtFilter,
+    historySortOrder,
+    section,
+  ]);
+
+  const handleResetHistoryFilters = () => {
+    setHistoryExecutionStatusFilter('');
+    setHistoryEvaluationStatusFilter('');
+    setHistoryTestSetFilter('');
+    setHistoryKeywordFilter('');
+    setHistoryCreatedAtFilter([null, null]);
+    setHistorySortOrder('createdAt_desc');
+  };
+
+  const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns({
+    testSetNameById,
+  });
 
   const { sectionTitle, isHistoryDetailMatched } = useValidationSectionMeta({
     section,
@@ -364,15 +513,99 @@ export function AgentValidationManagementPage({
       ) : null}
 
       {section === 'history' ? (
-        <ValidationHistorySection
-          runs={runs}
-          historyCurrentPage={historyCurrentPage}
-          historyPageSize={historyPageSize}
-          setHistoryCurrentPage={setHistoryCurrentPage}
-          setHistoryPageSize={setHistoryPageSize}
-          onOpenHistoryRunDetail={onOpenHistoryRunDetail}
-          historyColumns={historyColumns}
-        />
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Space direction="horizontal" size={8} wrap>
+            <Button onClick={handleResetHistoryFilters}>필터 초기화</Button>
+            <Typography.Text type="secondary">
+              전체 {runs.length}건 / 조회 {filteredHistoryRuns.length}건
+            </Typography.Text>
+          </Space>
+          <Row gutter={[8, 8]} align="middle">
+            <Col xs={24} sm={24} md={10} lg={9}>
+              <Input.Search
+                allowClear
+                value={historyKeywordFilter}
+                onChange={(event) => setHistoryKeywordFilter(event.target.value)}
+                onSearch={(value) => setHistoryKeywordFilter(value)}
+                placeholder="Run ID / Run 이름 / 테스트 세트"
+              />
+            </Col>
+            <Col xs={24} sm={12} md={7} lg={6}>
+              <Select
+                style={{ width: '100%' }}
+                value={historyTestSetFilter}
+                onChange={setHistoryTestSetFilter}
+                options={historyTestSetFilterOptions}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={7} lg={5}>
+              <Select
+                style={{ width: '100%' }}
+                value={historyExecutionStatusFilter}
+                onChange={setHistoryExecutionStatusFilter}
+                options={[
+                  { label: '전체 실행 상태', value: '' },
+                  { label: '실행대기', value: 'PENDING' },
+                  { label: '실행중', value: 'RUNNING' },
+                  { label: '완료', value: 'DONE' },
+                  { label: '실패', value: 'FAILED' },
+                ]}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={7} lg={5}>
+              <Select
+                style={{ width: '100%' }}
+                value={historyEvaluationStatusFilter}
+                onChange={setHistoryEvaluationStatusFilter}
+                options={[
+                  { label: '전체 평가 상태', value: '' },
+                  { label: '평가대기', value: '평가대기' },
+                  { label: '평가중', value: '평가중' },
+                  { label: '평가완료', value: '평가완료' },
+                ]}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={7} lg={6}>
+              <DatePicker.RangePicker
+                style={{ width: '100%' }}
+                value={historyCreatedAtFilter as any}
+                onChange={(value) =>
+                  setHistoryCreatedAtFilter(
+                    value
+                      ? [
+                          value[0] ? new Date((value[0] as { valueOf: () => number }).valueOf()) : null,
+                          value[1] ? new Date((value[1] as { valueOf: () => number }).valueOf()) : null,
+                        ]
+                      : [null, null],
+                  )
+                }
+                format="YYYY-MM-DD"
+              />
+            </Col>
+            <Col xs={24} sm={12} md={5} lg={4}>
+              <Select
+                style={{ width: '100%' }}
+                value={historySortOrder}
+                onChange={(value) =>
+                  setHistorySortOrder(value === 'createdAt_asc' ? 'createdAt_asc' : 'createdAt_desc')
+                }
+                options={[
+                  { label: '최신순', value: 'createdAt_desc' },
+                  { label: '오래된순', value: 'createdAt_asc' },
+                ]}
+              />
+            </Col>
+          </Row>
+          <ValidationHistorySection
+            runs={filteredHistoryRuns}
+            historyCurrentPage={historyCurrentPage}
+            historyPageSize={historyPageSize}
+            setHistoryCurrentPage={setHistoryCurrentPage}
+            setHistoryPageSize={setHistoryPageSize}
+            onOpenHistoryRunDetail={onOpenHistoryRunDetail}
+            historyColumns={historyColumns}
+          />
+        </Space>
       ) : null}
 
       {section === 'history-detail' ? (
@@ -387,6 +620,7 @@ export function AgentValidationManagementPage({
           setRunItemsPageSize={setRunItemsPageSize}
           onBackToHistory={onBackToHistory}
           onOpenInRunWorkspace={onOpenRunWorkspace}
+          testSetNameById={testSetNameById}
           historyDetailItemColumns={historyDetailItemColumns}
         />
       ) : null}

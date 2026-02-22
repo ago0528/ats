@@ -6,7 +6,6 @@ import { canCompareRun, canCreateRun, canEvaluateRun, canExecuteRun } from '../u
 const run = (partial?: Partial<ValidationRun>): ValidationRun =>
   ({
     id: 'run-1',
-    mode: 'REGISTERED',
     environment: 'dev',
     status: 'PENDING',
     agentId: 'ORCHESTRATOR_WORKER_V3',

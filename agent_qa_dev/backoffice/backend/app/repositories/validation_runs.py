@@ -4,7 +4,7 @@ import datetime as dt
 import json
 from typing import Any, Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.core.enums import Environment, EvalStatus, RunStatus
@@ -16,12 +16,115 @@ from app.models.validation_run_item import ValidationRunItem
 from app.models.validation_score_snapshot import ValidationScoreSnapshot
 
 
+def _normalize_evaluation_status_filter(value: Optional[str]) -> Optional[str]:
+    normalized = (value or "").strip()
+    if not normalized:
+        return None
+
+    if normalized in {"평가대기", "평가중", "평가완료"}:
+        return normalized
+
+    upper = normalized.upper()
+    if upper == "PENDING":
+        return "평가대기"
+    if upper == "RUNNING":
+        return "평가중"
+    if upper == "DONE":
+        return "평가완료"
+    return None
+
+
+def _to_int_expression(value) -> Any:
+    return func.coalesce(value, 0)
+
+
+def _build_item_progress_query(session: Session):
+    return (
+        session.query(
+            ValidationRunItem.run_id.label("run_id"),
+            func.count(ValidationRunItem.id).label("total_items"),
+            func.count(ValidationLlmEvaluation.id).label("llm_done_items"),
+        )
+        .outerjoin(
+            ValidationLlmEvaluation,
+            and_(
+                ValidationLlmEvaluation.run_item_id == ValidationRunItem.id,
+                ValidationLlmEvaluation.status == EvalStatus.DONE,
+            ),
+        )
+        .group_by(ValidationRunItem.run_id)
+        .subquery()
+    )
+
+
+def _apply_evaluation_status_filter(
+    query,
+    session: Session,
+    evaluation_status: str,
+):
+    normalized = _normalize_evaluation_status_filter(evaluation_status)
+    if not normalized:
+        return query
+
+    item_progress = _build_item_progress_query(session)
+    total_items = _to_int_expression(item_progress.c.total_items)
+    llm_done_items = _to_int_expression(item_progress.c.llm_done_items)
+
+    query = query.outerjoin(item_progress, item_progress.c.run_id == ValidationRun.id)
+
+    evaluation_done = and_(
+        ValidationRun.status == RunStatus.DONE,
+        or_(
+            and_(total_items == 0, ValidationRun.eval_status == EvalStatus.DONE),
+            and_(total_items > 0, llm_done_items >= total_items),
+        ),
+    )
+    evaluation_running = and_(
+        ValidationRun.status == RunStatus.DONE,
+        or_(
+            ValidationRun.eval_status == EvalStatus.RUNNING,
+            and_(total_items == 0, ValidationRun.eval_status == EvalStatus.PENDING),
+            and_(total_items > 0, llm_done_items > 0, llm_done_items < total_items),
+        ),
+    )
+    evaluation_pending = or_(
+        ValidationRun.status != RunStatus.DONE,
+        and_(ValidationRun.status == RunStatus.DONE, total_items > 0, llm_done_items == 0, ValidationRun.eval_status != EvalStatus.RUNNING),
+        and_(ValidationRun.status == RunStatus.DONE, total_items == 0, ValidationRun.eval_status != EvalStatus.DONE, ValidationRun.eval_status != EvalStatus.RUNNING),
+    )
+
+    if normalized == "평가완료":
+        return query.filter(evaluation_done)
+    if normalized == "평가중":
+        return query.filter(evaluation_running)
+    if normalized == "평가대기":
+        return query.filter(evaluation_pending)
+
+    return query
+
+
 def _to_json_text(value: Any) -> str:
     if value is None:
         return ""
     if isinstance(value, str):
         return value
     return json.dumps(value, ensure_ascii=False)
+
+
+def _to_json_payload(value: str | None) -> dict[str, float]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, metric in parsed.items():
+        if isinstance(metric, (int, float)):
+            out[str(key)] = float(metric)
+    return out
 
 
 class ValidationRunRepository:
@@ -32,7 +135,6 @@ class ValidationRunRepository:
         self,
         *,
         environment: Environment,
-        mode: str,
         test_set_id: Optional[str] = None,
         name: str = "",
         agent_id: str,
@@ -47,7 +149,6 @@ class ValidationRunRepository:
     ) -> ValidationRun:
         run = ValidationRun(
             environment=environment,
-            mode=mode,
             test_set_id=test_set_id,
             name=name,
             status=RunStatus.PENDING,
@@ -74,6 +175,7 @@ class ValidationRunRepository:
         environment: Optional[Environment] = None,
         test_set_id: Optional[str] = None,
         status: Optional[str] = None,
+        evaluation_status: Optional[str] = None,
         offset: int = 0,
         limit: int = 50,
     ) -> list[ValidationRun]:
@@ -87,6 +189,7 @@ class ValidationRunRepository:
             query = query.filter(ValidationRun.test_set_id == normalized_test_set_id)
         if status:
             query = query.filter(ValidationRun.status == status)
+        query = _apply_evaluation_status_filter(query, self.db, evaluation_status)
         return list(query.order_by(ValidationRun.created_at.desc()).offset(offset).limit(limit).all())
 
     def count_runs(
@@ -95,6 +198,7 @@ class ValidationRunRepository:
         environment: Optional[Environment] = None,
         test_set_id: Optional[str] = None,
         status: Optional[str] = None,
+        evaluation_status: Optional[str] = None,
     ) -> int:
         query = self.db.query(func.count(ValidationRun.id))
         if environment:
@@ -106,6 +210,7 @@ class ValidationRunRepository:
             query = query.filter(ValidationRun.test_set_id == normalized_test_set_id)
         if status:
             query = query.filter(ValidationRun.status == status)
+        query = _apply_evaluation_status_filter(query, self.db, evaluation_status)
         return int(query.scalar() or 0)
 
     def set_status(self, run_id: str, status: RunStatus) -> None:
@@ -282,6 +387,30 @@ class ValidationRunRepository:
             or 0
         )
 
+    def get_run_score_snapshot(self, run_id: str) -> Optional[ValidationScoreSnapshot]:
+        return (
+            self.db.query(ValidationScoreSnapshot)
+            .filter(ValidationScoreSnapshot.run_id == run_id, ValidationScoreSnapshot.query_group_id.is_(None))
+            .order_by(ValidationScoreSnapshot.evaluated_at.desc())
+            .first()
+        )
+
+    def get_run_average_response_time_sec(self, run_id: str) -> Optional[float]:
+        avg_latency_ms = (
+            self.db.query(func.avg(ValidationRunItem.latency_ms))
+            .filter(ValidationRunItem.run_id == run_id, ValidationRunItem.latency_ms.isnot(None))
+            .scalar()
+        )
+        if avg_latency_ms is None:
+            return None
+        try:
+            value = float(avg_latency_ms)
+        except Exception:
+            return None
+        if not (value and value >= 0):
+            return 0.0 if value == 0 else None
+        return round(value / 1000, 3)
+
     def latest_done_run_for_env(self, environment: Environment, *, exclude_run_id: Optional[str] = None) -> Optional[ValidationRun]:
         query = self.db.query(ValidationRun).filter(
             ValidationRun.environment == environment,
@@ -300,7 +429,6 @@ class ValidationRunRepository:
         cloned_name = f"{base_name} (재실행)" if base_name else "재실행"
         cloned = self.create_run(
             environment=base.environment,
-            mode=base.mode,
             test_set_id=base.test_set_id,
             name=cloned_name,
             agent_id=base.agent_id,
@@ -384,10 +512,22 @@ class ValidationRunRepository:
         return {str(query_id): str(group_id) for query_id, group_id in rows if query_id and group_id}
 
     def build_run_payload(self, run: ValidationRun) -> dict[str, Any]:
+        score_snapshot = self.get_run_score_snapshot(run.id)
+        score_summary = None
+        if score_snapshot is not None:
+            score_summary = {
+                "totalItems": score_snapshot.total_items,
+                "executedItems": score_snapshot.executed_items,
+                "errorItems": score_snapshot.error_items,
+                "logicPassItems": score_snapshot.logic_pass_items,
+                "logicPassRate": round(score_snapshot.logic_pass_rate, 3),
+                "llmDoneItems": score_snapshot.llm_done_items,
+                "llmMetricAverages": _to_json_payload(score_snapshot.llm_metric_averages_json),
+                "llmTotalScoreAvg": score_snapshot.llm_total_score_avg,
+            }
         return {
             "id": run.id,
             "name": run.name,
-            "mode": run.mode,
             "environment": run.environment.value,
             "status": run.status.value,
             "baseRunId": run.base_run_id,
@@ -406,6 +546,8 @@ class ValidationRunRepository:
             "evalStatus": run.eval_status.value if isinstance(run.eval_status, EvalStatus) else str(run.eval_status),
             "evalStartedAt": run.eval_started_at,
             "evalFinishedAt": run.eval_finished_at,
+            "averageResponseTimeSec": self.get_run_average_response_time_sec(run.id),
+            "scoreSummary": score_summary,
             "totalItems": self.count_items(run.id),
             "doneItems": self.count_done_items(run.id),
             "errorItems": self.count_error_items(run.id),

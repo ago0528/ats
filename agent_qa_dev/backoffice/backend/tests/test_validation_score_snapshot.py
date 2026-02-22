@@ -34,7 +34,6 @@ def test_validation_score_snapshot_created_after_evaluation(monkeypatch):
     run_resp = client.post(
         "/api/v1/validation-runs",
         json={
-            "mode": "REGISTERED",
             "environment": "dev",
             "queryIds": [query_id],
         },

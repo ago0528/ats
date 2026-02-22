@@ -1,7 +1,6 @@
 import type { Environment } from '../../app/EnvironmentScope';
 
 export type QueryCategory = 'Happy path' | 'Edge case' | 'Adversarial input' | string;
-export type ValidationRunMode = 'REGISTERED' | 'AD_HOC';
 
 export type QueryGroup = {
   id: string;
@@ -83,7 +82,6 @@ export type QueryBulkUpdateResult = {
 export type ValidationRun = {
   id: string;
   name?: string;
-  mode: ValidationRunMode;
   environment: Environment;
   status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
   evalStatus?: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
@@ -101,6 +99,17 @@ export type ValidationRun = {
   doneItems: number;
   errorItems: number;
   llmDoneItems: number;
+  averageResponseTimeSec?: number | null;
+  scoreSummary?: {
+    totalItems: number;
+    executedItems: number;
+    errorItems: number;
+    logicPassItems: number;
+    logicPassRate: number;
+    llmDoneItems: number;
+    llmMetricAverages: Record<string, number>;
+    llmTotalScoreAvg: number | null;
+  } | null;
   createdAt?: string;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -126,6 +135,7 @@ export type ValidationRunItem = {
   conversationId: string;
   rawResponse: string;
   latencyMs?: number | null;
+  responseTimeSec?: number | null;
   error: string;
   rawJson: string;
   executedAt?: string | null;
@@ -158,7 +168,6 @@ export type ValidationSettings = {
 };
 
 export type ValidationRunCreateRequest = {
-  mode: ValidationRunMode;
   environment: Environment;
   name?: string;
   testSetId?: string;

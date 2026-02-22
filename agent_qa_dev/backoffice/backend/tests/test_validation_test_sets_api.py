@@ -151,7 +151,6 @@ def test_validation_run_execute_requires_pending_state(monkeypatch):
     run_resp = client.post(
         "/api/v1/validation-runs",
         json={
-            "mode": "REGISTERED",
             "environment": "dev",
             "queryIds": [query_id],
         },

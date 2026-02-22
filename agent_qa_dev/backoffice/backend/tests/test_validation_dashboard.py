@@ -28,7 +28,7 @@ def test_validation_group_dashboard():
 
     run_resp = client.post(
         "/api/v1/validation-runs",
-        json={"mode": "REGISTERED", "environment": "dev", "queryIds": [query_id]},
+        json={"environment": "dev", "queryIds": [query_id]},
     )
     run_id = run_resp.json()["id"]
 

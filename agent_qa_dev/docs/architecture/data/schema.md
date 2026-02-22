@@ -379,7 +379,6 @@
 | Column name               | Type           | Nullable | Default                        | Description                  | Example value                                  | Notes                                    |
 | ------------------------- | -------------- | -------- | ------------------------------ | ---------------------------- | ---------------------------------------------- | ---------------------------------------- |
 | `id`                      | `varchar(36)`  | No       | UUID (app)                     | 실행(run) ID                 | `35efe819-03de-468a-8f3a-0c5f68a9f1d0`         | PK                                       |
-| `mode`                    | `varchar(20)`  | No       | `REGISTERED` (app)             | 실행 모드                    | `REGISTERED`                                   |                                          |
 | `environment`             | `enum`         | No       | 없음                           | 실행 대상 환경               | `st2`                                          | index                                    |
 | `status`                  | `enum`         | No       | `PENDING` (app)                | 실행 상태                    | `DONE`                                         | index                                    |
 | `base_run_id`             | `varchar(36)`  | Yes      | `NULL`                         | 비교 기준 run ID             | `f97a8927-a89a-4f95-ae6e-f3a690b9af2d`         | FK(self)                                 |

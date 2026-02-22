@@ -11,7 +11,6 @@ import {
 const run = (status: string): ValidationRun =>
   ({
     id: 'run-1',
-    mode: 'REGISTERED',
     environment: 'dev',
     status,
     agentId: 'ORCHESTRATOR_WORKER_V3',
@@ -68,7 +67,7 @@ describe('run progress helpers', () => {
 
   it('calculates execution labels', () => {
     expect(getExecutionStateLabel(null)).toBe('미생성');
-    expect(getExecutionStateLabel(run('PENDING'))).toBe('생성됨');
+    expect(getExecutionStateLabel(run('PENDING'))).toBe('실행대기');
     expect(getExecutionStateLabel(run('RUNNING'))).toBe('실행중');
     expect(getExecutionStateLabel(run('DONE'))).toBe('실행완료');
     expect(getExecutionStateLabel(run('FAILED'))).toBe('실행실패');

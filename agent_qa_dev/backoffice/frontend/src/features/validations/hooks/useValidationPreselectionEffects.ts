@@ -78,7 +78,11 @@ export function useValidationPreselectionEffects({
           timeoutMs: sourceRun.timeoutMs,
         });
 
-        if (sourceRun.mode === 'REGISTERED') {
+        const sourceMode: 'REGISTERED' | 'AD_HOC' = sortedItems.every((item) => !item.queryId)
+          ? 'AD_HOC'
+          : 'REGISTERED';
+
+        if (sourceMode === 'REGISTERED') {
           const uniqueQueryIds = Array.from(
             new Set(
               sortedItems

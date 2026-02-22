@@ -9,7 +9,7 @@ from typing import Any, Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -39,7 +39,6 @@ class AdHocQueryPayload(BaseModel):
 
 
 class ValidationRunCreateRequest(BaseModel):
-    mode: str = "REGISTERED"
     environment: Environment
     name: Optional[str] = None
     testSetId: Optional[str] = None
@@ -52,14 +51,6 @@ class ValidationRunCreateRequest(BaseModel):
     timeoutMs: Optional[int] = None
     queryIds: list[str] = Field(default_factory=list)
     adHocQuery: Optional[AdHocQueryPayload] = None
-
-    @field_validator("mode")
-    @classmethod
-    def validate_mode(cls, value: str) -> str:
-        mode = (value or "").upper()
-        if mode not in {"REGISTERED", "AD_HOC"}:
-            raise ValueError("mode must be REGISTERED or AD_HOC")
-        return mode
 
 
 class RunSecretPayload(BaseModel):
@@ -207,13 +198,21 @@ def list_validation_runs(
     environment: Optional[Environment] = Query(default=None),
     testSetId: Optional[str] = Query(default=None),
     status: Optional[str] = Query(default=None),
+    evaluationStatus: Optional[str] = Query(default=None),
     offset: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
 ):
     repo = ValidationRunRepository(db)
     setting_repo = ValidationSettingsRepository(db)
-    rows = repo.list_runs(environment=environment, test_set_id=testSetId, status=status, offset=offset, limit=limit)
+    rows = repo.list_runs(
+        environment=environment,
+        test_set_id=testSetId,
+        status=status,
+        evaluation_status=evaluationStatus,
+        offset=offset,
+        limit=limit,
+    )
     settings_by_env: dict[Environment, object] = {}
     defaults_changed = False
     for row in rows:
@@ -235,7 +234,12 @@ def list_validation_runs(
         db.commit()
     return {
         "items": [repo.build_run_payload(row) for row in rows],
-        "total": repo.count_runs(environment=environment, test_set_id=testSetId, status=status),
+        "total": repo.count_runs(
+            environment=environment,
+            test_set_id=testSetId,
+            status=status,
+            evaluation_status=evaluationStatus,
+        ),
     }
 
 
@@ -260,10 +264,16 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
         body.name,
         f"Run {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
     )
+    has_query_ids = bool(body.queryIds)
+    has_ad_hoc_query = body.adHocQuery is not None
+
+    if has_query_ids and has_ad_hoc_query:
+        raise HTTPException(status_code=400, detail="queryIds and adHocQuery cannot be used together")
+    if not has_query_ids and not has_ad_hoc_query:
+        raise HTTPException(status_code=400, detail="queryIds or adHocQuery is required")
 
     run = run_repo.create_run(
         environment=body.environment,
-        mode=body.mode,
         test_set_id=body.testSetId,
         name=run_name,
         agent_id=agent_id,
@@ -278,9 +288,7 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
 
     items_payload: list[dict[str, Any]] = []
     ordinal = 1
-    if body.mode == "REGISTERED":
-        if not body.queryIds:
-            raise HTTPException(status_code=400, detail="queryIds is required for REGISTERED mode")
+    if has_query_ids:
         selected_queries = query_repo.list_by_ids(body.queryIds)
         if len(selected_queries) != len(body.queryIds):
             raise HTTPException(status_code=404, detail="Some queries were not found")
@@ -311,9 +319,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                     )
                     ordinal += 1
     else:
-        if body.adHocQuery is None:
-            raise HTTPException(status_code=400, detail="adHocQuery is required for AD_HOC mode")
-
         for room_index in range(1, int(conversation_room_count) + 1):
             for repeat_index in range(1, int(repeat_in_conversation) + 1):
                 items_payload.append(
@@ -393,6 +398,7 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                 "error": row.error,
                 "rawJson": row.raw_json,
                 "executedAt": row.executed_at,
+                "responseTimeSec": row.latency_ms / 1000 if row.latency_ms is not None else None,
                 "logicEvaluation": (
                     {
                         "result": logic_map[row.id].result,

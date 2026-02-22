@@ -80,13 +80,11 @@ export function useValidationActions({
       const payload =
         runMode === 'REGISTERED'
           ? {
-            mode: 'REGISTERED' as const,
             environment,
             queryIds: selectedQueryIds,
             ...overridePayload,
           }
           : {
-            mode: 'AD_HOC' as const,
             environment,
             adHocQuery: {
               queryText: adHocQueryText,

@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes import validation_runs as validation_runs_route
 from app.core.db import SessionLocal
-from app.core.enums import RunStatus
+from app.core.enums import Environment, EvalStatus, RunStatus
 from app.main import app
 from app.repositories.validation_runs import ValidationRunRepository
 
@@ -33,7 +33,6 @@ def test_validation_runs_flow(monkeypatch):
     run_resp = client.post(
         "/api/v1/validation-runs",
         json={
-            "mode": "REGISTERED",
             "environment": "dev",
             "queryIds": [query_id],
             "repeatInConversation": 2,
@@ -133,7 +132,6 @@ def test_validation_run_evaluate_gate(monkeypatch):
     run_resp = client.post(
         "/api/v1/validation-runs",
         json={
-            "mode": "REGISTERED",
             "environment": "dev",
             "queryIds": [query_id],
         },
@@ -157,3 +155,70 @@ def test_validation_run_evaluate_gate(monkeypatch):
         json={"openaiModel": "gpt-5.2"},
     )
     assert no_result_eval_resp.status_code == 409
+
+
+def test_list_validation_runs_with_evaluation_status_filter():
+    client = TestClient(app)
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+
+    run_pending = repo.create_run(
+        environment=Environment.DEV,
+        agent_id="ORCHESTRATOR_WORKER_V3",
+        test_model="gpt-5.2",
+        eval_model="gpt-5.2",
+        repeat_in_conversation=1,
+        conversation_room_count=1,
+        agent_parallel_calls=1,
+        timeout_ms=1000,
+    )
+    run_running = repo.create_run(
+        environment=Environment.DEV,
+        agent_id="ORCHESTRATOR_WORKER_V3",
+        test_model="gpt-5.2",
+        eval_model="gpt-5.2",
+        repeat_in_conversation=1,
+        conversation_room_count=1,
+        agent_parallel_calls=1,
+        timeout_ms=1000,
+    )
+    run_completed = repo.create_run(
+        environment=Environment.DEV,
+        agent_id="ORCHESTRATOR_WORKER_V3",
+        test_model="gpt-5.2",
+        eval_model="gpt-5.2",
+        repeat_in_conversation=1,
+        conversation_room_count=1,
+        agent_parallel_calls=1,
+        timeout_ms=1000,
+    )
+
+    repo.set_status(run_running.id, RunStatus.DONE)
+    repo.set_eval_status(run_running.id, EvalStatus.RUNNING)
+    repo.set_status(run_completed.id, RunStatus.DONE)
+    repo.set_eval_status(run_completed.id, EvalStatus.DONE)
+    db.commit()
+
+    done_resp = client.get("/api/v1/validation-runs", params={"environment": "dev", "evaluationStatus": "평가완료"})
+    assert done_resp.status_code == 200
+    done_items = done_resp.json()["items"]
+    done_ids = {item["id"] for item in done_items}
+    assert run_completed.id in done_ids
+    assert run_running.id not in done_ids
+    assert run_pending.id not in done_ids
+
+    running_resp = client.get("/api/v1/validation-runs", params={"environment": "dev", "evaluationStatus": "평가중"})
+    assert running_resp.status_code == 200
+    running_ids = {item["id"] for item in running_resp.json()["items"]}
+    assert run_running.id in running_ids
+    assert run_completed.id not in running_ids
+    assert run_pending.id not in running_ids
+
+    pending_resp = client.get("/api/v1/validation-runs", params={"environment": "dev", "evaluationStatus": "PENDING"})
+    assert pending_resp.status_code == 200
+    pending_ids = {item["id"] for item in pending_resp.json()["items"]}
+    assert run_pending.id in pending_ids
+    assert run_running.id not in pending_ids
+    assert run_completed.id not in pending_ids
+
+    db.close()

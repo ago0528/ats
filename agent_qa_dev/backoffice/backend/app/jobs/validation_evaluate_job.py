@@ -31,6 +31,33 @@ def _parse_metric_scores(metric_scores_json: str) -> dict[str, float]:
     return out
 
 
+def _coerce_float(value: Any) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    normalized = float(value)
+    if not (normalized == normalized):
+        return None
+    return normalized
+
+
+def _parse_pass_flag(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        if value == 0:
+            return False
+        if value == 1:
+            return True
+        return None
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "y", "yes", "pass", "passed", "ok", "success"}:
+            return True
+        if normalized in {"false", "0", "n", "no", "fail", "failed", "reject", "invalid"}:
+            return False
+    return None
+
+
 def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items: list[Any]) -> None:
     run = repo.get_run(run_id)
     if run is None:
@@ -132,6 +159,8 @@ async def evaluate_validation_run(
             db.commit()
             return
 
+        logic_result_by_item: dict[str, str] = {}
+        logic_fail_reason_by_item: dict[str, str] = {}
         for item in run_items:
             if item.logic_field_path_snapshot and item.logic_expected_value_snapshot:
                 logic_raw_result = run_logic_check(
@@ -153,6 +182,8 @@ async def evaluate_validation_run(
                 logic_result = "SKIPPED"
                 fail_reason = ""
 
+            logic_result_by_item[item.id] = logic_result
+            logic_fail_reason_by_item[item.id] = fail_reason
             repo.upsert_logic_eval(
                 item.id,
                 eval_items={
@@ -204,14 +235,26 @@ async def evaluate_validation_run(
                     )
                     return
 
+                logic_result = logic_result_by_item.get(item.id, "SKIPPED")
+                raw_response_preview = (item.raw_response or "").strip()[:max_chars]
+                raw_json_preview = (item.raw_json or "").strip()[:max_chars]
+                criteria_preview = criteria_text[:max_chars]
+                logic_expected = (item.logic_expected_value_snapshot or "").strip()[:max_chars]
+                logic_fail_reason = (logic_fail_reason_by_item.get(item.id) or "").strip()[:max_chars]
+                logic_fail_reason_text = f", failReason={logic_fail_reason}" if logic_fail_reason else ""
                 prompt = (
-                    "다음 응답을 평가하세요.\n\n"
+                    "다음 응답을 LLM as a judge 방식으로 평가하세요.\n\n"
+                    "규칙:\n"
+                    "1) 출력은 JSON 객체만 허용.\n"
+                    "2) 키는 반드시 metric_scores, total_score, passed, comment 이어야 함.\n"
+                    "3) metric_scores 값은 숫자(1~5)이며, 가능한 경우 여러 항목을 반환.\n\n"
                     f"질의: {item.query_text_snapshot}\n\n"
                     f"기대 결과: {item.expected_result_snapshot}\n\n"
-                    f"응답(raw JSON): {(item.raw_json or '')[:max_chars]}\n\n"
-                    f"평가 기준(JSON): {criteria_text}\n\n"
-                    "반드시 JSON으로 답하세요.\n"
-                    '{"metric_scores": {"정확성": 1~5}, "total_score": 1~5, "comment": "평가 근거"}'
+                    f"실행 Raw 응답: {raw_response_preview}\n\n"
+                    f"실행 Raw JSON: {raw_json_preview}\n\n"
+                    f"로직 규칙: fieldPath={item.logic_field_path_snapshot or '-'}, expected={logic_expected}, result={logic_result}{logic_fail_reason_text}\n\n"
+                    f"평가 기준(JSON): {criteria_preview}\n\n"
+                    '{"metric_scores": {"정확성": 1~5}, "total_score": 1~5, "passed": true, "comment": "평가 근거"}'
                 )
 
                 try:
@@ -231,17 +274,36 @@ async def evaluate_validation_run(
 
                     metric_scores = {}
                     total_score = None
+                    passed = None
                     comment = ""
                     if isinstance(result, dict):
                         if isinstance(result.get("metric_scores"), dict):
                             metric_scores = result.get("metric_scores") or {}
                         elif isinstance(result.get("score"), (int, float)):
                             metric_scores = {"overall": float(result["score"])}
-                        if isinstance(result.get("total_score"), (int, float)):
-                            total_score = float(result["total_score"])
-                        elif isinstance(result.get("score"), (int, float)):
+
+                        passed = _parse_pass_flag(result.get("passed"))
+
+                        if _coerce_float(result.get("total_score")) is not None:
+                            total_score = _coerce_float(result["total_score"])
+                        elif _coerce_float(result.get("score")) is not None:
                             total_score = float(result["score"])
+
+                        if passed is None and total_score is not None:
+                            passed = total_score >= 3.0
+
+                        if passed is True and total_score is None:
+                            total_score = 5.0
+                        if passed is False and total_score is None:
+                            total_score = 1.0
+
                         comment = str(result.get("comment") or result.get("reason") or "")
+                        if passed is True:
+                            comment = f"{comment} (passed=true)".strip()
+                        elif passed is False:
+                            comment = f"{comment} (passed=false)".strip()
+                        elif comment == "":
+                            comment = "No comment."
 
                     repo.upsert_llm_eval(
                         item.id,

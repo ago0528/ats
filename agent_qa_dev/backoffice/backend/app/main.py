@@ -2,6 +2,75 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+def _load_dotenv_file() -> None:
+    base_dir = Path(__file__).resolve().parents[1]
+    candidates = [
+        base_dir / ".env",
+        Path.cwd() / ".env",
+    ]
+    env_path: Path | None = None
+    for candidate in candidates:
+        if candidate.exists():
+            env_path = candidate
+            break
+
+    if env_path is None:
+        logger.warning(
+            "No .env file found. Tried: %s, %s",
+            base_dir / ".env",
+            Path.cwd() / ".env",
+        )
+        return
+
+    logger.info("Loading environment variables from %s", env_path)
+
+    loaded_keys: list[str] = []
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            continue
+        if key.startswith("export "):
+            key = key.removeprefix("export ").strip()
+        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+            value = value[1:-1]
+        if key and key not in os.environ:
+            os.environ[key] = value
+            loaded_keys.append(key)
+
+    if loaded_keys:
+        logger.debug("Loaded %d variables from %s: %s", len(loaded_keys), env_path, ", ".join(sorted(loaded_keys)))
+    else:
+        logger.debug("No new variables were loaded from %s", env_path)
+
+
+def _log_openai_key_status() -> None:
+    openai_key = os.getenv("BACKOFFICE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        if os.getenv("BACKOFFICE_OPENAI_API_KEY"):
+            logger.info("Resolved OpenAI key from BACKOFFICE_OPENAI_API_KEY.")
+        else:
+            logger.info("Resolved OpenAI key from OPENAI_API_KEY.")
+        return
+
+    logger.warning(
+        "OpenAI API key is not configured. Set BACKOFFICE_OPENAI_API_KEY or OPENAI_API_KEY in environment/.env.",
+    )
+
+
+_load_dotenv_file()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +89,6 @@ from app.core.db import Base, _ENGINE, get_db_path
 
 app = FastAPI(title="AQB Backoffice API", version="0.1.0")
 APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.1.0")
-logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -45,6 +113,7 @@ def _ensure_sqlite_column(table_name: str, column_name: str, column_definition: 
 @app.on_event("startup")
 def startup() -> None:
     logger.info("Resolved BACKOFFICE_DB_PATH=%s", get_db_path())
+    _log_openai_key_status()
     Base.metadata.create_all(_ENGINE)
     _ensure_sqlite_column("validation_query_groups", "default_target_assistant", "default_target_assistant TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_queries", "context_json", "context_json TEXT NOT NULL DEFAULT ''")

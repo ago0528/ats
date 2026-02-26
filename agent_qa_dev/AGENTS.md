@@ -40,29 +40,49 @@
 ## 4) @skills 인덱스 (docs/skills)
 
 문서/설계/구현 전, 작업 목적에 맞는 스킬을 `docs/skills/*/SKILL.md`에서 먼저 선택해 사용한다.
+스킬 인덱스는 `docs/skills` 실디렉터리와 동기화한다. (파일 추가/삭제 시 이 섹션도 함께 갱신)
 
-사용 가능한 스킬 목록:
+### 4-1) 평가·리포트 생성 스킬
 
-- `docs/skills/aqb-scoring/SKILL.md`
+- `docs/skills/url-agent-move-scoring/SKILL.md`: 이동 에이전트 raw CSV(`url_agent_*.csv`)를 반복 실행 기준으로 평가하고 마크다운 리포트를 생성한다.
+- `docs/skills/resume-agent-scoring/SKILL.md`: 지원자 관리 에이전트 raw CSV(Track 1/2/3)를 라운드/트랙 단위로 집계해 마크다운 리포트를 생성한다.
+- `docs/skills/plan-agent-scoring/SKILL.md`: 실행 에이전트 raw CSV(`plan_agent_*.csv`)를 0~5 점수 규칙으로 재채점해 마크다운 리포트를 생성한다.
+
+### 4-2) 백오피스 구현 스킬
+
 - `docs/skills/backoffice-backend-api/SKILL.md`
 - `docs/skills/backoffice-frontend-antd/SKILL.md`
-- `docs/skills/backoffice-quality-review/SKILL.md`
-- `docs/skills/brainstorming/SKILL.md`
-- `docs/skills/db-schema-doc-updater/SKILL.md`
-- `docs/skills/dispatching-parallel-agents/SKILL.md`
-- `docs/skills/executing-plans/SKILL.md`
-- `docs/skills/finishing-a-development-branch/SKILL.md`
-- `docs/skills/receiving-code-review/SKILL.md`
-- `docs/skills/requesting-code-review/SKILL.md`
-- `docs/skills/subagent-driven-development/SKILL.md`
 - `docs/skills/systematic-debugging/SKILL.md`
 - `docs/skills/test-driven-development/SKILL.md`
-- `docs/skills/using-git-worktrees/SKILL.md`
-- `docs/skills/using-superpowers/SKILL.md`
-- `docs/skills/verification-before-completion/SKILL.md`
-- `docs/skills/worktree-merge-release/SKILL.md`
+- `docs/skills/db-schema-doc-updater/SKILL.md`
+
+### 4-3) 품질·리뷰·실행 스킬
+
+- `docs/skills/brainstorming/SKILL.md`
 - `docs/skills/writing-plans/SKILL.md`
+- `docs/skills/executing-plans/SKILL.md`
+- `docs/skills/subagent-driven-development/SKILL.md`
+- `docs/skills/dispatching-parallel-agents/SKILL.md`
+- `docs/skills/requesting-code-review/SKILL.md`
+- `docs/skills/receiving-code-review/SKILL.md`
+- `docs/skills/backoffice-quality-review/SKILL.md`
+- `docs/skills/verification-before-completion/SKILL.md`
+
+### 4-4) 브랜치·릴리즈 스킬
+
+- `docs/skills/using-git-worktrees/SKILL.md`
+- `docs/skills/sync-main-branch/SKILL.md`
+- `docs/skills/worktree-merge-release/SKILL.md`
+- `docs/skills/finishing-a-development-branch/SKILL.md`
+
+### 4-5) 메타 스킬
+
 - `docs/skills/writing-skills/SKILL.md`
+
+### 4-6) 검증 이력 운영 가이드
+
+- 기대결과 일괄 수정(다운로드→수정→업로드) 계약: `docs/architecture/validation-runs-api-contract.md`의 `5) 기대결과 일괄 업데이트 API`
+- 스코어링 운영 기준: `docs/architecture/scoring_guidelines.md`
 
 선택 규칙:
 

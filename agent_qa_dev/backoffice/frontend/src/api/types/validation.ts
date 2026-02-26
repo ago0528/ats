@@ -77,6 +77,44 @@ export type QueryBulkUpdateResult = {
   createdGroupNames: string[];
 };
 
+export type ValidationRunExpectedBulkPreviewStatus =
+  | 'planned-update'
+  | 'unchanged'
+  | 'unmapped-item-id'
+  | 'missing-item-id'
+  | 'duplicate-item-id';
+
+export type ValidationRunExpectedBulkPreviewRow = {
+  rowNo: number;
+  itemId: string;
+  status: ValidationRunExpectedBulkPreviewStatus | string;
+  changedFields: string[];
+};
+
+export type ValidationRunExpectedBulkPreviewResult = {
+  totalRows: number;
+  validRows: number;
+  plannedUpdateCount: number;
+  unchangedCount: number;
+  invalidRows: number[];
+  missingItemIdRows: number[];
+  duplicateItemIdRows: number[];
+  unmappedItemRows: number[];
+  previewRows: ValidationRunExpectedBulkPreviewRow[];
+  remainingMissingExpectedCountAfterApply: number;
+};
+
+export type ValidationRunExpectedBulkUpdateResult = {
+  requestedRowCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedMissingItemIdCount: number;
+  skippedDuplicateItemIdCount: number;
+  skippedUnmappedCount: number;
+  evalReset: boolean;
+  remainingMissingExpectedCount: number;
+};
+
 export type ValidationRun = {
   id: string;
   name?: string;
@@ -88,8 +126,10 @@ export type ValidationRun = {
   agentId: string;
   testModel: string;
   evalModel: string;
+  // Room batch count. Rooms are processed sequentially (room1 -> room2 ...).
   repeatInConversation: number;
   conversationRoomCount: number;
+  // Query-level parallel worker count per room batch.
   agentParallelCalls: number;
   timeoutMs: number;
   options?: Record<string, unknown>;
@@ -141,6 +181,7 @@ export type ValidationRunItem = {
   targetAssistant?: string;
   conversationRoomIndex: number;
   repeatIndex: number;
+  // Conversation ID from each executed item. Same room does not guarantee a shared ID.
   conversationId: string;
   rawResponse: string;
   latencyMs?: number | null;
@@ -174,6 +215,50 @@ export type ValidationSettings = {
   evalModelDefault: string;
   paginationPageSizeLimitDefault: number;
   updatedAt?: string;
+};
+
+export type ValidationDashboardScoringMetric = {
+  score?: number | null;
+  sampleCount?: number;
+};
+
+export type ValidationDashboardConsistencyMetric = {
+  status: 'READY' | 'PENDING' | string;
+  score?: number | null;
+  eligibleQueryCount: number;
+  consistentQueryCount?: number;
+};
+
+export type ValidationDashboardLatencyMetric = {
+  avgSec?: number | null;
+  p50Sec?: number | null;
+  p90Sec?: number | null;
+  count: number;
+};
+
+export type ValidationDashboardStabilityMetric = {
+  score?: number | null;
+  errorRate: number;
+  emptyRate: number;
+};
+
+export type ValidationDashboardScoring = {
+  intent: ValidationDashboardScoringMetric;
+  accuracy: ValidationDashboardScoringMetric & {
+    legacyFallbackCount?: number;
+    accuracyFallbackCount?: number;
+    accuracyExtractFallbackCount?: number;
+    accuracyFallbackRate?: number;
+  };
+  consistency: ValidationDashboardConsistencyMetric;
+  latencySingle: ValidationDashboardLatencyMetric;
+  latencyMulti: ValidationDashboardLatencyMetric;
+  latencyUnclassifiedCount?: number;
+  stability: ValidationDashboardStabilityMetric;
+};
+
+export type ValidationDashboardDistributions = {
+  scoreBuckets: Record<string, number>;
 };
 
 export type ValidationRunCreateRequest = {
@@ -252,4 +337,32 @@ export type ValidationTestSetAppendQueriesResult = {
   addedCount: number;
   skippedCount: number;
   itemCount: number;
+};
+
+export type ValidationRunActivityItem = {
+  runId: string;
+  runName: string;
+  testSetId?: string | null;
+  status: ValidationRun['status'];
+  evalStatus?: ValidationRun['evalStatus'];
+  totalItems: number;
+  doneItems: number;
+  errorItems: number;
+  llmDoneItems: number;
+  createdAt?: string;
+  startedAt?: string | null;
+  evalStartedAt?: string | null;
+  isRead: boolean;
+};
+
+export type ValidationRunActivityResponse = {
+  items: ValidationRunActivityItem[];
+  unreadCount: number;
+};
+
+export type ValidationRunActivityReadRequest = {
+  environment: Environment;
+  actorKey: string;
+  runIds?: string[];
+  markAll?: boolean;
 };

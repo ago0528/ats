@@ -1,5 +1,7 @@
 import type { ValidationSection } from '../../features/validations/types';
 
+const HISTORY_DETAIL_TAB_VALUES = new Set(['history', 'results']);
+
 export type MenuKey =
   | 'validation-run'
   | 'validation-history'
@@ -69,6 +71,15 @@ export function resolveHistoryRunId(pathname: string) {
   } catch {
     return encodedId;
   }
+}
+
+export function resolveHistoryDetailTab(search: string) {
+  const params = new URLSearchParams(search);
+  const tab = String(params.get('tab') || '').trim().toLowerCase();
+  if (HISTORY_DETAIL_TAB_VALUES.has(tab)) {
+    return tab as 'history' | 'results';
+  }
+  return 'history' as const;
 }
 
 export function isKnownPath(pathname: string) {

@@ -21,6 +21,11 @@ export const EVAL_MODEL_OPTIONS: { label: string; value: string }[] = [
 
 export const DEFAULT_EVAL_MODEL_VALUE = 'gpt-5.2';
 
+export const HISTORY_SLOW_THRESHOLD_SEC = 5;
+export const RESULT_LOW_SCORE_THRESHOLD = 2;
+export const DISPLAY_UNKNOWN_LABEL = '알 수 없음';
+export const DISPLAY_UNCLASSIFIED_LABEL = '미분류';
+
 export const RUN_ITEM_INITIAL_COLUMN_WIDTHS = {
   ordinal: 72,
   queryText: 320,
@@ -42,6 +47,24 @@ export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {
   error: 220,
   logic: 90,
   llm: 110,
+};
+
+export const HISTORY_TAB_INITIAL_COLUMN_WIDTHS = {
+  errorSummary: 240,
+  responseTimeSec: 140,
+  executedAt: 180,
+  status: 120,
+  detail: 96,
+};
+
+export const RESULTS_TAB_INITIAL_COLUMN_WIDTHS = {
+  totalScore: 120,
+  intent: 120,
+  accuracy: 120,
+  consistency: 120,
+  speed: 140,
+  stability: 120,
+  detail: 96,
 };
 
 export const HISTORY_INITIAL_COLUMN_WIDTHS = {

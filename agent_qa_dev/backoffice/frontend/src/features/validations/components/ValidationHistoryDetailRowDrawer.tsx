@@ -1,5 +1,4 @@
 import {
-  Card,
   Collapse,
   Descriptions,
   Drawer,
@@ -52,117 +51,115 @@ export function ValidationHistoryDetailRowDrawer({
       onClose={onClose}
     >
       {item ? (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <Card size="small" title="요약">
-            <Descriptions size="small" column={1}>
-              <Descriptions.Item label="상태">
-                {'status' in row ? (
-                  <Tag color={getRunItemStatusColor(row.status)}>
-                    {row.statusLabel}
-                  </Tag>
-                ) : (
-                  '-'
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="실행시각">
-                {item.executedAt || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="총 응답시간">
-                {'responseTimeText' in row ? row.responseTimeText : '-'}
-              </Descriptions.Item>
-              {activeTab === 'results' && resultsRow ? (
-                <>
-                  <Descriptions.Item label="대표 점수">
-                    {resultsRow.totalScoreText}
+        <Collapse
+          defaultActiveKey={['summary']}
+          items={[
+            {
+              key: 'summary',
+              label: '요약',
+              children: (
+                <Descriptions size="small" column={1}>
+                  <Descriptions.Item label="상태">
+                    {'status' in row ? (
+                      <Tag color={getRunItemStatusColor(row.status)}>
+                        {row.statusLabel}
+                      </Tag>
+                    ) : (
+                      item.llmEvaluation?.status || '-'
+                    )}
                   </Descriptions.Item>
-                  <Descriptions.Item label="의도 충족">
-                    {resultsRow.intentScoreText}
+                  <Descriptions.Item label="실행 시각">
+                    {item.executedAt || '-'}
                   </Descriptions.Item>
-                  <Descriptions.Item label="정확성">
-                    {resultsRow.accuracyScoreText}
+                  <Descriptions.Item label="응답 시간">
+                    {'responseTimeText' in row ? row.responseTimeText : (resultsRow?.speedText || '-')}
                   </Descriptions.Item>
-                  <Descriptions.Item label="일관성">
-                    {resultsRow.consistencyScoreText}
+                  {activeTab === 'results' && resultsRow ? (
+                    <>
+                      <Descriptions.Item label="대표 점수">
+                        {resultsRow.totalScoreText}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="의도 충족">
+                        {resultsRow.intentScoreText}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="정확성">
+                        {resultsRow.accuracyScoreText}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="일관성">
+                        {resultsRow.consistencyScoreText}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="안정성">
+                        {resultsRow.stabilityScoreText}
+                      </Descriptions.Item>
+                    </>
+                  ) : null}
+                  <Descriptions.Item label="오류">
+                    {item.error || '-'}
                   </Descriptions.Item>
-                  <Descriptions.Item label="안정성">
-                    {resultsRow.stabilityScoreText}
-                  </Descriptions.Item>
-                </>
-              ) : null}
-            </Descriptions>
-          </Card>
-
-          <Card size="small" title="요청(Request) 전문">
-            {renderTextBlock(String(item.queryText || ''))}
-          </Card>
-
-          <Card size="small" title="응답(Response) 전문">
-            {renderTextBlock(String(item.rawResponse || ''))}
-          </Card>
-
-          <Card size="small" title="메타 데이터">
-            <Descriptions size="small" column={1}>
-              <Descriptions.Item label="Room/Repeat">
-                {item.conversationRoomIndex}/{item.repeatIndex}
-              </Descriptions.Item>
-              <Descriptions.Item label="Conversation ID">
-                {item.conversationId || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="기대결과">
-                {item.expectedResult || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="카테고리">
-                {item.category || '-'}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
-
-          <Card size="small" title="오류 상세">
-            {renderTextBlock(String(item.error || ''))}
-          </Card>
-
-          <Collapse
-            items={[
-              {
-                key: 'internal-code',
-                label: '로우 데이터',
-                children: (
-                  <Space
-                    direction="vertical"
-                    size={8}
-                    style={{ width: '100%' }}
-                  >
-                    <Card size="small" title="JSON">
-                      {renderTextBlock(tryPrettyJson(item.rawJson, ''))}
-                    </Card>
-                    <Card size="small" title="기대 결과">
-                      {renderTextBlock(
-                        typeof item.appliedCriteria === 'string'
-                          ? tryPrettyJson(item.appliedCriteria, '')
-                          : JSON.stringify(item.appliedCriteria || {}, null, 2),
-                      )}
-                    </Card>
-                    <Card size="small" title="LLM 평가 결과">
-                      {renderTextBlock(
-                        JSON.stringify(
-                          {
-                            status: item.llmEvaluation?.status,
-                            evalModel: item.llmEvaluation?.evalModel,
-                            metricScores: item.llmEvaluation?.metricScores,
-                            totalScore: item.llmEvaluation?.totalScore,
-                            comment: item.llmEvaluation?.comment,
-                          },
-                          null,
-                          2,
-                        ),
-                      )}
-                    </Card>
-                  </Space>
+                </Descriptions>
+              ),
+            },
+            {
+              key: 'query',
+              label: '질의',
+              children: renderTextBlock(String(item.queryText || '')),
+            },
+            {
+              key: 'meta',
+              label: '메타 데이터',
+              children: (
+                <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Descriptions size="small" column={1}>
+                    <Descriptions.Item label="카테고리">
+                      {item.category || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="대화 방 번호">
+                      {item.conversationRoomIndex}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="반복 실행 번호">
+                      {item.repeatIndex}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="대화 ID">
+                      {item.conversationId || '-'}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="대상 어시스턴트">
+                      {item.targetAssistant || '-'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                  <Typography.Text type="secondary">컨텍스트(JSON)</Typography.Text>
+                  {renderTextBlock(tryPrettyJson(item.contextJson, String(item.contextJson || '-')))}
+                </Space>
+              ),
+            },
+            {
+              key: 'raw',
+              label: '로우 데이터',
+              children: renderTextBlock(tryPrettyJson(item.rawJson, '')),
+            },
+            {
+              key: 'expected-result',
+              label: '기대결과(스냅샷)',
+              children: renderTextBlock(String(item.expectedResult || '')),
+            },
+            {
+              key: 'llm-evaluation',
+              label: 'LLM 평가 결과',
+              children: renderTextBlock(
+                JSON.stringify(
+                  {
+                    status: item.llmEvaluation?.status,
+                    evalModel: item.llmEvaluation?.evalModel,
+                    metricScores: item.llmEvaluation?.metricScores,
+                    totalScore: item.llmEvaluation?.totalScore,
+                    comment: item.llmEvaluation?.comment,
+                  },
+                  null,
+                  2,
                 ),
-              },
-            ]}
-          />
-        </Space>
+              ),
+            },
+          ]}
+        />
       ) : null}
     </Drawer>
   );

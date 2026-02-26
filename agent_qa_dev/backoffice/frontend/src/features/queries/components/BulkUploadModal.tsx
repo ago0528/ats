@@ -98,7 +98,7 @@ export function BulkUploadModal({
                   dataSource={previewRows}
                   tableLayout="fixed"
                   pagination={false}
-                  scroll={{ x: 3300, y: 280 }}
+                  scroll={{ x: 1800, y: 280 }}
                   locale={{ emptyText: previewEmptyText }}
                 />
                 {previewTotal > BULK_UPLOAD_PREVIEW_LIMIT ? (
@@ -107,19 +107,10 @@ export function BulkUploadModal({
                   </Typography.Text>
                 ) : null}
                 <Typography.Text type="secondary">
-                  `formType/actionType/dataKey/buttonKey/buttonUrlContains/multiSelectAllowYn` 컬럼을 채우면 aqb.v1 정확성 규칙이 자동 생성됩니다.
-                </Typography.Text>
-                <Typography.Text type="secondary">
                   `기대 결과`는 필수입니다. 비어 있으면 run 평가가 차단됩니다.
                 </Typography.Text>
                 <Typography.Text type="secondary">
-                  `기대 결과` 셀에서 `@check formType=ACTION; @check dataKey=RECRUIT_PLAN_CREATE_SAVE` 형식으로 정확성 키태그를 함께 사용할 수 있습니다.
-                </Typography.Text>
-                <Typography.Text type="secondary">
                   `latencyClass` 컬럼은 `SINGLE` 또는 `MULTI`만 허용됩니다.
-                </Typography.Text>
-                <Typography.Text type="secondary">
-                  보조 컬럼과 aqb.v1 JSON이 모두 비어 있으면 legacy 폴백으로 저장되며, 평가 시 정확성 신뢰도 경고가 표시됩니다.
                 </Typography.Text>
                 <Typography.Text type="secondary">CSV의 그룹 값이 비어 있으면 그룹 미지정으로 등록됩니다.</Typography.Text>
               </Space>

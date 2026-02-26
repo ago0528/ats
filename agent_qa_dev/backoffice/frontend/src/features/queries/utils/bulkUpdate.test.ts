@@ -11,7 +11,6 @@ function buildQuery(overrides?: Partial<ValidationQuery>): ValidationQuery {
     category: 'Happy path',
     groupId: 'g-1',
     groupName: '그룹A',
-    llmEvalCriteria: { 정확성: 5 },
     logicFieldPath: 'assistantMessage',
     logicExpectedValue: '채용',
     contextJson: '{"foo":"bar"}',
@@ -46,7 +45,7 @@ describe('bulk update csv utils', () => {
   });
 
   it('maps changed fields into Korean labels', () => {
-    expect(toChangedFieldLabels(['queryText', 'llmEvalCriteria'])).toEqual(['질의', 'LLM 평가기준(JSON)']);
+    expect(toChangedFieldLabels(['queryText', 'logicFieldPath'])).toEqual(['질의', 'Logic 검증 필드']);
   });
 
   it('maps preview rows for table rendering', () => {
@@ -66,4 +65,3 @@ describe('bulk update csv utils', () => {
     });
   });
 });
-

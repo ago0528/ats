@@ -136,6 +136,21 @@ def startup() -> None:
     _ensure_sqlite_column("validation_runs", "eval_started_at", "eval_started_at DATETIME")
     _ensure_sqlite_column("validation_runs", "eval_finished_at", "eval_finished_at DATETIME")
     _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "llm_output_json",
+        "llm_output_json TEXT NOT NULL DEFAULT ''",
+    )
+    _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "prompt_version",
+        "prompt_version TEXT NOT NULL DEFAULT ''",
+    )
+    _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "input_hash",
+        "input_hash TEXT NOT NULL DEFAULT ''",
+    )
+    _ensure_sqlite_column(
         "validation_settings",
         "pagination_page_size_limit_default",
         "pagination_page_size_limit_default INTEGER NOT NULL DEFAULT 100",

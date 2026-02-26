@@ -42,7 +42,6 @@ const item = (id: string, partial?: Partial<ValidationRunItem>): ValidationRunIt
     queryText: `query-${id}`,
     expectedResult: '',
     category: 'Happy path',
-    appliedCriteria: '',
     logicFieldPath: '',
     logicExpectedValue: '',
     conversationRoomIndex: 1,
@@ -57,9 +56,9 @@ const item = (id: string, partial?: Partial<ValidationRunItem>): ValidationRunIt
       status: 'DONE',
       evalModel: 'gpt-5.2',
       metricScores: {
-        의도충족: 4,
-        정확성: 4,
-        안정성: 5,
+        intent: 4,
+        accuracy: 4,
+        stability: 5,
       },
       totalScore: 4.33,
       comment: 'ok',
@@ -104,7 +103,7 @@ describe('history detail row helpers', () => {
         llmEvaluation: {
           status: 'DONE',
           evalModel: 'gpt-5.2',
-          metricScores: { 의도충족: 4, 정확성: 4, 안정성: 5 },
+          metricScores: { intent: 4, accuracy: 4, stability: 5 },
           totalScore: 4.3,
           comment: '',
         },
@@ -114,7 +113,7 @@ describe('history detail row helpers', () => {
         llmEvaluation: {
           status: 'DONE_WITH_EXEC_ERROR',
           evalModel: 'gpt-5.2',
-          metricScores: { 의도충족: 1, 정확성: 1, 안정성: 0 },
+          metricScores: { intent: 1, accuracy: 1, stability: 0 },
           totalScore: 0.6,
           comment: '',
         },
@@ -123,7 +122,7 @@ describe('history detail row helpers', () => {
         llmEvaluation: {
           status: 'DONE',
           evalModel: 'gpt-5.2',
-          metricScores: { 의도충족: 2, 정확성: 2, 안정성: 5 },
+          metricScores: { intent: 2, accuracy: 2, stability: 5 },
           totalScore: 3.0,
           comment: '',
         },
@@ -181,8 +180,8 @@ describe('history detail row helpers', () => {
   it('builds KPI summary from run and items', () => {
     const items = [
       item('a'),
-      item('b', { error: 'boom', llmEvaluation: { status: 'DONE_WITH_EXEC_ERROR', evalModel: 'gpt-5.2', metricScores: { 의도충족: 1, 정확성: 1, 안정성: 0 }, totalScore: 0.66, comment: '' } }),
-      item('c', { llmEvaluation: { status: 'DONE', evalModel: 'gpt-5.2', metricScores: { 의도충족: 3, 정확성: 3, 안정성: 5 }, totalScore: 3.66, comment: '' } }),
+      item('b', { error: 'boom', llmEvaluation: { status: 'DONE_WITH_EXEC_ERROR', evalModel: 'gpt-5.2', metricScores: { intent: 1, accuracy: 1, stability: 0 }, totalScore: 0.66, comment: '' } }),
+      item('c', { llmEvaluation: { status: 'DONE', evalModel: 'gpt-5.2', metricScores: { intent: 3, accuracy: 3, stability: 5 }, totalScore: 3.66, comment: '' } }),
     ];
     const kpi = buildResultsKpi(run(), items);
     expect(kpi.intent.sampleCount).toBe(3);

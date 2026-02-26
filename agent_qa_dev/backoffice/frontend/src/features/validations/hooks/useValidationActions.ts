@@ -27,7 +27,6 @@ export function useValidationActions({
   selectedQueryIds,
   adHocQueryText,
   adHocExpected,
-  adHocCriteria,
   adHocLogicFieldPath,
   adHocLogicExpected,
   createRunOverrides,
@@ -49,7 +48,6 @@ export function useValidationActions({
   selectedQueryIds: string[];
   adHocQueryText: string;
   adHocExpected: string;
-  adHocCriteria: string;
   adHocLogicFieldPath: string;
   adHocLogicExpected: string;
   createRunOverrides: RunCreateOverrides;
@@ -90,7 +88,6 @@ export function useValidationActions({
               queryText: adHocQueryText,
               expectedResult: adHocExpected,
               category: 'Happy path',
-              llmEvalCriteria: adHocCriteria,
               logicFieldPath: adHocLogicFieldPath,
               logicExpectedValue: adHocLogicExpected,
             },
@@ -115,7 +112,6 @@ export function useValidationActions({
     selectedQueryIds,
     adHocQueryText,
     adHocExpected,
-    adHocCriteria,
     adHocLogicFieldPath,
     adHocLogicExpected,
     message,

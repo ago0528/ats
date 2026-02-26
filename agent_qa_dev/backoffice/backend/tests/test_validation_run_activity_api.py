@@ -45,6 +45,11 @@ def test_validation_run_activity_flow():
     other_env_run = _create_run(repo, environment=Environment.ST2, name="타 환경 Run")
     repo.set_status(other_env_run.id, RunStatus.RUNNING)
 
+    running_run_id = running_run.id
+    evaluating_run_id = evaluating_run.id
+    done_run_id = done_run.id
+    other_env_run_id = other_env_run.id
+
     db.commit()
     db.close()
 
@@ -55,10 +60,10 @@ def test_validation_run_activity_flow():
     assert initial_resp.status_code == 200
     initial_data = initial_resp.json()
     initial_ids = {item["runId"] for item in initial_data["items"]}
-    assert running_run.id in initial_ids
-    assert evaluating_run.id in initial_ids
-    assert done_run.id not in initial_ids
-    assert other_env_run.id not in initial_ids
+    assert running_run_id in initial_ids
+    assert evaluating_run_id in initial_ids
+    assert done_run_id not in initial_ids
+    assert other_env_run_id not in initial_ids
     assert initial_data["unreadCount"] == 2
 
     read_one_resp = client.post(
@@ -66,7 +71,7 @@ def test_validation_run_activity_flow():
         json={
             "environment": "dev",
             "actorKey": "actor-1",
-            "runIds": [running_run.id],
+            "runIds": [running_run_id],
         },
     )
     assert read_one_resp.status_code == 200
@@ -79,8 +84,8 @@ def test_validation_run_activity_flow():
     assert after_single_read_resp.status_code == 200
     after_single_read_data = after_single_read_resp.json()
     by_run_id = {item["runId"]: item for item in after_single_read_data["items"]}
-    assert by_run_id[running_run.id]["isRead"] is True
-    assert by_run_id[evaluating_run.id]["isRead"] is False
+    assert by_run_id[running_run_id]["isRead"] is True
+    assert by_run_id[evaluating_run_id]["isRead"] is False
     assert after_single_read_data["unreadCount"] == 1
 
     read_all_resp = client.post(
@@ -92,7 +97,7 @@ def test_validation_run_activity_flow():
         },
     )
     assert read_all_resp.status_code == 200
-    assert read_all_resp.json()["updatedCount"] == 2
+    assert read_all_resp.json()["updatedCount"] == 1
 
     final_resp = client.get(
         "/api/v1/validation-run-activity",

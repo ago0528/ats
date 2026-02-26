@@ -84,17 +84,89 @@ def robust_json_loads(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _matches_schema_type(value: Any, schema_type: str) -> bool:
+    if schema_type == "object":
+        return isinstance(value, dict)
+    if schema_type == "array":
+        return isinstance(value, list)
+    if schema_type == "string":
+        return isinstance(value, str)
+    if schema_type == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if schema_type == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if schema_type == "boolean":
+        return isinstance(value, bool)
+    if schema_type == "null":
+        return value is None
+    return True
+
+
+def _validate_schema_value(value: Any, schema: Dict[str, Any], path: str = "$") -> Optional[str]:
+    allowed_types: list[str] = []
+    raw_type = schema.get("type")
+    if isinstance(raw_type, str):
+        allowed_types = [raw_type]
+    elif isinstance(raw_type, list):
+        allowed_types = [str(item) for item in raw_type if isinstance(item, str)]
+
+    if allowed_types:
+        if not any(_matches_schema_type(value, schema_type) for schema_type in allowed_types):
+            return f"type_mismatch at {path}: expected {allowed_types}, got {type(value).__name__}"
+
+    if isinstance(value, dict):
+        required = schema.get("required")
+        if isinstance(required, list):
+            for key in required:
+                if isinstance(key, str) and key not in value:
+                    return f"missing_required at {path}.{key}"
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            for key, sub_schema in properties.items():
+                if not isinstance(key, str) or key not in value:
+                    continue
+                if not isinstance(sub_schema, dict):
+                    continue
+                err = _validate_schema_value(value[key], sub_schema, f"{path}.{key}")
+                if err:
+                    return err
+    elif isinstance(value, list):
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for idx, item in enumerate(value):
+                err = _validate_schema_value(item, item_schema, f"{path}[{idx}]")
+                if err:
+                    return err
+
+    return None
+
+
 async def openai_judge_once(
     session: aiohttp.ClientSession,
     api_key: str,
     model: str,
     prompt_text: str,
     timeout_sec: int = 90,
+    *,
+    response_schema: Optional[Dict[str, Any]] = None,
+    schema_name: str = "judge_output",
+    strict_schema: bool = True,
 ) -> Tuple[Optional[Dict[str, Any]], Dict[str, int], str]:
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    text_format: Dict[str, Any]
+    if response_schema:
+        text_format = {
+            "type": "json_schema",
+            "name": schema_name,
+            "schema": response_schema,
+            "strict": bool(strict_schema),
+        }
+    else:
+        text_format = {"type": "json_object"}
+
     payload = {
         "model": model,
         "input": [
@@ -104,7 +176,7 @@ async def openai_judge_once(
             },
             {"role": "user", "content": prompt_text},
         ],
-        "text": {"format": {"type": "json_object"}},
+        "text": {"format": text_format},
         "temperature": 0,
     }
     try:
@@ -118,6 +190,10 @@ async def openai_judge_once(
             result = robust_json_loads(text)
             if result is None:
                 return None, usage, f"OpenAI output is not JSON. raw={text[:200]}"
+            if response_schema:
+                schema_error = _validate_schema_value(result, response_schema)
+                if schema_error:
+                    return None, usage, f"SCHEMA_VALIDATION_FAILED:{schema_error}"
             return result, usage, ""
     except asyncio.TimeoutError:
         return None, {}, f"OpenAI timeout({timeout_sec}s)"
@@ -131,13 +207,25 @@ async def openai_judge_with_retry(
     model: str,
     prompt_text: str,
     max_retries: int = 2,
+    *,
+    response_schema: Optional[Dict[str, Any]] = None,
+    schema_name: str = "judge_output",
+    strict_schema: bool = True,
 ) -> Tuple[Optional[Dict[str, Any]], Dict[str, int], str]:
     wait = 2.0
     last_err = ""
     last_usage: Dict[str, int] = {}
 
     for _ in range(max_retries + 1):
-        result, usage, err = await openai_judge_once(session, api_key, model, prompt_text)
+        result, usage, err = await openai_judge_once(
+            session,
+            api_key,
+            model,
+            prompt_text,
+            response_schema=response_schema,
+            schema_name=schema_name,
+            strict_schema=strict_schema,
+        )
         if usage:
             last_usage = usage
         if result is not None and not err:
@@ -147,4 +235,3 @@ async def openai_judge_with_retry(
         wait *= 2
 
     return None, last_usage, last_err
-

@@ -58,9 +58,6 @@ export function QueryFormModal({
         <Form.Item name="expectedResult" label="기대 결과">
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
         </Form.Item>
-        <Form.Item name="llmEvalCriteria" label="LLM 평가기준(JSON)">
-          <Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} />
-        </Form.Item>
         <Space style={{ width: '100%' }} size={12}>
           <Form.Item name="logicFieldPath" label="Logic 검증 필드" style={{ minWidth: 220 }}>
             <Input placeholder="assistantMessage" />

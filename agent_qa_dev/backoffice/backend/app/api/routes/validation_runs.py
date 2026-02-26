@@ -4,7 +4,6 @@ import datetime as dt
 import io
 import json
 import os
-import re
 import uuid
 from typing import Any, Optional
 
@@ -35,7 +34,6 @@ class AdHocQueryPayload(BaseModel):
     queryText: str = Field(min_length=1)
     expectedResult: str = ""
     category: str = "Happy path"
-    llmEvalCriteria: Any = None
     logicFieldPath: str = ""
     logicExpectedValue: str = ""
 
@@ -75,7 +73,6 @@ class SaveQueryPayload(BaseModel):
     createdBy: str = "unknown"
     queryText: Optional[str] = None
     expectedResult: Optional[str] = None
-    llmEvalCriteria: Any = None
     logicFieldPath: Optional[str] = None
     logicExpectedValue: Optional[str] = None
 
@@ -122,14 +119,6 @@ def _resolve_openai_api_key() -> Optional[str]:
     return (os.getenv("BACKOFFICE_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip() or None
 
 
-def _json_text(value: Any) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False)
-
-
 def _serialize_json(value: str) -> Any:
     text = (value or "").strip()
     if not text:
@@ -155,20 +144,6 @@ def _metric_scores(value: str) -> dict[str, float]:
         if isinstance(metric, (int, float)):
             out[str(key)] = float(metric)
     return out
-
-
-def _extract_accuracy_source_tag(comment: str) -> str:
-    match = re.search(r"\[ACCURACY_SOURCE:([^\]]+)\]", str(comment or ""))
-    if not match:
-        return ""
-    return str(match.group(1) or "").strip()
-
-
-def _extract_failed_checks_tag(comment: str) -> str:
-    match = re.search(r"\[ACCURACY_FAILED_PATHS:([^\]]+)\]", str(comment or ""))
-    if not match:
-        return ""
-    return str(match.group(1) or "").strip()
 
 
 def _normalize_run_name(name: str | None, fallback: str) -> str:
@@ -567,7 +542,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
         for room_index in range(1, int(conversation_room_count) + 1):
             for repeat_index in range(1, int(repeat_in_conversation) + 1):
                 for query in selected_queries:
-                    criteria = query.llm_eval_criteria_json
                     target_assistant = (query.target_assistant or "").strip() or agent_id
                     items_payload.append(
                         {
@@ -576,7 +550,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                             "query_text_snapshot": query.query_text,
                             "expected_result_snapshot": query.expected_result,
                             "category_snapshot": query.category,
-                            "applied_criteria_json": criteria,
                             "logic_field_path_snapshot": query.logic_field_path,
                             "logic_expected_value_snapshot": query.logic_expected_value,
                             "context_json_snapshot": query.context_json,
@@ -596,7 +569,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                         "query_text_snapshot": body.adHocQuery.queryText,
                         "expected_result_snapshot": body.adHocQuery.expectedResult,
                         "category_snapshot": body.adHocQuery.category or "Happy path",
-                        "applied_criteria_json": _json_text(body.adHocQuery.llmEvalCriteria),
                         "logic_field_path_snapshot": body.adHocQuery.logicFieldPath or "",
                         "logic_expected_value_snapshot": body.adHocQuery.logicExpectedValue or "",
                         "context_json_snapshot": "",
@@ -694,7 +666,6 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                 "queryText": row.query_text_snapshot,
                 "expectedResult": row.expected_result_snapshot,
                 "category": row.category_snapshot,
-                "appliedCriteria": _serialize_json(row.applied_criteria_json),
                 "logicFieldPath": row.logic_field_path_snapshot,
                 "logicExpectedValue": row.logic_expected_value_snapshot,
                 "contextJson": row.context_json_snapshot,
@@ -877,15 +848,19 @@ def export_run(run_id: str, includeDebug: bool = Query(default=False), db: Sessi
             "Logic 사유": logic_map[row.id].fail_reason if row.id in logic_map else "",
             "LLM 상태": llm.status if llm is not None else "",
             "LLM 모델": llm.eval_model if llm is not None else "",
-            "의도충족 점수": llm_metrics.get("의도충족", ""),
-            "정확성 점수": llm_metrics.get("정확성", ""),
-            "안정성 점수": llm_metrics.get("안정성", ""),
+            "의도충족 점수": llm_metrics.get("intent", ""),
+            "정확성 점수": llm_metrics.get("accuracy", ""),
+            "일관성 점수": llm_metrics.get("consistency", ""),
+            "속도(SINGLE) 점수": llm_metrics.get("latencySingle", ""),
+            "속도(MULTI) 점수": llm_metrics.get("latencyMulti", ""),
+            "안정성 점수": llm_metrics.get("stability", ""),
+            "LLM 평가 코멘트": llm_comment,
             "Raw JSON": row.raw_json or "",
         }
         if includeDebug:
-            output_row["LLM 코멘트"] = llm_comment
-            output_row["정확성 실패체크"] = _extract_failed_checks_tag(llm_comment)
-            output_row["정확성 소스"] = _extract_accuracy_source_tag(llm_comment)
+            output_row["LLM 출력(JSON)"] = llm.llm_output_json if llm is not None else ""
+            output_row["프롬프트 버전"] = llm.prompt_version if llm is not None else ""
+            output_row["입력 해시"] = llm.input_hash if llm is not None else ""
         rows.append(output_row)
 
     df = pd.DataFrame(rows)
@@ -1062,7 +1037,6 @@ def save_run_item_as_query(run_id: str, item_id: str, body: SaveQueryPayload, db
         expected_result=body.expectedResult or item.expected_result_snapshot,
         category=body.category or item.category_snapshot,
         group_id=body.groupId,
-        llm_eval_criteria=body.llmEvalCriteria if body.llmEvalCriteria is not None else item.applied_criteria_json,
         logic_field_path=body.logicFieldPath if body.logicFieldPath is not None else item.logic_field_path_snapshot,
         logic_expected_value=body.logicExpectedValue if body.logicExpectedValue is not None else item.logic_expected_value_snapshot,
         context_json=item.context_json_snapshot,

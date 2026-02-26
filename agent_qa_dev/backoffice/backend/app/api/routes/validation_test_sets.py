@@ -575,7 +575,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
     for room_index in range(1, int(conversation_room_count) + 1):
         for repeat_index in range(1, int(repeat_in_conversation) + 1):
             for query in ordered_queries:
-                criteria = query.llm_eval_criteria_json
                 target_assistant = (query.target_assistant or "").strip() or agent_id
                 items_payload.append(
                     {
@@ -584,7 +583,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
                         "query_text_snapshot": query.query_text,
                         "expected_result_snapshot": query.expected_result,
                         "category_snapshot": query.category,
-                        "applied_criteria_json": criteria,
                         "logic_field_path_snapshot": query.logic_field_path,
                         "logic_expected_value_snapshot": query.logic_expected_value,
                         "context_json_snapshot": query.context_json,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import uuid
 from typing import Any, Optional
 
 from sqlalchemy import and_, delete, func, or_
@@ -530,6 +531,9 @@ class ValidationRunRepository:
         total_score: Optional[float],
         llm_comment: str,
         status: str,
+        llm_output: str = "",
+        prompt_version: str = "",
+        input_hash: str = "",
     ) -> ValidationLlmEvaluation:
         entity = self.db.query(ValidationLlmEvaluation).filter(ValidationLlmEvaluation.run_item_id == run_item_id).first()
         if entity is None:
@@ -539,6 +543,9 @@ class ValidationRunRepository:
         entity.metric_scores_json = _to_json_text(metric_scores)
         entity.total_score = total_score
         entity.llm_comment = llm_comment or ""
+        entity.llm_output_json = llm_output or ""
+        entity.prompt_version = prompt_version or ""
+        entity.input_hash = input_hash or ""
         entity.status = status
         entity.evaluated_at = dt.datetime.utcnow()
         self.db.flush()
@@ -651,7 +658,6 @@ class ValidationRunRepository:
                     "query_text_snapshot": item.query_text_snapshot,
                     "expected_result_snapshot": item.expected_result_snapshot,
                     "category_snapshot": item.category_snapshot,
-                    "applied_criteria_json": item.applied_criteria_json,
                     "logic_field_path_snapshot": item.logic_field_path_snapshot,
                     "logic_expected_value_snapshot": item.logic_expected_value_snapshot,
                     "context_json_snapshot": item.context_json_snapshot,

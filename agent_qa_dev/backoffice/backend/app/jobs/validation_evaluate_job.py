@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import re
 from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 import aiohttp
@@ -14,29 +15,33 @@ from app.core.db import SessionLocal
 from app.core.enums import EvalStatus
 from app.repositories.validation_runs import ValidationRunRepository
 from app.services.logic_check import run_logic_check
-from app.services.validation_scoring import (
-    ACCURACY_LLM_EXTRACT_FALLBACK_TAG,
-    LEGACY_ACCURACY_FALLBACK_TAG,
-    average,
-    evaluate_accuracy_checks,
-    merge_accuracy_checks,
-    parse_applied_criteria,
-    parse_expected_result_accuracy_checks,
-    parse_raw_payload,
-    score_stability,
-)
+from app.services.validation_scoring import average, extract_response_time_sec, parse_raw_payload, score_stability
 
-INTENT_PROMPT_VERSION = "intent-v2.0.0"
-INTENT_VERDICT_SCORE_MAP: dict[str, float] = {
-    "PERFECT": 5.0,
-    "GOOD": 4.0,
-    "PARTIAL": 3.0,
-    "WEAK": 2.0,
-    "RELATED_BUT_WRONG": 1.0,
-    "FAILED": 0.0,
-}
-ACCURACY_SOURCE_TAG_PREFIX = "[ACCURACY_SOURCE:"
-ACCURACY_FAILED_PATHS_TAG_PREFIX = "[ACCURACY_FAILED_PATHS:"
+PROMPT_VERSION = "single-prompt-v2.0.0"
+METRIC_KEYS = ("intent", "accuracy", "consistency", "latencySingle", "latencyMulti", "stability")
+CONSISTENCY_KEY = "consistency"
+
+_DOCS_ROOT = Path(__file__).resolve().parents[4] / "docs" / "evaluating"
+_PROMPT_PATH = _DOCS_ROOT / "prompt_for_scoring.txt"
+_SCHEMA_PATH = _DOCS_ROOT / "prompt_for_scoring_output_schema.json"
+
+
+def _safe_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _clamp_score(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except Exception:
+        return None
+    if parsed < 0:
+        return 0.0
+    if parsed > 5:
+        return 5.0
+    return parsed
 
 
 def _parse_metric_scores(metric_scores_json: str) -> dict[str, float]:
@@ -51,81 +56,105 @@ def _parse_metric_scores(metric_scores_json: str) -> dict[str, float]:
 
     out: dict[str, float] = {}
     for key, value in payload.items():
-        if isinstance(value, (int, float)):
-            out[str(key)] = float(value)
+        parsed = _clamp_score(value)
+        if parsed is not None:
+            out[str(key)] = parsed
     return out
 
 
-def _normalize_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+def _normalize_prompt_text(text: str) -> str:
+    normalized = str(text or "").replace("\r\n", "\n").strip()
+    if not normalized:
+        raise ValueError("prompt_for_scoring.txt is empty")
+    return normalized
 
 
-def _canonicalize_json_value(value: Any) -> Any:
+def _load_prompt_and_schema() -> tuple[str, dict[str, Any], str, bool]:
+    prompt_text = _normalize_prompt_text(_PROMPT_PATH.read_text(encoding="utf-8"))
+    schema_payload = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema = schema_payload.get("schema")
+    if not isinstance(schema, dict):
+        raise ValueError("prompt_for_scoring_output_schema.json must contain object field `schema`")
+    schema_name = str(schema_payload.get("name") or "score_eval")
+    strict = bool(schema_payload.get("strict", True))
+    return prompt_text, schema, schema_name, strict
+
+
+def _canonicalize_json_value(value: Any, *, max_text: int) -> Any:
     if isinstance(value, dict):
-        return {key: _canonicalize_json_value(value[key]) for key in sorted(value.keys())}
+        return {
+            str(key): _canonicalize_json_value(value[key], max_text=max_text)
+            for key in sorted(value.keys())
+        }
     if isinstance(value, list):
-        return [_canonicalize_json_value(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
+        return [_canonicalize_json_value(item, max_text=max_text) for item in value[:20]]
+    if isinstance(value, str):
+        return value[:max_text]
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
-    return str(value)
+    return str(value)[:max_text]
 
 
-def _build_intent_input_payload(item: Any, raw_payload: dict[str, Any], max_chars: int) -> dict[str, Any]:
-    data_ui = raw_payload.get("dataUIList")
-    if not isinstance(data_ui, list):
-        data_ui = []
-    payload = {
-        "query": _normalize_text(item.query_text_snapshot)[:max_chars],
-        "expectedResult": _normalize_text(item.expected_result_snapshot)[:max_chars],
-        "assistantMessage": _normalize_text(raw_payload.get("assistantMessage"))[:max_chars],
-        "dataUIList": _canonicalize_json_value(data_ui[:3]),
+def _build_row_raw_payload(raw_payload: dict[str, Any], *, max_text: int) -> dict[str, Any]:
+    return {
+        "assistantMessage": _safe_text(raw_payload.get("assistantMessage"))[:max_text],
+        "dataUIList": _canonicalize_json_value(raw_payload.get("dataUIList"), max_text=max_text),
+        "setting": _canonicalize_json_value(raw_payload.get("setting"), max_text=max_text),
+        "filterType": _canonicalize_json_value(raw_payload.get("filterType"), max_text=max_text),
+        "raw": _canonicalize_json_value(raw_payload, max_text=max_text),
     }
-    return payload
 
 
-def _extract_intent_verdict(result: Any) -> tuple[float | None, str, list[str]]:
-    if not isinstance(result, dict):
-        return None, "", []
-    verdict = str(result.get("intent_verdict") or "").strip().upper()
-    score = INTENT_VERDICT_SCORE_MAP.get(verdict)
-    comment = _normalize_text(result.get("comment"))
-    evidence_raw = result.get("evidence")
-    evidence: list[str] = []
-    if isinstance(evidence_raw, list):
-        for entry in evidence_raw[:3]:
-            text = _normalize_text(entry)
-            if text:
-                evidence.append(text)
-    return score, comment, evidence
+@dataclass
+class ItemEvalDraft:
+    item_id: str
+    query_id: str
+    metric_scores: dict[str, Any]
+    llm_comment: str
+    status: str
+    llm_output_json: str
+    prompt_version: str
+    input_hash: str
 
 
-def _extract_accuracy_checks_from_llm_result(result: Any) -> list[dict[str, Any]]:
-    if not isinstance(result, dict):
-        return []
-    supported_keys = (
-        "formType",
-        "actionType",
-        "dataKey",
-        "buttonKey",
-        "buttonUrlContains",
-        "multiSelectAllowYn",
-        "assistantMessageContains",
-    )
-    lines: list[str] = []
-    for key in supported_keys:
-        value = result.get(key)
-        if value is None:
+def _build_total_score(metric_scores: dict[str, Any]) -> float | None:
+    intent = _clamp_score(metric_scores.get("intent"))
+    accuracy = _clamp_score(metric_scores.get("accuracy"))
+    stability = _clamp_score(metric_scores.get("stability"))
+    consistency = _clamp_score(metric_scores.get("consistency"))
+    if intent is None or accuracy is None or stability is None:
+        return None
+    values = [intent, accuracy, stability]
+    if consistency is not None:
+        values.append(consistency)
+    total = average(values)
+    if total is None:
+        return None
+    return round(float(total), 4)
+
+
+def _sync_consistency_by_query_id(drafts: list[ItemEvalDraft]) -> None:
+    grouped: dict[str, list[ItemEvalDraft]] = defaultdict(list)
+    for draft in drafts:
+        if draft.query_id:
+            grouped[draft.query_id].append(draft)
+
+    for query_id, rows in grouped.items():
+        if not query_id:
             continue
-        if isinstance(value, bool):
-            value_text = "true" if value else "false"
-        else:
-            value_text = str(value).strip()
-        if not value_text:
+        if len(rows) < 2:
+            for draft in rows:
+                draft.metric_scores[CONSISTENCY_KEY] = None
             continue
-        lines.append(f"@check {key}={value_text}")
-    if not lines:
-        return []
-    return parse_expected_result_accuracy_checks("\n".join(lines))
+
+        shared_value: float | None = None
+        for draft in rows:
+            parsed = _clamp_score(draft.metric_scores.get(CONSISTENCY_KEY))
+            if parsed is not None:
+                shared_value = parsed
+                break
+        for draft in rows:
+            draft.metric_scores[CONSISTENCY_KEY] = shared_value
 
 
 def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items: list[Any]) -> None:
@@ -162,11 +191,9 @@ def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items
         for target_group in target_groups:
             agg = aggregates[target_group]
             agg["totalItems"] += 1
-
             has_execution = bool(item.executed_at) or bool((item.error or "").strip())
             if has_execution:
                 agg["executedItems"] += 1
-
             if (item.error or "").strip():
                 agg["errorItems"] += 1
 
@@ -228,14 +255,13 @@ async def evaluate_validation_run(
             repo.set_eval_status(run_id, EvalStatus.DONE)
             db.commit()
             return
-        missing_expected = [
-            item for item in run_items if not str(item.expected_result_snapshot or "").strip()
-        ]
+
+        missing_expected = [item for item in run_items if not _safe_text(item.expected_result_snapshot)]
         if missing_expected:
             sample_query_ids = [
                 str(item.query_id or item.id or "")
                 for item in missing_expected[:5]
-                if str(item.query_id or item.id or "").strip()
+                if _safe_text(item.query_id or item.id)
             ]
             sample_text = ",".join(sample_query_ids) if sample_query_ids else "-"
             raise ValueError(
@@ -274,214 +300,163 @@ async def evaluate_validation_run(
             )
         db.commit()
 
+        prompt_template, response_schema, schema_name, strict_schema = _load_prompt_and_schema()
+
+        parsed_raw_map: dict[str, tuple[dict[str, Any], bool]] = {}
+        response_sec_map: dict[str, float | None] = {}
+        query_group_map: dict[str, list[Any]] = defaultdict(list)
+
+        for item in run_items:
+            raw_payload, raw_parse_ok = parse_raw_payload(item.raw_json or "")
+            parsed_raw_map[item.id] = (raw_payload, raw_parse_ok)
+            response_sec_map[item.id] = extract_response_time_sec(raw_payload, item.latency_ms)
+            if item.query_id:
+                query_group_map[str(item.query_id)].append(item)
+
         adapter = OpenAIJudgeAdapter()
         sem = asyncio.Semaphore(max(1, int(max_parallel or 1)))
         timeout = aiohttp.ClientTimeout(total=120)
+        eval_drafts: list[ItemEvalDraft] = []
 
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async def _evaluate_item(item) -> None:
-                raw_payload, raw_parse_ok = parse_raw_payload(item.raw_json or "")
-                criteria_payload, legacy_fallback = parse_applied_criteria(item.applied_criteria_json or "")
-                criteria_meta = criteria_payload.get("meta") if isinstance(criteria_payload, dict) else {}
-                criteria_source = str((criteria_meta or {}).get("source") or "").strip() or "legacy"
-
-                stability_score = score_stability(
+                raw_payload, raw_parse_ok = parsed_raw_map[item.id]
+                response_time_sec = response_sec_map.get(item.id)
+                stability_fallback = score_stability(
                     error_text=item.error or "",
                     raw_payload=raw_payload,
                     raw_parse_ok=raw_parse_ok,
                 )
 
-                base_accuracy_checks = (
-                    criteria_payload.get("accuracyChecks")
-                    if isinstance(criteria_payload, dict)
-                    and isinstance(criteria_payload.get("accuracyChecks"), list)
-                    else []
-                )
-                expected_result_checks = parse_expected_result_accuracy_checks(item.expected_result_snapshot or "")
-                merged_accuracy_checks = merge_accuracy_checks(base_accuracy_checks, expected_result_checks)
-                accuracy_eval = evaluate_accuracy_checks(raw_payload, merged_accuracy_checks)
+                peer_rows: list[dict[str, Any]] = []
+                if item.query_id:
+                    for peer in query_group_map.get(str(item.query_id), []):
+                        peer_payload, _ = parsed_raw_map[peer.id]
+                        peer_rows.append(
+                            {
+                                "itemId": peer.id,
+                                "repeatIndex": int(peer.repeat_index or 1),
+                                "conversationRoomIndex": int(peer.conversation_room_index or 1),
+                                "responseTimeSec": response_sec_map.get(peer.id),
+                                "error": _safe_text(peer.error),
+                                "assistantMessage": _safe_text(peer_payload.get("assistantMessage"))[: max_chars // 4],
+                                "dataUIList": _canonicalize_json_value(peer_payload.get("dataUIList"), max_text=1000),
+                            }
+                        )
 
-                llm_error_message = ""
-                intent_comment = ""
-                intent_evidence: list[str] = []
-                intent_score = 0.0
-                intent_payload = _build_intent_input_payload(item, raw_payload, max_chars)
-                intent_payload_text = json.dumps(
-                    intent_payload,
+                evaluation_input = {
+                    "runId": run_id,
+                    "itemId": item.id,
+                    "queryId": str(item.query_id or ""),
+                    "queryText": _safe_text(item.query_text_snapshot)[:max_chars],
+                    "expectedResult": _safe_text(item.expected_result_snapshot)[:max_chars],
+                    "error": _safe_text(item.error),
+                    "responseTimeSec": response_time_sec,
+                    "rawPayload": _build_row_raw_payload(raw_payload, max_text=max(500, max_chars // 4)),
+                    "peerExecutions": peer_rows,
+                }
+
+                input_json_text = json.dumps(
+                    evaluation_input,
                     ensure_ascii=False,
                     sort_keys=True,
                     separators=(",", ":"),
                     default=str,
                 )
-                intent_input_hash = hashlib.sha256(intent_payload_text.encode("utf-8")).hexdigest()[:12]
+                if len(input_json_text) > max_chars:
+                    input_json_text = input_json_text[:max_chars]
 
-                if (item.error or "").strip():
-                    llm_error_message = "Execution failed. Intent evaluation skipped."
-                elif not openai_key:
-                    llm_error_message = "OpenAI API key is missing."
+                prompt = (
+                    f"{prompt_template}\n\n"
+                    "<evaluation_input_json>\n"
+                    f"{input_json_text}\n"
+                    "</evaluation_input_json>\n"
+                )
+                input_hash = hashlib.sha256(input_json_text.encode("utf-8")).hexdigest()
+
+                result_payload: dict[str, Any] | None = None
+                llm_error = ""
+                if not openai_key:
+                    llm_error = "OpenAI API key is missing."
                 else:
-                    intent_rubric = criteria_payload.get("intentRubric") if isinstance(criteria_payload, dict) else {}
-                    prompt = (
-                        "다음 입력 JSON을 기준으로 의도 충족을 채점하세요.\n"
-                        "반드시 JSON 객체만 출력하세요.\n"
-                        "키는 intent_verdict, evidence, comment만 허용합니다.\n"
-                        "intent_verdict 허용값: PERFECT, GOOD, PARTIAL, WEAK, RELATED_BUT_WRONG, FAILED\n"
-                        "evidence는 최대 3개의 짧은 문자열만 허용합니다.\n"
-                        "정확성(formType/dataKey/buttonUrl 등 구조값)은 별도 규칙엔진이 평가하므로 여기서는 의도만 판단하세요.\n\n"
-                        f"의도 루브릭(JSON): {json.dumps(intent_rubric if isinstance(intent_rubric, dict) else {}, ensure_ascii=False)}\n\n"
-                        f"입력 JSON: {intent_payload_text}\n\n"
-                        '{"intent_verdict":"PERFECT|GOOD|PARTIAL|WEAK|RELATED_BUT_WRONG|FAILED","evidence":["근거1"],"comment":"판단 근거"}'
-                    )
                     try:
                         async with sem:
-                            result, _usage, err = await adapter.judge(session, openai_key, openai_model, prompt)
-                        if result is None:
-                            llm_error_message = err or "Intent evaluation failed."
-                        else:
-                            parsed_intent, parsed_comment, parsed_evidence = _extract_intent_verdict(result)
-                            if parsed_intent is not None:
-                                intent_score = parsed_intent
-                            else:
-                                llm_error_message = "Intent verdict parse failed."
-                            intent_comment = parsed_comment
-                            intent_evidence = parsed_evidence
+                            result_payload, _usage, llm_error = await adapter.judge(
+                                session,
+                                openai_key,
+                                openai_model,
+                                prompt,
+                                response_schema=response_schema,
+                                schema_name=schema_name,
+                                strict_schema=strict_schema,
+                            )
                     except Exception as exc:
-                        llm_error_message = str(exc)
+                        llm_error = str(exc)
 
-                accuracy_extract_error = False
-                accuracy_extract_used = False
-                accuracy_extract_message = ""
-                if not accuracy_eval.get("hasChecks"):
-                    if (item.error or "").strip():
-                        accuracy_extract_error = True
-                        accuracy_extract_message = "Execution failed. Accuracy extractor skipped."
-                    elif not openai_key:
-                        accuracy_extract_error = True
-                        accuracy_extract_message = "OpenAI API key is missing for accuracy extractor."
-                    else:
-                        extractor_prompt = (
-                            "기대결과 텍스트를 읽고 정확성 검증용 키 후보를 추출하세요.\n"
-                            "반드시 JSON 객체만 출력하고, 아래 키만 사용하세요.\n"
-                            "허용 키: formType, actionType, dataKey, buttonKey, buttonUrlContains, multiSelectAllowYn, assistantMessageContains\n"
-                            "값을 알 수 없으면 null 또는 빈 문자열을 사용하세요.\n\n"
-                            f"질의: {_normalize_text(item.query_text_snapshot)[:max_chars]}\n\n"
-                            f"기대결과: {_normalize_text(item.expected_result_snapshot)[:max_chars]}\n\n"
-                            '{"formType":null,"actionType":null,"dataKey":null,"buttonKey":null,"buttonUrlContains":null,"multiSelectAllowYn":null,"assistantMessageContains":null}'
-                        )
-                        try:
-                            async with sem:
-                                extract_result, _usage, extract_err = await adapter.judge(
-                                    session, openai_key, openai_model, extractor_prompt
-                                )
-                            if extract_result is None:
-                                accuracy_extract_error = True
-                                accuracy_extract_message = extract_err or "Accuracy extractor failed."
-                            else:
-                                extracted_checks = _extract_accuracy_checks_from_llm_result(extract_result)
-                                merged_accuracy_checks = merge_accuracy_checks(merged_accuracy_checks, extracted_checks)
-                                accuracy_eval = evaluate_accuracy_checks(raw_payload, merged_accuracy_checks)
-                                if accuracy_eval.get("hasChecks"):
-                                    accuracy_extract_used = True
-                                else:
-                                    accuracy_extract_error = True
-                                    accuracy_extract_message = "Accuracy extractor returned empty checks."
-                        except Exception as exc:
-                            accuracy_extract_error = True
-                            accuracy_extract_message = str(exc)
-
-                accuracy_score = accuracy_eval.get("score")
-                if not isinstance(accuracy_score, (int, float)):
-                    accuracy_score = 0.0
-                accuracy_score = max(0.0, min(5.0, float(accuracy_score)))
-                if accuracy_extract_error:
-                    accuracy_score = 0.0
-
-                metric_scores = {
-                    "의도충족": max(0.0, min(5.0, float(intent_score))),
-                    "정확성": accuracy_score,
-                    "안정성": max(0.0, min(5.0, float(stability_score))),
+                metric_scores: dict[str, Any] = {
+                    "intent": 0.0,
+                    "accuracy": 0.0,
+                    "consistency": None,
+                    "latencySingle": None,
+                    "latencyMulti": None,
+                    "stability": float(stability_fallback),
                 }
-                total_score = average(
-                    [
-                        metric_scores["의도충족"],
-                        metric_scores["정확성"],
-                        metric_scores["안정성"],
-                    ]
-                )
+                llm_comment = ""
+                llm_output_json = ""
+                status = "DONE_WITH_LLM_ERROR"
 
-                failed_checks = accuracy_eval.get("failedChecks") or []
-                failed_check_text = ""
-                failed_paths_for_tag: list[str] = []
-                if isinstance(failed_checks, list) and failed_checks:
-                    failed_paths_for_tag = [
-                        str(check.get("path") or "").strip()
-                        for check in failed_checks
-                        if isinstance(check, dict)
-                    ]
-                    failed_paths_for_tag = [path for path in failed_paths_for_tag if path]
-                    if failed_paths_for_tag:
-                        failed_check_text = f"Accuracy failed checks: {', '.join(failed_paths_for_tag[:6])}"
+                if result_payload is not None and not llm_error:
+                    for key in METRIC_KEYS:
+                        if key == CONSISTENCY_KEY:
+                            metric_scores[key] = _clamp_score(result_payload.get(key))
+                        else:
+                            metric_scores[key] = _clamp_score(result_payload.get(key))
+                    if metric_scores.get("intent") is None:
+                        metric_scores["intent"] = 0.0
+                    if metric_scores.get("accuracy") is None:
+                        metric_scores["accuracy"] = 0.0
+                    if metric_scores.get("stability") is None:
+                        metric_scores["stability"] = float(stability_fallback)
 
-                accuracy_source_parts: list[str] = []
-                if criteria_source == "template_json":
-                    accuracy_source_parts.append("aqb")
-                elif criteria_source == "template_helper":
-                    accuracy_source_parts.append("helper")
-                elif criteria_source == "legacy":
-                    accuracy_source_parts.append("legacy")
-                if expected_result_checks:
-                    accuracy_source_parts.append("@check")
-                if accuracy_extract_used:
-                    accuracy_source_parts.append("llm_extract")
-                if not accuracy_source_parts:
-                    accuracy_source_parts.append("none")
-                accuracy_source_text = "+".join(dict.fromkeys(accuracy_source_parts))
-
-                comment_parts: list[str] = []
-                comment_parts.append(f"[PROMPT_VERSION:{INTENT_PROMPT_VERSION}]")
-                comment_parts.append(f"[INPUT_HASH:{intent_input_hash}]")
-                comment_parts.append(f"{ACCURACY_SOURCE_TAG_PREFIX}{accuracy_source_text}]")
-                if failed_paths_for_tag:
-                    comment_parts.append(f"{ACCURACY_FAILED_PATHS_TAG_PREFIX}{','.join(failed_paths_for_tag[:20])}]")
-                if intent_evidence:
-                    comment_parts.append(f"Intent evidence: {'; '.join(intent_evidence)}")
-                if intent_comment:
-                    comment_parts.append(intent_comment)
-                if failed_check_text:
-                    comment_parts.append(failed_check_text)
-                if legacy_fallback:
-                    comment_parts.append(LEGACY_ACCURACY_FALLBACK_TAG)
-                if accuracy_extract_used:
-                    comment_parts.append(ACCURACY_LLM_EXTRACT_FALLBACK_TAG)
-                if accuracy_extract_error:
-                    comment_parts.append(f"Accuracy extractor fallback: {accuracy_extract_message or 'failed'}")
-                if llm_error_message:
-                    comment_parts.append(f"Intent judge fallback: {llm_error_message}")
-                if not comment_parts:
-                    comment_parts.append("OK")
-                llm_comment = " | ".join(comment_parts)
-
-                status = "DONE"
-                if (item.error or "").strip():
-                    status = "DONE_WITH_EXEC_ERROR"
-                elif accuracy_extract_error:
-                    status = "DONE_WITH_ACCURACY_EXTRACT_ERROR"
-                elif llm_error_message:
+                    llm_comment = _safe_text(result_payload.get("reasoning")) or "OK"
+                    llm_output_json = json.dumps(result_payload, ensure_ascii=False)
+                    status = "DONE_WITH_EXEC_ERROR" if _safe_text(item.error) else "DONE"
+                else:
+                    llm_comment = f"LLM_ERROR: {llm_error or 'unknown'}"
+                    llm_output_json = json.dumps({"error": llm_error or "unknown"}, ensure_ascii=False)
                     status = "DONE_WITH_LLM_ERROR"
-                elif legacy_fallback or accuracy_extract_used:
-                    status = "DONE_LEGACY"
 
-                repo.upsert_llm_eval(
-                    item.id,
-                    eval_model=openai_model,
-                    metric_scores=metric_scores,
-                    total_score=round(float(total_score), 4) if isinstance(total_score, (int, float)) else None,
-                    llm_comment=llm_comment,
-                    status=status,
+                eval_drafts.append(
+                    ItemEvalDraft(
+                        item_id=item.id,
+                        query_id=str(item.query_id or ""),
+                        metric_scores=metric_scores,
+                        llm_comment=llm_comment,
+                        status=status,
+                        llm_output_json=llm_output_json,
+                        prompt_version=PROMPT_VERSION,
+                        input_hash=input_hash,
+                    )
                 )
 
             await asyncio.gather(*[_evaluate_item(item) for item in run_items])
-            db.commit()
+
+        _sync_consistency_by_query_id(eval_drafts)
+
+        for draft in eval_drafts:
+            total_score = _build_total_score(draft.metric_scores)
+            repo.upsert_llm_eval(
+                draft.item_id,
+                eval_model=openai_model,
+                metric_scores=draft.metric_scores,
+                total_score=total_score,
+                llm_comment=draft.llm_comment,
+                status=draft.status,
+                llm_output=draft.llm_output_json,
+                prompt_version=draft.prompt_version,
+                input_hash=draft.input_hash,
+            )
+        db.commit()
 
         _build_score_snapshots(repo, run_id, run_items)
         db.commit()

@@ -50,21 +50,20 @@ export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {
 };
 
 export const HISTORY_TAB_INITIAL_COLUMN_WIDTHS = {
-  errorSummary: 240,
+  queryText: 360,
   responseTimeSec: 140,
   executedAt: 180,
   status: 120,
-  detail: 96,
 };
 
 export const RESULTS_TAB_INITIAL_COLUMN_WIDTHS = {
   totalScore: 120,
+  queryText: 320,
   intent: 120,
   accuracy: 120,
   consistency: 120,
   speed: 140,
   stability: 120,
-  detail: 96,
 };
 
 export const HISTORY_INITIAL_COLUMN_WIDTHS = {

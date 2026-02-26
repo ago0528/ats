@@ -34,7 +34,6 @@ const item = (partial?: Partial<ValidationRunItem>): ValidationRunItem =>
     queryText: 'q',
     expectedResult: '',
     category: 'Happy path',
-    appliedCriteria: '',
     logicFieldPath: '',
     logicExpectedValue: '',
     conversationRoomIndex: 1,

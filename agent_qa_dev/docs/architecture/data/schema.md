@@ -207,7 +207,7 @@
 ### 테이블 개요
 
 - Table name: `validation_queries`
-- Business purpose: 검증에 사용하는 질의 원본 정의(질의문/기대결과/평가기준/로직검증 기준)를 저장
+- Business purpose: 검증에 사용하는 질의 원본 정의(질의문/기대결과/로직검증 기준/실행 메타)를 저장
 - Primary key: `id`
 - Important relationships:
   - `group_id -> validation_query_groups.id` (N:1)
@@ -227,7 +227,7 @@
 | `expected_result`        | `text`         | No       | `""` (app)             | 기대 결과 설명                    | `잠실/매매/30평대 매물 반환`           |                   |
 | `category`               | `varchar(40)`  | No       | `Happy path` (app)     | 시나리오 분류                     | `Edge case`                            | index             |
 | `group_id`               | `varchar(36)`  | No       | 없음                   | 소속 질의 그룹 ID                 | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index         |
-| `llm_eval_criteria_json` | `text`         | No       | `""` (app)             | 질의별 LLM 평가 기준(JSON 문자열) | `[{"metric":"정확성","weight":0.5}]`   | JSON string       |
+| `llm_eval_criteria_json` | `text`         | No       | `""` (app)             | 내부 실행 메타(JSON 문자열, 공개 API 비노출) | `{"meta":{"latencyClass":"MULTI"}}`   | legacy column (v2) |
 | `logic_field_path`       | `text`         | No       | `""` (app)             | 로직 검증 필드 경로               | `items[0].dealType`                    |                   |
 | `logic_expected_value`   | `text`         | No       | `""` (app)             | 로직 기대값                       | `SALE`                                 |                   |
 | `context_json`           | `text`         | No       | `""` (app)             | 질의별 실행 컨텍스트(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
@@ -474,7 +474,7 @@
 | `query_text_snapshot`           | `text`         | No       | 없음               | 실행 시점 질의문 스냅샷           | `잠실 30평대 매매 찾아줘`              | snapshot          |
 | `expected_result_snapshot`      | `text`         | No       | `""` (app)         | 실행 시점 기대결과 스냅샷         | `잠실/매매/30평대`                     | snapshot          |
 | `category_snapshot`             | `varchar(40)`  | No       | `Happy path` (app) | 실행 시점 카테고리 스냅샷         | `Edge case`                            | snapshot          |
-| `applied_criteria_json`         | `text`         | No       | `""` (app)         | 실행 적용 평가기준(JSON 문자열)   | `[{"metric":"정확성"}]`                | snapshot JSON     |
+| `applied_criteria_json`         | `text`         | No       | `""` (app)         | 레거시 스냅샷 컬럼(신규 평가 파이프라인 미사용)   | `""`                | legacy column     |
 | `logic_field_path_snapshot`     | `text`         | No       | `""` (app)         | 실행 적용 로직 경로 스냅샷        | `items[0].dealType`                    | snapshot          |
 | `logic_expected_value_snapshot` | `text`         | No       | `""` (app)         | 실행 적용 로직 기대값 스냅샷      | `SALE`                                 | snapshot          |
 | `context_json_snapshot`         | `text`         | No       | `""` (app)         | 실행 컨텍스트 스냅샷(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
@@ -520,9 +520,12 @@
 | `id`                 | `varchar(36)`  | No       | UUID (app)      | LLM 평가 ID              | `54e0cbcf-d32d-4640-9d1e-1d1656f7473a` | PK               |
 | `run_item_id`        | `varchar(36)`  | No       | 없음            | 대상 run item ID         | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | FK, unique index |
 | `eval_model`         | `varchar(120)` | No       | `gpt-5.2` (app) | 평가에 사용된 모델       | `gpt-5.2`                              |                  |
-| `metric_scores_json` | `text`         | No       | `""` (app)      | 메트릭 점수(JSON 문자열) | `{"정확성":88,"근거성":81}`            | JSON string      |
-| `total_score`        | `float`        | Yes      | `NULL`          | 총점                     | `84.5`                                 |                  |
-| `llm_comment`        | `text`         | No       | `""` (app)      | LLM 평가 코멘트          | `의도는 맞지만 근거 문장이 부족`       |                  |
+| `metric_scores_json` | `text`         | No       | `""` (app)      | 메트릭 점수(JSON 문자열) | `{"intent":4.0,"accuracy":3.0,"consistency":null,"latencySingle":5.0,"latencyMulti":0.0,"stability":5.0}` | JSON string (v2 keys) |
+| `total_score`        | `float`        | Yes      | `NULL`          | 총점(`intent`,`accuracy`,`stability` + `consistency`(존재 시) 평균) | `4.0`                                 |                  |
+| `llm_comment`        | `text`         | No       | `""` (app)      | reasoning 또는 LLM 오류 요약 | `동일 질의 반복 1건으로 consistency는 null`       |                  |
+| `llm_output_json`    | `text`         | No       | `""` (app)      | LLM 원본 구조화 응답(JSON 문자열) | `{"intent":4,"accuracy":3,...}`       | JSON string      |
+| `prompt_version`     | `varchar(80)`  | No       | `""` (app)      | 평가 프롬프트 버전       | `single-prompt-v2.0.0`                 |                  |
+| `input_hash`         | `varchar(128)` | No       | `""` (app)      | 평가 입력 canonical hash(SHA-256) | `f7a4...`                           |                  |
 | `status`             | `varchar(40)`  | No       | `PENDING` (app) | 평가 상태                | `DONE`                                 | index            |
 | `evaluated_at`       | `datetime`     | No       | UTC now (app)   | 평가 시각                | `2026-02-18 10:45:15`                  |                  |
 

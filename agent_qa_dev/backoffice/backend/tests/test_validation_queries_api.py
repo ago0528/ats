@@ -13,7 +13,7 @@ def test_validation_queries_crud_and_bulk_upload():
     assert "text/csv" in template_resp.headers.get("content-type", "")
     assert "attachment; filename=\"query_template.csv\"" == template_resp.headers.get("content-disposition")
     assert (
-        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값"
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,Logic 검증 필드,Logic 기대값,latencyClass"
         in template_resp.content.decode("utf-8-sig")
     )
 
@@ -27,7 +27,6 @@ def test_validation_queries_crud_and_bulk_upload():
             "expectedResult": "채용 공고 리스트",
             "category": "Happy path",
             "groupId": group_id,
-            "llmEvalCriteria": {"version": 1},
             "logicFieldPath": "assistantMessage",
             "logicExpectedValue": "채용",
             "targetAssistant": "ORCHESTRATOR_WORKER_V3",
@@ -64,9 +63,9 @@ def test_validation_queries_crud_and_bulk_upload():
     assert patch_resp.json()["category"] == "Edge case"
 
     csv_body = (
-        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n"
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,Logic 검증 필드,Logic 기대값,latencyClass\n"
         "질의1,Happy path,,,,,,,\n"
-        f'질의2,Adversarial input,{group_id},ORCHESTRATOR_WORKER_V3,"{{""recruitPlanId"":123}}",기대 결과 2,"{{""정확성"":5}}",assistantMessage,채용\n'
+        f'질의2,Adversarial input,{group_id},ORCHESTRATOR_WORKER_V3,"{{""recruitPlanId"":123}}",기대 결과 2,assistantMessage,채용,MULTI\n'
         "질의3,Edge case,지원자 관리,,,,,,\n"
         "질의4,Edge case,없는그룹,,,,,,\n"
     )
@@ -92,14 +91,12 @@ def test_validation_queries_crud_and_bulk_upload():
     by_text = {item["queryText"]: item for item in listed}
     assert by_text["질의1"]["groupId"] is None
     assert by_text["질의1"]["expectedResult"] == ""
-    assert by_text["질의1"]["llmEvalCriteria"] == {}
     assert by_text["질의1"]["logicFieldPath"] == ""
     assert by_text["질의1"]["logicExpectedValue"] == ""
     assert by_text["질의2"]["groupId"] == group_id
     assert by_text["질의2"]["targetAssistant"] == "ORCHESTRATOR_WORKER_V3"
     assert by_text["질의2"]["contextJson"] == '{"recruitPlanId":123}'
     assert by_text["질의2"]["expectedResult"] == "기대 결과 2"
-    assert by_text["질의2"]["llmEvalCriteria"] == {"정확성": 5}
     assert by_text["질의2"]["logicFieldPath"] == "assistantMessage"
     assert by_text["질의2"]["logicExpectedValue"] == "채용"
     assert by_text["질의3"]["groupId"] == group_id
@@ -139,7 +136,6 @@ def test_validation_queries_bulk_update_preview_and_apply():
             "expectedResult": "기존 기대값",
             "category": "Happy path",
             "groupId": source_group_id,
-            "llmEvalCriteria": {"정확성": 3},
             "logicFieldPath": "assistantMessage",
             "logicExpectedValue": "기존값",
             "targetAssistant": "ORCHESTRATOR_WORKER_V3",
@@ -156,7 +152,6 @@ def test_validation_queries_bulk_update_preview_and_apply():
             "expectedResult": "유지",
             "category": "Edge case",
             "groupId": source_group_id,
-            "llmEvalCriteria": {"정확성": 4},
             "logicFieldPath": "assistantMessage",
             "logicExpectedValue": "유지값",
             "targetAssistant": "ORCHESTRATOR_WORKER_V3",
@@ -176,12 +171,12 @@ def test_validation_queries_bulk_update_preview_and_apply():
     assert usage_set_resp.status_code == 200
 
     csv_body = (
-        "쿼리 ID,질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n"
-        f'{first_query_id},업데이트 완료 질의,Adversarial input,새그룹,NEW_ASSISTANT,"{{""phase"":""new""}}",신규 기대값,"{{""정확성"":5}}",assistantMessage,신규값\n'
-        f'{second_query_id},변경 없음 질의,Edge case,원본그룹,ORCHESTRATOR_WORKER_V3,"{{""phase"":""keep""}}",유지,"{{""정확성"":4}}",assistantMessage,유지값\n'
-        ",누락행,Happy path,,,,,,,\n"
-        "unknown-query-id,매핑 실패 질의,Happy path,,,,,,,\n"
-        f"{first_query_id},중복 행,Happy path,,,,,,,\n"
+        "쿼리 ID,질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,Logic 검증 필드,Logic 기대값\n"
+        f'{first_query_id},업데이트 완료 질의,Adversarial input,새그룹,NEW_ASSISTANT,"{{""phase"":""new""}}",신규 기대값,assistantMessage,신규값\n'
+        f'{second_query_id},변경 없음 질의,Edge case,원본그룹,ORCHESTRATOR_WORKER_V3,"{{""phase"":""keep""}}",유지,assistantMessage,유지값\n'
+        ",누락행,Happy path,,,,,,\n"
+        "unknown-query-id,매핑 실패 질의,Happy path,,,,,,\n"
+        f"{first_query_id},중복 행,Happy path,,,,,,\n"
     )
 
     preview_resp = client.post(
@@ -242,7 +237,6 @@ def test_validation_queries_bulk_update_preview_and_apply():
     assert by_id[first_query_id]["targetAssistant"] == "NEW_ASSISTANT"
     assert by_id[first_query_id]["contextJson"] == '{"phase":"new"}'
     assert by_id[first_query_id]["expectedResult"] == "신규 기대값"
-    assert by_id[first_query_id]["llmEvalCriteria"] == {"정확성": 5}
     assert by_id[first_query_id]["logicExpectedValue"] == "신규값"
     assert by_id[first_query_id]["testSetUsage"]["count"] == 1
     assert by_id[first_query_id]["testSetUsage"]["testSetNames"] == ["업데이트 사용 세트"]

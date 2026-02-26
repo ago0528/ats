@@ -38,7 +38,10 @@
         "maximum": 5
       },
       "consistency": {
-        "type": "number",
+        "type": [
+          "number",
+          "null"
+        ],
         "description": "일관성 점수(0~5).",
         "minimum": 0,
         "maximum": 5

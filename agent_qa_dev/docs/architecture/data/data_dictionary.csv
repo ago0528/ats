@@ -45,7 +45,10 @@ validation_llm_evaluations,3,metric_scores_json,TEXT,No,,No
 validation_llm_evaluations,4,total_score,FLOAT,Yes,,No
 validation_llm_evaluations,5,llm_comment,TEXT,No,,No
 validation_llm_evaluations,6,status,VARCHAR(40),No,,No
-validation_llm_evaluations,7,evaluated_at,DATETIME,No,,No
+validation_llm_evaluations,7,llm_output_json,TEXT,No,,No
+validation_llm_evaluations,8,prompt_version,VARCHAR(80),No,,No
+validation_llm_evaluations,9,input_hash,VARCHAR(128),No,,No
+validation_llm_evaluations,10,evaluated_at,DATETIME,No,,No
 validation_logic_evaluations,0,id,VARCHAR(36),No,,Yes
 validation_logic_evaluations,1,run_item_id,VARCHAR(36),No,,No
 validation_logic_evaluations,2,eval_items_json,TEXT,No,,No

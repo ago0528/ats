@@ -1,165 +1,28 @@
-### 의도 충족 — LLM 평가 스케일
+## 단일 프롬프트 기반 평가 운영 기준 (v2)
 
-LLM 평가 프롬프트에 이 루브릭을 포함시키고, 점수 + 근거를 함께 출력하도록 구성한다.
-재현성 강화를 위해 LLM은 자유형 점수 대신 `intent_verdict(enum)`만 반환하고,
-서버가 고정 매핑으로 점수를 계산한다.
+### 1) 평가 입력
+- 단일 프롬프트 입력은 `expected_result + rawPayload + peerExecutions`를 사용한다.
+- 규칙 파싱(`@check`, `accuracyChecks`, extractor fallback) 기반의 별도 정확성 엔진은 사용하지 않는다.
 
-- `PERFECT=5`, `GOOD=4`, `PARTIAL=3`, `WEAK=2`, `RELATED_BUT_WRONG=1`, `FAILED=0`
-- 코멘트에는 `promptVersion`, `inputHash`를 함께 남겨 동일 입력 추적 가능하게 운영한다.
+### 2) 출력 스키마
+- `docs/evaluating/prompt_for_scoring_output_schema.json`을 단일 기준 스키마로 사용한다.
+- metricScores 키는 아래 6개로 고정한다.
+  - `intent`, `accuracy`, `consistency`, `latencySingle`, `latencyMulti`, `stability`
 
-| 점수 | 기준                                                               |
-| ---- | ------------------------------------------------------------------ |
-| 5    | 의도한 필터를 정확히 사용하고, 응답 텍스트도 기대와 일치           |
-| 4    | 의도한 필터는 맞았으나, 응답 표현이 부분적으로 부정확하거나 불완전 |
-| 3    | 핵심 의도는 파악했으나, 필터 일부가 누락되거나 응답이 우회적       |
-| 2    | 의도를 부분적으로만 파악, 결과가 기대와 상당히 다름                |
-| 1    | 의도를 잘못 파악했으나 관련 영역의 응답은 제공                     |
-| 0    | 완전히 다른 의도로 해석하거나 응답 실패                            |
+### 3) consistency 확정 규칙
+- 동일 `query_id` 실행이 2건 이상인 경우에만 consistency 값을 사용한다.
+- 동일 `query_id` 그룹의 모든 row는 동일 consistency 값을 저장한다.
+- 그룹 크기 1건이면 consistency는 `null`이다.
 
-### 일관성 — 일치 항목 비율 기반
+### 4) total_score 산식
+- `intent`, `accuracy`, `stability`는 항상 포함한다.
+- `consistency`가 존재하면 함께 포함해 산술 평균을 계산한다.
+- `latencySingle`, `latencyMulti`는 KPI 저장/표시용이며 total_score에는 포함하지 않는다.
 
-독립 실행 배치(`채팅방 수` 파라미터)에서 3회 실행 결과를 비교한다.
+### 5) 오류 처리
+- OpenAI 응답이 strict schema를 만족하지 않으면 해당 row를 `DONE_WITH_LLM_ERROR`로 기록한다.
+- 일부 row 실패가 발생해도 run 전체 평가는 계속 진행한다.
 
-| 점수 | 기준                                                   |
-| ---- | ------------------------------------------------------ |
-| 5    | 3회 모두 숫자 일치 + 결론 일치                         |
-| 4    | 3회 모두 결론 일치, 숫자는 허용 오차 범위 내 (예: ±1%) |
-| 3    | 3회 중 2회 일치 (숫자 + 결론 모두)                     |
-| 2    | 3회 중 2회 결론만 일치, 숫자 불일치                    |
-| 1    | 3회 모두 결론은 유사하나 숫자가 매번 다름              |
-| 0    | 3회 응답이 모두 상이                                   |
-
-### 정확성 — 기대결과 기반 하이브리드 평가
-
-평가 전제:
-- `기대 결과`가 비어 있으면 평가를 시작하지 않는다.
-- `기대 결과`는 자연어 설명 + `@check` 키태그 혼합 입력을 권장한다.
-
-`@check` 예시:
-- `@check formType=ACTION`
-- `@check actionType=SELECT`
-- `@check dataKey=RECRUIT_PLAN_CREATE_SAVE`
-- `@check buttonKey=...`
-- `@check buttonUrlContains=/agent/...`
-- `@check multiSelectAllowYn=true|false`
-- `@check assistantMessageContains=문구`
-
-정확성 계산 순서:
-1. `aqb.v1`/보조컬럼에서 생성된 규칙 체크
-2. `기대 결과`의 `@check` 태그 파싱 체크
-3. 체크가 전혀 없을 때만 LLM extractor로 키 후보 추출 후 규칙 체크
-4. extractor도 실패하면 정확성 0점
-
-### 검증 이력 기대결과 일괄 수정 운영 절차
-
-검증 이력 상세에서 Run Item 스냅샷 기대결과를 CSV/XLSX로 일괄 수정할 수 있다.
-
-1. `기대결과 일괄 업데이트`에서 템플릿 CSV 다운로드
-2. `Item ID`는 유지하고 `기대결과`만 수정
-3. CSV/XLSX 업로드 후 Preview 확인
-4. Apply 시 `expected_result_snapshot`만 반영
-5. 변경 건이 1건 이상이면 기존 평가결과 자동 초기화
-   - `validation_llm_evaluations` 삭제
-   - `validation_score_snapshots` 삭제
-   - run `eval_status = PENDING`, `eval_started_at/eval_finished_at = NULL`
-
-주의사항:
-- `기대결과` 빈 셀은 변경 없음으로 처리된다 (공란 덮어쓰기 방지).
-- `Item ID` 누락/중복/미매핑 행은 업데이트에서 제외된다.
-- 적용 후에는 반드시 평가를 다시 실행해야 최신 점수가 계산된다.
-
-**지원자 관리 에이전트 (필터 정확도 + 결과 정확도)**
-
-| 점수 | 기준                                                                 |
-| ---- | -------------------------------------------------------------------- |
-| 5    | 필터 정확 + 수치 정확                                                |
-| 4    | 필터 정확 + 수치 허용 오차 범위 내 (예: ±1%)                         |
-| 3    | 필터 부정확하나 수치는 정확 (우연히 맞은 경우 또는 다른 경로로 도달) |
-| 2    | 필터 정확하나 수치 부정확 (필터는 이해했으나 연산/집계 오류)         |
-| 1    | 필터 부분 일치 + 수치 부정확                                         |
-| 0    | 필터 완전 불일치 + 수치 부정확                                       |
-
-**실행/이동 에이전트 (datakey/url 기준)**
-
-| 점수 | 기준                                                                      |
-| ---- | ------------------------------------------------------------------------- |
-| 5    | 기대한 datakey 정확히 사용                                                |
-| 3    | 기대한 datakey 포함하되 불필요한 datakey도 함께 제공 (사용자가 선택 가능) |
-| 0    | 기대한 datakey 미포함                                                     |
-
-### 응답 속도 — 점수화 제외 (관측 지표)
-
-응답 속도는 품질 점수에 포함하지 않는다.  
-대신 운영 모니터링 지표로 아래 값만 노출한다.
-
-- `latencyClass=SINGLE`: `avgSec`, `p50Sec`, `p90Sec`, `count`
-- `latencyClass=MULTI`: `avgSec`, `p50Sec`, `p90Sec`, `count`
-- `latencyClass` 미기입 데이터는 `unclassified`로 별도 집계
-
-입력 계약:
-- 질의 템플릿 컬럼 `latencyClass` 사용
-- 허용값: `SINGLE`, `MULTI`
-
-### 안정성 — 성공 비율 직접 변환
-
-| 점수 | 기준               |
-| ---- | ------------------ |
-| 5    | 정상 응답          |
-| 0    | 에러/타임아웃/Null |
-
-## 부록
-
-### 필요시, ‘종합 점수 산출’ 방법 고려
-
-- 항목별 점수 → 가중치를 통해 종합 점수 산출 방식 고려 가능
-- 가중치는 비즈니스 우선순위에 따라 조정 가능
-
-| 항목               | 가중치 | 근거                               |
-| ------------------ | ------ | ---------------------------------- |
-| 의도 충족 (1번)    | 20%    | 에이전트의 핵심 역할               |
-| 일관성 (2번)       | 10%    | 신뢰도 지표이나 정확성과 일부 중복 |
-| 정확성 (3번)       | 30%    | 가장 직접적인 품질 지표            |
-| 응답 속도 (참고)   | 0%     | 점수화 제외, 운영 모니터링 지표    |
-| 안정성 (6번)       | 20%    | 서비스 운영의 기본 전제            |
-
-_E.o.D_
-
----
-
-## AQB v1 입력 스키마 (자동화 1단계)
-
-검증 이력 `평가` 자동화를 위해 `LLM 평가기준(JSON)`은 아래 구조를 표준으로 사용한다.
-
-```json
-{
-  "schemaVersion": "aqb.v1",
-  "intentRubric": {
-    "scale": "0-5",
-    "policy": "intent_only"
-  },
-  "accuracyChecks": [
-    { "path": "dataUIList[*].uiValue.formType", "op": "eq", "value": "ACTION", "weight": 1 }
-  ],
-  "meta": {
-    "source": "template_json|template_helper|legacy",
-    "rubricVersion": "2026-02-24.v1"
-  }
-}
-```
-
-### CSV 보조 컬럼 (업로드 시 자동 변환)
-
-- `formType`
-- `actionType`
-- `dataKey`
-- `buttonKey`
-- `buttonUrlContains`
-- `multiSelectAllowYn`
-- `의도 루브릭(JSON)` (선택)
-- `정확성 체크(JSON)` (선택)
-
-우선순위:
-
-1. `LLM 평가기준(JSON)`이 `aqb.v1`이면 그대로 사용
-2. 아니면 보조 컬럼으로 `accuracyChecks` 자동 생성
-3. 둘 다 없으면 `legacy` 폴백으로 저장하고 평가 시 경고한다
+### 6) UI/계약 표기
+- consistency가 null이면 화면에는 `집계 없음`으로 표시한다.
+- 공개 API 계약에서는 `llmEvalCriteria`, `appliedCriteria`를 노출하지 않는다.

@@ -1,19 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Button, Card, Col, DatePicker, Input, Row, Select, Space, Typography } from 'antd';
-import { useLocation } from 'react-router-dom';
+import {
+  App,
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Input,
+  Row,
+  Select,
+  Space,
+  Typography,
+} from 'antd';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   compareValidationRun,
   createRunFromValidationTestSet,
+  deleteValidationRun,
   evaluateValidationRun,
   executeValidationRun,
-  deleteValidationRun,
-  getValidationTestSetDashboard,
   getValidationRun,
-  updateValidationRun,
+  getValidationTestSetDashboard,
   listValidationRunItems,
   listValidationRuns,
   listValidationTestSets,
+  previewValidationRunExpectedResultsBulkUpdate,
+  updateValidationRun,
+  updateValidationRunExpectedResultsBulk,
 } from '../../api/validation';
 import type {
   ValidationRun,
@@ -26,11 +39,15 @@ import type { RuntimeSecrets } from '../../app/types';
 import { ValidationDashboardSection } from './components/ValidationDashboardSection';
 import { ValidationHistoryDetailSection } from './components/ValidationHistoryDetailSection';
 import { ValidationHistorySection } from './components/ValidationHistorySection';
-import { ValidationRunSection, type RunCreateOverrides } from './components/ValidationRunSection';
+import {
+  ValidationRunSection,
+  type RunCreateOverrides,
+} from './components/ValidationRunSection';
 import { useValidationColumns } from './hooks/useValidationColumns';
 import { useValidationSectionMeta } from './hooks/useValidationSectionMeta';
-import type { ValidationSection } from './types';
+import type { HistoryDetailTab, ValidationSection } from './types';
 import { getEvaluationStateLabel } from './utils/runStatus';
+import { resolveHistoryDetailTab } from '../../app/navigation/validationNavigation';
 
 export type { ValidationSection } from './types';
 
@@ -49,10 +66,14 @@ export function AgentValidationManagementPage({
   historyRunId?: string;
   onOpenHistoryRunDetail?: (runId: string) => void;
   onBackToHistory?: () => void;
-  onOpenRunWorkspace?: (payload: { runId: string; testSetId?: string | null }) => void;
+  onOpenRunWorkspace?: (payload: {
+    runId: string;
+    testSetId?: string | null;
+  }) => void;
 }) {
   const { message } = App.useApp();
   const location = useLocation();
+  const navigate = useNavigate();
   const [testSets, setTestSets] = useState<ValidationTestSet[]>([]);
   const [runs, setRuns] = useState<ValidationRun[]>([]);
   const [runItems, setRunItems] = useState<ValidationRunItem[]>([]);
@@ -70,14 +91,22 @@ export function AgentValidationManagementPage({
     useState<string>('');
   const [historyTestSetFilter, setHistoryTestSetFilter] = useState<string>('');
   const [historyKeywordFilter, setHistoryKeywordFilter] = useState<string>('');
-  const [historyCreatedAtFilter, setHistoryCreatedAtFilter] = useState<[Date | null, Date | null]>([null, null]);
-  const [historySortOrder, setHistorySortOrder] = useState<'createdAt_desc' | 'createdAt_asc'>(
-    'createdAt_desc',
-  );
+  const [historyCreatedAtFilter, setHistoryCreatedAtFilter] = useState<
+    [Date | null, Date | null]
+  >([null, null]);
+  const [historySortOrder, setHistorySortOrder] = useState<
+    'createdAt_desc' | 'createdAt_asc'
+  >('createdAt_desc');
   const [loading, setLoading] = useState(false);
-  const [compareResult, setCompareResult] = useState<Record<string, unknown> | null>(null);
+  const [compareResult, setCompareResult] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [dashboardTestSetId, setDashboardTestSetId] = useState<string>('');
-  const [dashboardData, setDashboardData] = useState<Record<string, unknown> | null>(null);
+  const [dashboardData, setDashboardData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
   const runQueryParams = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -87,14 +116,23 @@ export function AgentValidationManagementPage({
     };
   }, [location.search]);
 
+  const historyDetailTab = useMemo<HistoryDetailTab>(
+    () => resolveHistoryDetailTab(location.search),
+    [location.search],
+  );
+
   const loadGroupsAndTestSets = async () => {
     try {
-      const testSetData = await listValidationTestSets({ limit: 500, environment });
+      const testSetData = await listValidationTestSets({
+        limit: 500,
+        environment,
+      });
       setTestSets(testSetData.items);
       setDashboardTestSetId((prev) => prev || testSetData.items[0]?.id || '');
       setSelectedTestSetId((prev) => {
         if (runQueryParams.testSetId) return runQueryParams.testSetId;
-        if (prev && testSetData.items.some((item) => item.id === prev)) return prev;
+        if (prev && testSetData.items.some((item) => item.id === prev))
+          return prev;
         return testSetData.items[0]?.id || '';
       });
       setHistoryTestSetFilter((prev) => {
@@ -118,7 +156,9 @@ export function AgentValidationManagementPage({
     try {
       const runData = await listValidationRuns({
         environment,
-        testSetId: options?.forceAll ? undefined : (options?.testSetId ?? selectedTestSetId) || undefined,
+        testSetId: options?.forceAll
+          ? undefined
+          : (options?.testSetId ?? selectedTestSetId) || undefined,
         status: options?.status || undefined,
         evaluationStatus: options?.evaluationStatus || undefined,
         limit: 300,
@@ -209,7 +249,10 @@ export function AgentValidationManagementPage({
   const historyTestSetFilterOptions = useMemo(() => {
     return [
       { label: '전체 테스트 세트', value: '' },
-      ...testSets.map((testSet) => ({ label: testSet.name, value: testSet.id })),
+      ...testSets.map((testSet) => ({
+        label: testSet.name,
+        value: testSet.id,
+      })),
     ];
   }, [testSets]);
 
@@ -230,7 +273,10 @@ export function AgentValidationManagementPage({
   useEffect(() => {
     if (section !== 'run') return;
     if (!baseRunId) return;
-    if (baseRunId === selectedRunId || !runs.some((run) => run.id === baseRunId)) {
+    if (
+      baseRunId === selectedRunId ||
+      !runs.some((run) => run.id === baseRunId)
+    ) {
       setBaseRunId('');
     }
   }, [baseRunId, runs, selectedRunId, section]);
@@ -239,14 +285,21 @@ export function AgentValidationManagementPage({
     if (section !== 'run') return;
     if (!currentRun) return;
     const isExecutionRunning = currentRun.status === 'RUNNING';
-    const isEvaluationRunning = String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
+    const isEvaluationRunning =
+      String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
     if (!isExecutionRunning && !isEvaluationRunning) return;
     const timer = window.setInterval(() => {
       void loadRunDetail(currentRun.id);
       void loadRuns({ testSetId: selectedTestSetId });
     }, 2000);
     return () => window.clearInterval(timer);
-  }, [section, currentRun?.id, currentRun?.status, currentRun?.evalStatus, selectedTestSetId]);
+  }, [
+    section,
+    currentRun?.id,
+    currentRun?.status,
+    currentRun?.evalStatus,
+    selectedTestSetId,
+  ]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(runItems.length / runItemsPageSize));
@@ -262,7 +315,10 @@ export function AgentValidationManagementPage({
     }
   }, [runs.length, historyPageSize, historyCurrentPage]);
 
-  const handleCreateRunFromTestSet = async (testSetId: string, overrides: RunCreateOverrides) => {
+  const handleCreateRunFromTestSet = async (
+    testSetId: string,
+    overrides: RunCreateOverrides,
+  ) => {
     if (!testSetId) {
       message.warning('테스트 세트를 먼저 선택해 주세요.');
       return;
@@ -314,16 +370,52 @@ export function AgentValidationManagementPage({
     const readErrorMessage = (error: unknown) => {
       if (typeof error === 'object' && error !== null) {
         const typed = error as {
-          response?: { data?: { detail?: string; message?: string } | string };
+          response?: {
+            data?: {
+              detail?:
+                | string
+                | {
+                  code?: string;
+                  message?: string;
+                  missingCount?: number;
+                  sampleQueryIds?: string[];
+                };
+              message?: string;
+            } | string;
+          };
           message?: string;
         };
-        if (typed.response?.data) {
-          const detail = typed.response.data;
-          if (typeof detail === 'string' && detail) {
-            return detail;
+        const responseData = typed.response?.data;
+        if (responseData) {
+          if (typeof responseData === 'string' && responseData) {
+            return responseData;
           }
-          if (detail && typeof detail === 'object' && (detail.detail || detail.message)) {
-            return String(detail.detail || detail.message);
+          if (responseData && typeof responseData === 'object') {
+            const nestedDetail = responseData.detail;
+            if (typeof nestedDetail === 'object' && nestedDetail !== null) {
+              if (nestedDetail.code === 'expected_result_missing') {
+                const missingCount = Number(nestedDetail.missingCount || 0);
+                const sampleQueryIds = Array.isArray(nestedDetail.sampleQueryIds)
+                  ? nestedDetail.sampleQueryIds
+                    .map((value) => String(value || '').trim())
+                    .filter(Boolean)
+                    .slice(0, 3)
+                  : [];
+                const sampleText = sampleQueryIds.length > 0
+                  ? ` (예시 Query ID: ${sampleQueryIds.join(', ')})`
+                  : '';
+                return `평가를 시작할 수 없습니다. 기대 결과가 비어 있는 질의가 ${missingCount}건 있습니다.${sampleText}`;
+              }
+              if (nestedDetail.message) {
+                return String(nestedDetail.message);
+              }
+            }
+            if (typeof nestedDetail === 'string' && nestedDetail) {
+              return nestedDetail;
+            }
+            if (responseData.message) {
+              return String(responseData.message);
+            }
           }
         }
         if (typed.message) {
@@ -342,14 +434,19 @@ export function AgentValidationManagementPage({
       console.error(error);
       const detail = readErrorMessage(error);
       message.error(
-        detail ? `평가 요청에 실패했습니다. (${detail})` : '평가 요청에 실패했습니다.',
+        detail
+          ? `평가 요청에 실패했습니다. (${detail})`
+          : '평가 요청에 실패했습니다.',
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateRun = async (runId: string, payload: ValidationRunUpdateRequest) => {
+  const handleUpdateRun = async (
+    runId: string,
+    payload: ValidationRunUpdateRequest,
+  ) => {
     try {
       setLoading(true);
       await updateValidationRun(runId, payload);
@@ -375,7 +472,9 @@ export function AgentValidationManagementPage({
       message.success('Run을 삭제했습니다.');
 
       if (section === 'run') {
-        const refreshedRuns = await loadRuns({ testSetId: selectedTestSetId || undefined });
+        const refreshedRuns = await loadRuns({
+          testSetId: selectedTestSetId || undefined,
+        });
         setCompareResult((prev) => (selectedRunId === runId ? null : prev));
         if (selectedRunId === runId) {
           setBaseRunId('');
@@ -396,6 +495,53 @@ export function AgentValidationManagementPage({
     } catch (error) {
       console.error(error);
       message.error('Run 삭제에 실패했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviewExpectedResultsBulkUpdate = async (
+    runId: string,
+    file: File,
+  ) => {
+    try {
+      setLoading(true);
+      return await previewValidationRunExpectedResultsBulkUpdate(runId, file);
+    } catch (error) {
+      console.error(error);
+      message.error('기대결과 일괄 업데이트 미리보기에 실패했습니다.');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApplyExpectedResultsBulkUpdate = async (
+    runId: string,
+    file: File,
+  ) => {
+    try {
+      setLoading(true);
+      const result = await updateValidationRunExpectedResultsBulk(runId, file);
+      if (result.evalReset) {
+        message.success('기대결과 일괄 업데이트 완료. 기존 평가결과가 초기화되었습니다.');
+      } else {
+        message.success('기대결과 일괄 업데이트가 완료되었습니다.');
+      }
+      if ((result.remainingMissingExpectedCount || 0) > 0) {
+        message.warning(`남은 빈 기대결과 ${result.remainingMissingExpectedCount}건`);
+      }
+      await loadRunDetail(runId);
+      if (section === 'run') {
+        await loadRuns({ testSetId: selectedTestSetId });
+      } else {
+        await loadRuns({ forceAll: true });
+      }
+      return result;
+    } catch (error) {
+      console.error(error);
+      message.error('기대결과 일괄 업데이트에 실패했습니다.');
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -438,7 +584,8 @@ export function AgentValidationManagementPage({
     [testSets],
   );
 
-  const getHistoryEvaluationState = (run: ValidationRun) => getEvaluationStateLabel(run);
+  const getHistoryEvaluationState = (run: ValidationRun) =>
+    getEvaluationStateLabel(run);
 
   const filteredHistoryRuns = useMemo(() => {
     if (section !== 'history') return runs;
@@ -449,11 +596,22 @@ export function AgentValidationManagementPage({
       ? new Date(startAt.getFullYear(), startAt.getMonth(), startAt.getDate())
       : null;
     const endBoundary = endAt
-      ? new Date(endAt.getFullYear(), endAt.getMonth(), endAt.getDate(), 23, 59, 59, 999)
+      ? new Date(
+          endAt.getFullYear(),
+          endAt.getMonth(),
+          endAt.getDate(),
+          23,
+          59,
+          59,
+          999,
+        )
       : null;
 
     const filtered = runs.filter((run) => {
-      if (historyExecutionStatusFilter && run.status !== historyExecutionStatusFilter) {
+      if (
+        historyExecutionStatusFilter &&
+        run.status !== historyExecutionStatusFilter
+      ) {
         return false;
       }
       if (
@@ -473,8 +631,13 @@ export function AgentValidationManagementPage({
       }
       if (!keyword) return true;
 
-      const testSetName = run.testSetId ? testSetNameById[run.testSetId] || run.testSetId : '';
-      const haystack = [run.id, run.name, testSetName].filter(Boolean).join(' ').toLowerCase();
+      const testSetName = run.testSetId
+        ? testSetNameById[run.testSetId] || run.testSetId
+        : '';
+      const haystack = [run.id, run.name, testSetName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
       return haystack.includes(keyword);
     });
 
@@ -501,11 +664,19 @@ export function AgentValidationManagementPage({
 
   useEffect(() => {
     if (section !== 'history') return;
-    const maxPage = Math.max(1, Math.ceil(filteredHistoryRuns.length / historyPageSize));
+    const maxPage = Math.max(
+      1,
+      Math.ceil(filteredHistoryRuns.length / historyPageSize),
+    );
     if (historyCurrentPage > maxPage) {
       setHistoryCurrentPage(maxPage);
     }
-  }, [filteredHistoryRuns.length, historyCurrentPage, historyPageSize, section]);
+  }, [
+    filteredHistoryRuns.length,
+    historyCurrentPage,
+    historyPageSize,
+    section,
+  ]);
 
   useEffect(() => {
     if (section !== 'history') return;
@@ -529,18 +700,27 @@ export function AgentValidationManagementPage({
     setHistorySortOrder('createdAt_desc');
   };
 
-  const { runItemColumns, historyDetailItemColumns, historyColumns } = useValidationColumns({
-    testSetNameById,
-  });
+  const { runItemColumns, historyColumns } =
+    useValidationColumns({
+      testSetNameById,
+    });
 
-  const { sectionTitle, isHistoryDetailMatched } = useValidationSectionMeta({
+  const { isHistoryDetailMatched } = useValidationSectionMeta({
     section,
+    historyDetailTab,
     historyRunId,
     currentRun,
   });
 
+  const handleChangeHistoryDetailTab = (nextTab: HistoryDetailTab) => {
+    if (!historyRunId) return;
+    const params = new URLSearchParams(location.search);
+    params.set('tab', nextTab);
+    navigate(`/validation/history/${encodeURIComponent(historyRunId)}?${params.toString()}`);
+  };
+
   return (
-    <Card className="backoffice-content-card" title={`에이전트 검증 관리 · ${sectionTitle}`}>
+    <Card className="backoffice-content-card">
       {section === 'run' ? (
         <ValidationRunSection
           loading={loading}
@@ -582,7 +762,9 @@ export function AgentValidationManagementPage({
               <Input.Search
                 allowClear
                 value={historyKeywordFilter}
-                onChange={(event) => setHistoryKeywordFilter(event.target.value)}
+                onChange={(event) =>
+                  setHistoryKeywordFilter(event.target.value)
+                }
                 onSearch={(value) => setHistoryKeywordFilter(value)}
                 placeholder="Run ID / Run 이름 / 테스트 세트"
               />
@@ -630,8 +812,20 @@ export function AgentValidationManagementPage({
                   setHistoryCreatedAtFilter(
                     value
                       ? [
-                          value[0] ? new Date((value[0] as { valueOf: () => number }).valueOf()) : null,
-                          value[1] ? new Date((value[1] as { valueOf: () => number }).valueOf()) : null,
+                          value[0]
+                            ? new Date(
+                                (
+                                  value[0] as { valueOf: () => number }
+                                ).valueOf(),
+                              )
+                            : null,
+                          value[1]
+                            ? new Date(
+                                (
+                                  value[1] as { valueOf: () => number }
+                                ).valueOf(),
+                              )
+                            : null,
                         ]
                       : [null, null],
                   )
@@ -644,7 +838,11 @@ export function AgentValidationManagementPage({
                 style={{ width: '100%' }}
                 value={historySortOrder}
                 onChange={(value) =>
-                  setHistorySortOrder(value === 'createdAt_asc' ? 'createdAt_asc' : 'createdAt_desc')
+                  setHistorySortOrder(
+                    value === 'createdAt_asc'
+                      ? 'createdAt_asc'
+                      : 'createdAt_desc',
+                  )
                 }
                 options={[
                   { label: '최신순', value: 'createdAt_desc' },
@@ -668,6 +866,7 @@ export function AgentValidationManagementPage({
       {section === 'history-detail' ? (
         <ValidationHistoryDetailSection
           historyRunId={historyRunId}
+          historyDetailTab={historyDetailTab}
           currentRun={currentRun}
           isHistoryDetailMatched={isHistoryDetailMatched}
           runItems={runItems}
@@ -675,12 +874,17 @@ export function AgentValidationManagementPage({
           runItemsPageSize={runItemsPageSize}
           setRunItemsCurrentPage={setRunItemsCurrentPage}
           setRunItemsPageSize={setRunItemsPageSize}
-          onBackToHistory={onBackToHistory}
           onOpenInRunWorkspace={onOpenRunWorkspace}
+          onChangeHistoryDetailTab={handleChangeHistoryDetailTab}
           onDeleteRun={handleDeleteRun}
           testSetNameById={testSetNameById}
-          historyDetailItemColumns={historyDetailItemColumns}
           onUpdateRun={handleUpdateRun}
+          onPreviewExpectedResultsBulkUpdate={
+            handlePreviewExpectedResultsBulkUpdate
+          }
+          onApplyExpectedResultsBulkUpdate={
+            handleApplyExpectedResultsBulkUpdate
+          }
         />
       ) : null}
 

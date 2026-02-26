@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isKnownPath,
   normalizePathname,
+  resolveHistoryDetailTab,
   resolveHistoryRunId,
   resolveMenu,
   resolveValidationSection,
@@ -28,6 +29,14 @@ describe('validation navigation helpers', () => {
   it('resolves history run id safely', () => {
     expect(resolveHistoryRunId('/validation/history/run-1')).toBe('run-1');
     expect(resolveHistoryRunId('/validation/run')).toBeUndefined();
+  });
+
+  it('resolves history detail tab from query string', () => {
+    expect(resolveHistoryDetailTab('?tab=history')).toBe('history');
+    expect(resolveHistoryDetailTab('?tab=results')).toBe('results');
+    expect(resolveHistoryDetailTab('?tab=RESULTS')).toBe('results');
+    expect(resolveHistoryDetailTab('?tab=unknown')).toBe('history');
+    expect(resolveHistoryDetailTab('')).toBe('history');
   });
 
   it('checks known paths', () => {

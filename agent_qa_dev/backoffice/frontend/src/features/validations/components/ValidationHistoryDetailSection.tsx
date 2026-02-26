@@ -1,29 +1,54 @@
-import { App, Button, Descriptions, Empty, Form, Input, InputNumber, Select, Space } from 'antd';
+import {
+  App,
+  Button,
+  Empty,
+  Form,
+  Input,
+  InputNumber,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Tabs,
+  Typography,
+  Upload,
+} from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useMemo, useState } from 'react';
+import type { UploadFile } from 'antd/es/upload/interface';
+import { DownloadOutlined } from '@ant-design/icons';
+import { useEffect, useMemo, useState } from 'react';
 
-import { buildValidationRunExportUrl } from '../../../api/validation';
+import { buildValidationRunExpectedResultsTemplateUrl } from '../../../api/validation';
 import type {
   ValidationRun,
   ValidationRunItem,
+  ValidationRunExpectedBulkPreviewResult,
+  ValidationRunExpectedBulkUpdateResult,
   ValidationRunUpdateRequest,
 } from '../../../api/types/validation';
-import { StandardDataTable } from '../../../components/common/StandardDataTable';
 import { StandardModal } from '../../../components/common/StandardModal';
-import { AGENT_MODE_OPTIONS, DEFAULT_AGENT_MODE_VALUE, DEFAULT_EVAL_MODEL_VALUE, EVAL_MODEL_OPTIONS } from '../constants';
-import { HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS } from '../constants';
 import {
-  getRunDisplayName,
-  getRunExecutionConfigText,
-  getValidationRunAggregateSummary,
-} from '../utils/runDisplay';
-import {
-  getEvaluationStateLabel,
-  getEvaluationProgressText,
-} from '../utils/runProgress';
+  AGENT_MODE_OPTIONS,
+  DEFAULT_AGENT_MODE_VALUE,
+  DEFAULT_EVAL_MODEL_VALUE,
+  EVAL_MODEL_OPTIONS,
+} from '../constants';
+import type { HistoryDetailTab } from '../types';
 import { canDeleteRun, canUpdateRun } from '../utils/runWorkbench';
-import { getExecutionStateLabel } from '../utils/runStatus';
-import { DownloadOutlined, ExportOutlined } from '@ant-design/icons';
+import { ValidationHistoryDetailHeaderBar } from './ValidationHistoryDetailHeaderBar';
+import { ValidationHistoryDetailHistoryTab } from './ValidationHistoryDetailHistoryTab';
+import { ValidationHistoryDetailResultsTab } from './ValidationHistoryDetailResultsTab';
+import { ValidationHistoryDetailRowDrawer } from './ValidationHistoryDetailRowDrawer';
+import { ValidationHistoryDetailContextMeta } from './ValidationHistoryDetailContextMeta';
+import {
+  buildHistoryRows,
+  buildResultsRows,
+  type HistoryRowView,
+  type HistoryTableFilters,
+  type ResultsFilters,
+  type ResultsRowView,
+} from '../utils/historyDetailRows';
+import { getAgentModeLabel, getLastUpdatedText, getModelLabel } from '../utils/historyDetailDisplay';
 
 const CONTEXT_SAMPLE =
   '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
@@ -35,11 +60,7 @@ const parseContextJson = (raw?: string) => {
   }
   try {
     const parsed = JSON.parse(text);
-    if (
-      parsed === null ||
-      typeof parsed !== 'object' ||
-      Array.isArray(parsed)
-    ) {
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       return {
         parsedContext: undefined,
         parseError: 'context는 JSON 객체 형태여야 합니다.',
@@ -80,8 +101,50 @@ const normalizeAgentModeValue = (value?: string) => {
   return trimmed;
 };
 
+const EXPECTED_BULK_STATUS_LABEL: Record<string, string> = {
+  'planned-update': '업데이트 예정',
+  unchanged: '변경 없음',
+  'unmapped-item-id': 'Item ID 미매핑',
+  'missing-item-id': 'Item ID 누락',
+  'duplicate-item-id': 'Item ID 중복',
+};
+
+const EXPECTED_BULK_STATUS_COLOR: Record<string, string> = {
+  'planned-update': 'blue',
+  unchanged: 'default',
+  'unmapped-item-id': 'orange',
+  'missing-item-id': 'red',
+  'duplicate-item-id': 'red',
+};
+
+type ExpectedBulkPreviewRow = {
+  key: string;
+  rowNo: number;
+  itemId: string;
+  status: string;
+  changedFields: string[];
+};
+
+const INITIAL_HISTORY_FILTERS: HistoryTableFilters = {
+  onlyErrors: false,
+  onlySlow: false,
+  status: 'all',
+  dateRange: [null, null],
+};
+
+const INITIAL_RESULTS_FILTERS: ResultsFilters = {
+  tablePreset: 'default',
+  onlyLowScore: false,
+  onlyAbnormal: false,
+  onlySlow: false,
+  onlyLatencyUnclassified: false,
+  scoreBucketFilter: null,
+  focusMetric: null,
+};
+
 export function ValidationHistoryDetailSection({
   historyRunId,
+  historyDetailTab,
   currentRun,
   isHistoryDetailMatched,
   runItems,
@@ -89,14 +152,16 @@ export function ValidationHistoryDetailSection({
   runItemsPageSize,
   setRunItemsCurrentPage,
   setRunItemsPageSize,
-  onBackToHistory,
   onOpenInRunWorkspace,
+  onChangeHistoryDetailTab,
   onUpdateRun,
   onDeleteRun,
-  historyDetailItemColumns,
+  onPreviewExpectedResultsBulkUpdate,
+  onApplyExpectedResultsBulkUpdate,
   testSetNameById = {},
 }: {
   historyRunId?: string;
+  historyDetailTab: HistoryDetailTab;
   currentRun: ValidationRun | null;
   isHistoryDetailMatched: boolean;
   runItems: ValidationRunItem[];
@@ -104,22 +169,36 @@ export function ValidationHistoryDetailSection({
   runItemsPageSize: number;
   setRunItemsCurrentPage: (value: number) => void;
   setRunItemsPageSize: (value: number) => void;
-  onBackToHistory?: () => void;
-  onOpenInRunWorkspace?: (payload: {
-    runId: string;
-    testSetId?: string | null;
-  }) => void;
-  onUpdateRun?: (
-    runId: string,
-    payload: ValidationRunUpdateRequest,
-  ) => Promise<void>;
+  onOpenInRunWorkspace?: (payload: { runId: string; testSetId?: string | null }) => void;
+  onChangeHistoryDetailTab?: (tab: HistoryDetailTab) => void;
+  onUpdateRun?: (runId: string, payload: ValidationRunUpdateRequest) => Promise<void>;
   onDeleteRun?: (runId: string) => Promise<void>;
-  historyDetailItemColumns: ColumnsType<ValidationRunItem>;
+  onPreviewExpectedResultsBulkUpdate?: (
+    runId: string,
+    file: File,
+  ) => Promise<ValidationRunExpectedBulkPreviewResult>;
+  onApplyExpectedResultsBulkUpdate?: (
+    runId: string,
+    file: File,
+  ) => Promise<ValidationRunExpectedBulkUpdateResult>;
   testSetNameById?: Record<string, string>;
 }) {
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const [updateSaving, setUpdateSaving] = useState(false);
+  const [expectedBulkModalOpen, setExpectedBulkModalOpen] = useState(false);
+  const [expectedBulkUploading, setExpectedBulkUploading] = useState(false);
+  const [expectedBulkFiles, setExpectedBulkFiles] = useState<UploadFile[]>([]);
+  const [expectedBulkPreviewRows, setExpectedBulkPreviewRows] = useState<ExpectedBulkPreviewRow[]>([]);
+  const [expectedBulkSummary, setExpectedBulkSummary] = useState<ValidationRunExpectedBulkPreviewResult | null>(null);
+  const [expectedBulkPreviewEmptyText, setExpectedBulkPreviewEmptyText] = useState('파일을 업로드하면 미리보기가 표시됩니다.');
   const [updateContextSnapshot, setUpdateContextSnapshot] = useState('');
+  const [historyFilters, setHistoryFilters] = useState<HistoryTableFilters>(INITIAL_HISTORY_FILTERS);
+  const [resultsFilters, setResultsFilters] = useState<ResultsFilters>(INITIAL_RESULTS_FILTERS);
+  const [resultsCurrentPage, setResultsCurrentPage] = useState(1);
+  const [resultsPageSize, setResultsPageSize] = useState(50);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [historySelectedRow, setHistorySelectedRow] = useState<HistoryRowView | null>(null);
+  const [resultsSelectedRow, setResultsSelectedRow] = useState<ResultsRowView | null>(null);
   const [form] = Form.useForm<{
     name?: string;
     agentId?: string;
@@ -130,6 +209,7 @@ export function ValidationHistoryDetailSection({
     timeoutMs?: number;
     contextJson?: string;
   }>();
+  const { modal, message } = App.useApp();
 
   const testSetName = useMemo(
     () =>
@@ -138,21 +218,28 @@ export function ValidationHistoryDetailSection({
         : '-',
     [currentRun, testSetNameById],
   );
-  const aggregateSummary = useMemo(
-    () => getValidationRunAggregateSummary(currentRun, runItems),
-    [currentRun, runItems],
-  );
-  const executionStateLabel = useMemo(
-    () => getExecutionStateLabel(currentRun),
-    [currentRun],
-  );
-  const evaluationStateLabel = useMemo(
-    () => getEvaluationStateLabel(currentRun, runItems),
-    [currentRun, runItems],
-  );
+  const historyRows = useMemo(() => buildHistoryRows(runItems), [runItems]);
+  const resultsRows = useMemo(() => buildResultsRows(runItems), [runItems]);
   const canEditCurrentRun = canUpdateRun(currentRun);
   const canDeleteCurrentRun = canDeleteRun(currentRun);
-  const { modal } = App.useApp();
+  const canOpenExpectedBulkUpdate = Boolean(onPreviewExpectedResultsBulkUpdate && onApplyExpectedResultsBulkUpdate);
+
+  useEffect(() => {
+    setHistoryFilters(INITIAL_HISTORY_FILTERS);
+    setResultsFilters(INITIAL_RESULTS_FILTERS);
+    setResultsCurrentPage(1);
+    setDrawerOpen(false);
+    setHistorySelectedRow(null);
+    setResultsSelectedRow(null);
+  }, [currentRun?.id]);
+
+  useEffect(() => {
+    setRunItemsCurrentPage(1);
+  }, [historyFilters, setRunItemsCurrentPage]);
+
+  useEffect(() => {
+    setResultsCurrentPage(1);
+  }, [resultsFilters]);
 
   const openUpdateRunModal = () => {
     if (!currentRun) return;
@@ -224,142 +311,196 @@ export function ValidationHistoryDetailSection({
     });
   };
 
+  const openExpectedBulkModal = () => {
+    setExpectedBulkModalOpen(true);
+    setExpectedBulkFiles([]);
+    setExpectedBulkPreviewRows([]);
+    setExpectedBulkSummary(null);
+    setExpectedBulkPreviewEmptyText('파일을 업로드하면 미리보기가 표시됩니다.');
+  };
+
+  const closeExpectedBulkModal = () => {
+    setExpectedBulkModalOpen(false);
+    setExpectedBulkFiles([]);
+    setExpectedBulkPreviewRows([]);
+    setExpectedBulkSummary(null);
+    setExpectedBulkPreviewEmptyText('파일을 업로드하면 미리보기가 표시됩니다.');
+  };
+
+  const toExpectedBulkPreviewRows = (
+    rows: ValidationRunExpectedBulkPreviewResult['previewRows'],
+  ): ExpectedBulkPreviewRow[] =>
+    rows.map((row) => ({
+      key: `${row.rowNo}:${row.itemId || ''}`,
+      rowNo: row.rowNo,
+      itemId: row.itemId || '-',
+      status: row.status,
+      changedFields: Array.isArray(row.changedFields) ? row.changedFields : [],
+    }));
+
+  const handleExpectedBulkFileChange = async (nextFiles: UploadFile[]) => {
+    setExpectedBulkFiles(nextFiles.slice(-1));
+    const origin = nextFiles[0]?.originFileObj;
+    if (!origin || !currentRun || !onPreviewExpectedResultsBulkUpdate) {
+      setExpectedBulkPreviewRows([]);
+      setExpectedBulkSummary(null);
+      setExpectedBulkPreviewEmptyText('파일을 업로드하면 미리보기가 표시됩니다.');
+      return;
+    }
+
+    try {
+      setExpectedBulkUploading(true);
+      const preview = await onPreviewExpectedResultsBulkUpdate(currentRun.id, origin);
+      setExpectedBulkSummary(preview);
+      setExpectedBulkPreviewRows(toExpectedBulkPreviewRows(preview.previewRows || []));
+      setExpectedBulkPreviewEmptyText('미리보기 데이터가 없습니다.');
+    } catch (error) {
+      console.error(error);
+      setExpectedBulkSummary(null);
+      setExpectedBulkPreviewRows([]);
+      setExpectedBulkPreviewEmptyText('미리보기에 실패했습니다.');
+    } finally {
+      setExpectedBulkUploading(false);
+    }
+  };
+
+  const submitExpectedBulkUpdate = async () => {
+    const file = expectedBulkFiles[0]?.originFileObj;
+    if (!currentRun || !onApplyExpectedResultsBulkUpdate) {
+      return;
+    }
+    if (!file) {
+      message.warning('업로드할 파일을 선택해 주세요.');
+      return;
+    }
+    try {
+      setExpectedBulkUploading(true);
+      await onApplyExpectedResultsBulkUpdate(currentRun.id, file);
+      closeExpectedBulkModal();
+    } finally {
+      setExpectedBulkUploading(false);
+    }
+  };
+
+  const expectedBulkPreviewColumns = useMemo<ColumnsType<ExpectedBulkPreviewRow>>(
+    () => [
+      { key: 'rowNo', title: '행', dataIndex: 'rowNo', width: 80 },
+      { key: 'itemId', title: 'Item ID', dataIndex: 'itemId', width: 220, ellipsis: true },
+      {
+        key: 'status',
+        title: '상태',
+        dataIndex: 'status',
+        width: 140,
+        render: (value: string) => (
+          <Tag color={EXPECTED_BULK_STATUS_COLOR[value] || 'default'}>
+            {EXPECTED_BULK_STATUS_LABEL[value] || value}
+          </Tag>
+        ),
+      },
+      {
+        key: 'changedFields',
+        title: '변경 필드',
+        dataIndex: 'changedFields',
+        width: 240,
+        ellipsis: true,
+        render: (value: string[]) => (value.length > 0 ? value.join(', ') : '-'),
+      },
+    ],
+    [],
+  );
+
+  const openHistoryRow = (row: HistoryRowView) => {
+    setHistorySelectedRow(row);
+    setResultsSelectedRow(null);
+    setDrawerOpen(true);
+  };
+
+  const openResultsRow = (row: ResultsRowView) => {
+    setResultsSelectedRow(row);
+    setHistorySelectedRow(null);
+    setDrawerOpen(true);
+  };
+
+  if (!historyRunId) {
+    return <Empty description="선택된 Run ID가 없습니다." />;
+  }
+  if (!isHistoryDetailMatched) {
+    return <Empty description="Run 상세를 불러오는 중입니다." />;
+  }
+  if (!currentRun) {
+    return <Empty description="런 상세를 찾을 수 없습니다." />;
+  }
+
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
-      <Space>
-        <Button onClick={() => onBackToHistory?.()}>목록으로</Button>
-        <Button
-          onClick={() => void openUpdateRunModal()}
-          disabled={!canEditCurrentRun || !isHistoryDetailMatched || !currentRun}
-        >
-          Run 수정
-        </Button>
-        <Button
-          danger
-          onClick={() => {
-            void handleDeleteCurrentRun();
-          }}
-          disabled={!canDeleteCurrentRun || !isHistoryDetailMatched || !currentRun}
-        >
-          Run 삭제
-        </Button>
-        <Button
-          icon={<ExportOutlined />}
-          onClick={() => {
-            if (!currentRun) return;
-            onOpenInRunWorkspace?.({
-              runId: currentRun.id,
-              testSetId: currentRun.testSetId ?? undefined,
-            });
-          }}
-          disabled={!currentRun || !isHistoryDetailMatched}
-        >
-          검증 실행에서 이 run 열기
-        </Button>
-        <Button
-          type="primary"
-          icon={<DownloadOutlined />}
-          href={
-            currentRun && isHistoryDetailMatched
-              ? buildValidationRunExportUrl(currentRun.id)
-              : undefined
-          }
-          disabled={
-            !currentRun || !isHistoryDetailMatched || runItems.length === 0
-          }
-        >
-          엑셀 다운로드
-        </Button>
-      </Space>
+      <ValidationHistoryDetailHeaderBar
+        currentRun={currentRun}
+        onOpenInRunWorkspace={onOpenInRunWorkspace}
+        onOpenUpdateRun={openUpdateRunModal}
+        onOpenExpectedBulkUpdate={openExpectedBulkModal}
+        onDeleteRun={handleDeleteCurrentRun}
+        canEditCurrentRun={canEditCurrentRun}
+        canDeleteCurrentRun={canDeleteCurrentRun}
+        canOpenExpectedBulkUpdate={canOpenExpectedBulkUpdate}
+        hasItems={runItems.length > 0}
+      />
 
-      {!historyRunId ? (
-        <Empty description="선택된 Run ID가 없습니다." />
-      ) : !isHistoryDetailMatched ? (
-        <Empty description="Run 상세를 불러오는 중입니다." />
-      ) : currentRun ? (
-        <>
-          <Descriptions size="small" bordered column={3}>
-            <Descriptions.Item label="Run 이름">
-              <span title={currentRun.id}>{getRunDisplayName(currentRun)}</span>
-            </Descriptions.Item>
-            <Descriptions.Item label="테스트 세트">
-              {testSetName}
-            </Descriptions.Item>
-            <Descriptions.Item label="실행 상태">
-              {executionStateLabel}
-            </Descriptions.Item>
-            <Descriptions.Item label="평가 상태">
-              {evaluationStateLabel}
-            </Descriptions.Item>
-            <Descriptions.Item label="실행 구성">
-              {getRunExecutionConfigText(currentRun)}
-            </Descriptions.Item>
-            <Descriptions.Item label="에이전트 모드">
-              {currentRun.agentId}
-            </Descriptions.Item>
-            <Descriptions.Item label="총/완료/오류">
-              {currentRun.totalItems} / {currentRun.doneItems} /{' '}
-              {currentRun.errorItems}
-            </Descriptions.Item>
-            <Descriptions.Item label="LLM 평가 진행">
-              {getEvaluationProgressText(runItems)}
-            </Descriptions.Item>
-            <Descriptions.Item label="평가 모델">
-              {currentRun.evalModel}
-            </Descriptions.Item>
-            <Descriptions.Item label="평균 응답시간(초)">
-              {aggregateSummary.averageResponseTimeSecText}
-            </Descriptions.Item>
-            <Descriptions.Item label="응답시간 p50(초)">
-              {aggregateSummary.responseTimeP50SecText}
-            </Descriptions.Item>
-            <Descriptions.Item label="응답시간 p95(초)">
-              {aggregateSummary.responseTimeP95SecText}
-            </Descriptions.Item>
-            <Descriptions.Item label="Logic PASS율">
-              {aggregateSummary.logicPassRateText}
-            </Descriptions.Item>
-            <Descriptions.Item label="LLM 평가율">
-              {aggregateSummary.llmDoneRateText}
-            </Descriptions.Item>
-            <Descriptions.Item label="LLM PASS율">
-              {aggregateSummary.llmPassRateText}
-            </Descriptions.Item>
-            <Descriptions.Item label="LLM 평균 점수">
-              {aggregateSummary.llmTotalScoreAvgText}
-            </Descriptions.Item>
-          </Descriptions>
+      <ValidationHistoryDetailContextMeta
+        items={[
+          { key: 'testSet', label: '테스트 세트', value: testSetName },
+          { key: 'agent', label: '에이전트', value: getAgentModeLabel(currentRun.agentId) },
+          { key: 'evalModel', label: '평가 모델', value: getModelLabel(currentRun.evalModel) },
+          { key: 'updatedAt', label: '마지막 업데이트', value: getLastUpdatedText(currentRun) },
+        ]}
+      />
 
-          <StandardDataTable
-            tableId="validation-history-detail-items"
-            initialColumnWidths={HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS}
-            minColumnWidth={84}
-            wrapperClassName="validation-history-detail-table-wrap"
-            className="query-management-table validation-history-detail-table"
-            rowKey="id"
-            size="small"
-            tableLayout="fixed"
-            dataSource={runItems}
-            locale={{ emptyText: <Empty description="실행 결과 없음" /> }}
-            pagination={{
-              current: runItemsCurrentPage,
-              pageSize: runItemsPageSize,
-              total: runItems.length,
-              onChange: (page, nextPageSize) => {
-                if (nextPageSize !== runItemsPageSize) {
-                  setRunItemsPageSize(nextPageSize);
-                  setRunItemsCurrentPage(1);
-                  return;
-                }
-                setRunItemsCurrentPage(page);
-              },
-            }}
-            columns={historyDetailItemColumns}
-          />
-        </>
+      <Tabs
+        activeKey={historyDetailTab}
+        items={[
+          { key: 'history', label: '검증 이력' },
+          { key: 'results', label: '평가 결과' },
+        ]}
+        onChange={(nextTab) => {
+          setDrawerOpen(false);
+          onChangeHistoryDetailTab?.(nextTab as HistoryDetailTab);
+        }}
+      />
+
+      {historyDetailTab === 'history' ? (
+        <ValidationHistoryDetailHistoryTab
+          currentRun={currentRun}
+          rows={historyRows}
+          filters={historyFilters}
+          onChangeFilters={setHistoryFilters}
+          currentPage={runItemsCurrentPage}
+          pageSize={runItemsPageSize}
+          setCurrentPage={setRunItemsCurrentPage}
+          setPageSize={setRunItemsPageSize}
+          onOpenRow={openHistoryRow}
+        />
       ) : (
-        <Empty description="런 상세를 찾을 수 없습니다." />
+        <ValidationHistoryDetailResultsTab
+          currentRun={currentRun}
+          runItems={runItems}
+          rows={resultsRows}
+          filters={resultsFilters}
+          onChangeFilters={setResultsFilters}
+          currentPage={resultsCurrentPage}
+          pageSize={resultsPageSize}
+          setCurrentPage={setResultsCurrentPage}
+          setPageSize={setResultsPageSize}
+          onOpenRow={openResultsRow}
+        />
       )}
+
+      <ValidationHistoryDetailRowDrawer
+        open={drawerOpen}
+        activeTab={historyDetailTab}
+        historyRow={historySelectedRow}
+        resultsRow={resultsSelectedRow}
+        onClose={() => setDrawerOpen(false)}
+      />
+
       <StandardModal
         open={updateModalOpen}
         title="Run 정보 수정"
@@ -403,6 +544,7 @@ export function ValidationHistoryDetailSection({
               <Form.Item
                 label="채팅방 수"
                 name="conversationRoomCount"
+                extra="채팅방 단위로 순차 실행됩니다. A 방 완료 후 B 방이 시작됩니다."
                 rules={[{ required: true, message: '필수 항목입니다.' }]}
               >
                 <InputNumber min={1} />
@@ -410,6 +552,7 @@ export function ValidationHistoryDetailSection({
               <Form.Item
                 label="동시 실행 수"
                 name="agentParallelCalls"
+                extra="각 채팅방 내 질의를 N개씩 병렬 처리합니다."
                 rules={[{ required: true, message: '필수 항목입니다.' }]}
               >
                 <InputNumber min={1} />
@@ -426,6 +569,84 @@ export function ValidationHistoryDetailSection({
               <Input.TextArea rows={5} placeholder={CONTEXT_SAMPLE} />
             </Form.Item>
           </Form>
+        </Space>
+      </StandardModal>
+
+      <StandardModal
+        title="기대결과 일괄 업데이트"
+        open={expectedBulkModalOpen}
+        width={920}
+        onCancel={closeExpectedBulkModal}
+        onOk={() => {
+          void submitExpectedBulkUpdate();
+        }}
+        okText="업데이트"
+        cancelText="취소"
+        confirmLoading={expectedBulkUploading}
+        okButtonProps={{ disabled: !expectedBulkFiles[0]?.originFileObj }}
+        destroyOnHidden
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Typography.Text type="secondary">
+            이 수정은 원본 질의가 아니라 현재 Run의 스냅샷에만 반영됩니다.
+          </Typography.Text>
+          <div>
+            <Typography.Text>템플릿 다운로드</Typography.Text>
+            <div style={{ marginTop: 8 }}>
+              <Button
+                icon={<DownloadOutlined />}
+                href={buildValidationRunExpectedResultsTemplateUrl(currentRun.id)}
+              >
+                CSV 다운로드
+              </Button>
+            </div>
+          </div>
+          <div>
+            <Typography.Text>파일 업로드 (CSV/XLSX)</Typography.Text>
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Upload
+                beforeUpload={() => false}
+                fileList={expectedBulkFiles}
+                maxCount={1}
+                accept=".csv,.xlsx,.xls"
+                showUploadList={false}
+                onChange={({ fileList }) => {
+                  void handleExpectedBulkFileChange(fileList);
+                }}
+              >
+                <Button>파일 선택</Button>
+              </Upload>
+              {expectedBulkFiles[0]?.name ? (
+                <Typography.Text type="secondary">{expectedBulkFiles[0].name}</Typography.Text>
+              ) : null}
+            </div>
+          </div>
+          <Tag color="warning">
+            적용 시 기존 평가결과가 초기화되며, 재평가가 필요합니다.
+          </Tag>
+          <Table
+            size="small"
+            rowKey="key"
+            columns={expectedBulkPreviewColumns}
+            dataSource={expectedBulkPreviewRows}
+            tableLayout="fixed"
+            pagination={false}
+            scroll={{ x: 760, y: 280 }}
+            locale={{ emptyText: expectedBulkPreviewEmptyText }}
+          />
+          {expectedBulkSummary ? (
+            <Space direction="vertical" size={4}>
+              <Typography.Text type="secondary">
+                총 {expectedBulkSummary.totalRows}건 중 업데이트 예정 {expectedBulkSummary.plannedUpdateCount}건, 변경 없음 {expectedBulkSummary.unchangedCount}건
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                누락 ID {expectedBulkSummary.missingItemIdRows.length}건 / 중복 ID {expectedBulkSummary.duplicateItemIdRows.length}건 / 미매핑 {expectedBulkSummary.unmappedItemRows.length}건
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                적용 후 빈 기대결과 예상 {expectedBulkSummary.remainingMissingExpectedCountAfterApply}건
+              </Typography.Text>
+            </Space>
+          ) : null}
         </Space>
       </StandardModal>
     </Space>

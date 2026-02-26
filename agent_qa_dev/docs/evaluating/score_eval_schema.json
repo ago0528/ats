@@ -1,0 +1,54 @@
+{
+  "name": "score_eval",
+  "schema": {
+    "type": "object",
+    "required": [
+      "score_eval",
+      "reasoning"
+    ],
+    "properties": {
+      "intent": {
+        "type": "number",
+        "description": "의도 충족 점수(0~5): raw payload의 assistantMessage, dataUIList, 기대결과를 기반으로 LLM 평가자가 PERFECT=5, GOOD=4, PARTIAL=3, WEAK=2, RELATED_BUT_WRONG=1, FAILED=0 스케일로 매핑해 판단. 실행 실패/LLM 판정 실패 시 0으로 처리.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "accuracy": {
+        "type": "number",
+        "description": "정확성 점수(0~5): 평가규칙(accuracyChecks: eq/contains/in/regex/exists)과 가중치로 pass ratio를 산출한 뒤 1.0=5, >=0.75=4, >=0.5=3, >=0.25=2, 0<ratio<0.25=1, 0=0으로 변환. 체크가 없거나 accuracy 추출 실패 시 0점.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "consistency": {
+        "type": "number",
+        "description": "동일 Query ID 반복(최소 2개) 비교 일치도(0~5): 각 반복의 (intent>=3 && accuracy>=3 && stability>=5) pass 플래그가 모두 참이거나 모두 거짓인 경우만 일치로 간주하고, 일치 비율 = consistent / eligible. 점수 = 일치 비율 * 5.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "latencySingle": {
+        "type": "number",
+        "description": "단일 도구 응답 속도 점수(0~5): responseTimeSec 또는 latency_ms 보정값을 이용해 계산. <=5초=5, 5~8초=4, 8~10초=3, 10~15초=2, 15~20초=1, 20초 초과=0.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "latencyMulti": {
+        "type": "number",
+        "description": "멀티 도구 응답 속도 점수(0~5): responseTimeSec 또는 latency_ms 보정값을 이용해 계산. <=20초=5, 20~30초=4, 30~40초=3, 40~50초=2, 50~60초=1, 60초 초과=0.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "stability": {
+        "type": "number",
+        "description": "안정성 점수(0~5): item.error 가 비어있고 raw JSON 파싱이 성공해야 하며, assistantMessage 또는 dataUIList(길이>0)가 존재해야 5점. 위 조건 중 하나라도 실패하면 0점.",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "reasoning": {
+        "type": "string",
+        "description": "각 지표(intent, accuracy, consistency, latencySingle, latencyMulti, stability)에 대해 판정 근거를 구체적으로 작성. 사용한 근거가 되는 필드(raw_json의 assistantMessage/데이터, expected_result, responseTimeSec, error), 임계값 적용 이유, 점수 근거(합/불합 조건)를 짧고 객관적으로 기록. 추정이 섞일 경우 fallback/판정 제한 사유를 명시."
+      }
+    },
+    "additionalProperties": false
+  },
+  "strict": true
+}

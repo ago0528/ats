@@ -1,0 +1,72 @@
+{
+  "name": "score_eval",
+  "schema": {
+    "type": "object",
+    "required": [
+      "intent_verdict",
+      "intent",
+      "accuracy",
+      "consistency",
+      "latencySingle",
+      "latencyMulti",
+      "stability",
+      "reasoning"
+    ],
+    "properties": {
+      "intent_verdict": {
+        "type": "string",
+        "description": "의도 충족 판정(enum).",
+        "enum": [
+          "PERFECT",
+          "GOOD",
+          "PARTIAL",
+          "WEAK",
+          "RELATED_BUT_WRONG",
+          "FAILED"
+        ]
+      },
+      "intent": {
+        "type": "number",
+        "description": "의도 충족 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "accuracy": {
+        "type": "number",
+        "description": "정확성 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "consistency": {
+        "type": "number",
+        "description": "일관성 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "latencySingle": {
+        "type": "number",
+        "description": "단일 도구 응답 속도 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "latencyMulti": {
+        "type": "number",
+        "description": "다중 도구 응답 속도 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "stability": {
+        "type": "number",
+        "description": "안정성 점수(0~5).",
+        "minimum": 0,
+        "maximum": 5
+      },
+      "reasoning": {
+        "type": "string",
+        "description": "지표별 근거 요약(텍스트)."
+      }
+    },
+    "additionalProperties": false
+  },
+  "strict": true
+}

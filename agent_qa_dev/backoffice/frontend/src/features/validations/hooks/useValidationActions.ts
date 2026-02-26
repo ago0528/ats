@@ -161,7 +161,15 @@ export function useValidationActions({
       await loadRuns();
     } catch (error) {
       console.error(error);
-      message.error('평가 요청에 실패했습니다.');
+      const detail = (error as any)?.response?.data?.detail;
+      if (detail && typeof detail === 'object' && detail.code === 'expected_result_missing') {
+        const missingCount = Number(detail.missingCount || 0);
+        const sampleQueryIds = Array.isArray(detail.sampleQueryIds) ? detail.sampleQueryIds.filter(Boolean) : [];
+        const sampleText = sampleQueryIds.length > 0 ? ` 예시: ${sampleQueryIds.slice(0, 3).join(', ')}` : '';
+        message.error(`평가를 시작할 수 없어요. 기대 결과 미입력 ${missingCount}건.${sampleText}`);
+      } else {
+        message.error('평가 요청에 실패했습니다.');
+      }
     } finally {
       setLoading(false);
     }

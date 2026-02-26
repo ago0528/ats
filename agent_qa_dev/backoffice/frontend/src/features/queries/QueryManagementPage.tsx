@@ -238,7 +238,7 @@ export function QueryManagementPage({
   );
 
   return (
-    <Card className="backoffice-content-card" title="질의 관리">
+    <Card className="backoffice-content-card">
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <QueryFilters
           category={category}
@@ -508,4 +508,3 @@ export function QueryManagementPage({
     </Card>
   );
 }
-

@@ -19,6 +19,16 @@ export type UploadPreviewRow = {
   llmEvalCriteria: string;
   logicFieldPath: string;
   logicExpectedValue: string;
+  formType: string;
+  actionType: string;
+  dataKey: string;
+  buttonKey: string;
+  buttonUrlContains: string;
+  multiSelectAllowYn: string;
+  intentRubricJson: string;
+  accuracyChecksJson: string;
+  latencyClass: string;
+  criteriaSource: string;
 };
 
 export type UploadPreviewParseResult = {

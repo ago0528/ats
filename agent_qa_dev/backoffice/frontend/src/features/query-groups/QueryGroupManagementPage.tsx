@@ -63,7 +63,7 @@ export function QueryGroupManagementPage({ environment, tokens }: { environment:
   );
 
   return (
-    <Card className="backoffice-content-card" title="질의 그룹">
+    <Card className="backoffice-content-card">
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <Space wrap>
           <Input.Search allowClear placeholder="그룹명 검색" onSearch={setSearch} style={{ width: 300 }} enterButton />

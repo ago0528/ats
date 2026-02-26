@@ -408,7 +408,7 @@ export function TestSetManagementPage({
   };
 
   return (
-    <Card className="backoffice-content-card" title="테스트 세트">
+    <Card className="backoffice-content-card">
       <Space direction="vertical" style={{ width: '100%' }} size={12}>
         <Space wrap>
           <Input.Search
@@ -599,6 +599,7 @@ export function TestSetManagementPage({
               label="채팅방 수"
               name="conversationRoomCount"
               style={{ flex: 1 }}
+              extra="채팅방 단위로 순차 실행됩니다. A 방 완료 후 B 방이 시작됩니다."
               rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1} />
@@ -607,6 +608,7 @@ export function TestSetManagementPage({
               label="동시 실행 수"
               name="agentParallelCalls"
               style={{ flex: 1 }}
+              extra="각 채팅방 내 질의를 N개씩 병렬 처리합니다."
               rules={[{ required: true, message: '필수 항목입니다.' }]}
             >
               <InputNumber min={1} />

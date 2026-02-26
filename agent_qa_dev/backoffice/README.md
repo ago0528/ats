@@ -84,4 +84,17 @@ export BACKOFFICE_ALLOW_DB_RESET=1
 python -m pytest -q
 ```
 
+## Backend Test (offline / internal mirror)
+```bash
+cd backoffice/backend
+
+# 오프라인 wheelhouse
+export BACKOFFICE_WHEELHOUSE=/path/to/wheelhouse
+./scripts/run_tests_offline.sh
+
+# 또는 사내 미러
+export BACKOFFICE_PIP_INDEX_URL=https://<internal-pypi>/simple
+./scripts/run_tests_offline.sh
+```
+
 > 백엔드 폴더에서는 `pnpm dev` 자체가 제공되지 않습니다. `pnpm` 관련 실행은 frontend 폴더로 이동해서 진행하세요.

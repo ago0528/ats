@@ -91,3 +91,170 @@
 - 정렬: `createdAt DESC` (최신순)
 - `GET /validation-runs`는 `offset`/`limit` 적용한 부분 집합을 반환
 - 응답은 프런트/백엔드에서 필드 추가 가능성이 있는 공통 객체 형태를 유지
+
+### 실행 파라미터 의미 (2026-02 기준)
+
+- `conversationRoomCount`: 실행 room 배치 개수. 배치는 순차 처리된다. (`room1` 완료 후 `room2`)
+- `agentParallelCalls`: 각 room 배치 내부에서 질의를 동시에 처리하는 워커 수
+- `repeatInConversation`: 동일 room 배치 내 반복 횟수
+- `conversationId`(run item): 항목 단위로 저장되는 대화 식별자이며, 같은 room 내에서 동일 ID를 보장하지 않는다
+
+---
+
+## 5) 기대결과 일괄 업데이트 API
+
+검증 이력 상세에서 Run Item 스냅샷(`expected_result_snapshot`)을 대량 수정하기 위한 계약이다.
+
+### 5-1) 템플릿 다운로드
+
+- Method: `GET`
+- Path: `/api/v1/validation-runs/{run_id}/expected-results/template.csv`
+- Response: CSV
+- 컬럼:
+  - `Item ID`
+  - `Query ID`
+  - `방/반복`
+  - `질의`
+  - `기존 기대결과`
+  - `기대결과`
+
+### 5-2) Preview
+
+- Method: `POST`
+- Path: `/api/v1/validation-runs/{run_id}/expected-results/bulk-update/preview`
+- Content-Type: `multipart/form-data`
+- Body: `file` (`.csv`, `.xlsx`, `.xls`)
+
+#### 식별/수정 컬럼 후보
+
+- Item ID: `Item ID`, `itemId`, `runItemId`, `run_item_id`
+- 기대결과: `기대결과`, `기대 결과`, `expectedResult`, `expected_result`
+
+#### Response
+
+```json
+{
+  "totalRows": 120,
+  "validRows": 118,
+  "plannedUpdateCount": 40,
+  "unchangedCount": 60,
+  "invalidRows": [2, 17],
+  "missingItemIdRows": [2],
+  "duplicateItemIdRows": [17],
+  "unmappedItemRows": [44],
+  "previewRows": [
+    { "rowNo": 1, "itemId": "uuid", "status": "planned-update", "changedFields": ["expectedResult"] }
+  ],
+  "remainingMissingExpectedCountAfterApply": 3
+}
+```
+
+상태값:
+- `planned-update`
+- `unchanged`
+- `missing-item-id`
+- `duplicate-item-id`
+- `unmapped-item-id`
+
+### 5-3) Apply
+
+- Method: `POST`
+- Path: `/api/v1/validation-runs/{run_id}/expected-results/bulk-update`
+- Content-Type: `multipart/form-data`
+- Body: `file`
+
+#### 실행 제약
+
+- `run.status == RUNNING` 이면 `409`
+- `run.eval_status == RUNNING` 이면 `409`
+
+#### Response
+
+```json
+{
+  "requestedRowCount": 120,
+  "updatedCount": 40,
+  "unchangedCount": 60,
+  "skippedMissingItemIdCount": 1,
+  "skippedDuplicateItemIdCount": 1,
+  "skippedUnmappedCount": 1,
+  "evalReset": true,
+  "remainingMissingExpectedCount": 3
+}
+```
+
+#### 부가 동작
+
+- `updatedCount > 0`이면 평가 결과 자동 초기화:
+  - `validation_llm_evaluations` (해당 run item 전부) 삭제
+  - `validation_score_snapshots` (해당 run) 삭제
+  - run `eval_status = PENDING`, `eval_started_at/eval_finished_at = NULL`
+- `validation_logic_evaluations`는 유지한다.
+
+---
+
+## 6) GNB 진행 알림 API
+
+검증 화면을 벗어나 있어도 현재 실행/평가 중인 Run을 GNB에서 확인하기 위한 계약이다.
+
+### 6-1) 진행 중 Run 조회
+
+- Method: `GET`
+- Path: `/api/v1/validation-run-activity`
+- Query:
+  - `environment` (required): `dev | st2 | st | pr`
+  - `actorKey` (required): 읽음 상태 식별 키
+  - `limit` (optional, default `20`, max `100`)
+- 활성 Run 기준:
+  - `status == RUNNING`
+  - 또는 `status == DONE && evalStatus == RUNNING`
+
+#### Response
+
+```json
+{
+  "items": [
+    {
+      "runId": "uuid",
+      "runName": "실행중 Run",
+      "testSetId": "uuid",
+      "status": "RUNNING",
+      "evalStatus": "PENDING",
+      "totalItems": 30,
+      "doneItems": 12,
+      "errorItems": 1,
+      "llmDoneItems": 0,
+      "createdAt": "2026-02-25T10:00:00",
+      "startedAt": "2026-02-25T10:00:10",
+      "evalStartedAt": null,
+      "isRead": false
+    }
+  ],
+  "unreadCount": 1
+}
+```
+
+오류:
+- `actorKey` 누락/공백: `400`
+
+### 6-2) 읽음 처리
+
+- Method: `POST`
+- Path: `/api/v1/validation-run-activity/read`
+- Body:
+  - 개별 읽음:
+    - `{ "environment":"dev", "actorKey":"...", "runIds":["run-id-1"] }`
+  - 전체 읽음(현재 활성 Run 대상):
+    - `{ "environment":"dev", "actorKey":"...", "markAll": true }`
+
+#### Response
+
+```json
+{
+  "updatedCount": 2
+}
+```
+
+오류:
+- `actorKey` 누락/공백: `400`
+- `markAll=false` 이고 `runIds`가 비어 있음: `400`

@@ -576,7 +576,7 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
         for repeat_index in range(1, int(repeat_in_conversation) + 1):
             for query in ordered_queries:
                 criteria = query.llm_eval_criteria_json
-                target_assistant = (query.target_assistant or "").strip()
+                target_assistant = (query.target_assistant or "").strip() or agent_id
                 items_payload.append(
                     {
                         "ordinal": ordinal,

@@ -188,7 +188,9 @@ export function ValidationRunSection({
   const [activeTab, setActiveTab] = useState<string>(WORKBENCH_TAB_KEY);
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
   const [overrideSaving, setOverrideSaving] = useState(false);
-  const [overrideModalMode, setOverrideModalMode] = useState<'create' | 'edit'>('create');
+  const [overrideModalMode, setOverrideModalMode] = useState<'create' | 'edit'>(
+    'create',
+  );
   const [overrideRunId, setOverrideRunId] = useState('');
   const [overrideContextSnapshot, setOverrideContextSnapshot] = useState('');
   const [form] = Form.useForm<OverrideFormValues>();
@@ -330,12 +332,13 @@ export function ValidationRunSection({
       if (overrideModalMode === 'edit') {
         if (!overrideRunId) return;
         const shouldUpdateContext = contextText !== overrideContextSnapshot;
-        const updatePayloadWithContext: ValidationRunUpdateRequest = shouldUpdateContext
-          ? {
-              ...updatePayload,
-              context: parsedContext.parsedContext ?? null,
-            }
-          : updatePayload;
+        const updatePayloadWithContext: ValidationRunUpdateRequest =
+          shouldUpdateContext
+            ? {
+                ...updatePayload,
+                context: parsedContext.parsedContext ?? null,
+              }
+            : updatePayload;
         await handleUpdateRun(overrideRunId, updatePayloadWithContext);
         setOverrideModalOpen(false);
         return;
@@ -345,7 +348,8 @@ export function ValidationRunSection({
         return;
       }
       if (parsedContext.parsedContext !== undefined) {
-        (baseOverrides as RunCreateOverrides).context = parsedContext.parsedContext;
+        (baseOverrides as RunCreateOverrides).context =
+          parsedContext.parsedContext;
       }
       await handleCreateRun(testSetId, {
         ...baseOverrides,
@@ -361,7 +365,8 @@ export function ValidationRunSection({
     if (!currentRun) return;
     modal.confirm({
       title: 'Run 삭제',
-      content: '실행 기록이 없는 PENDING 상태의 Run만 삭제할 수 있습니다. 삭제하시겠습니까?',
+      content:
+        '실행 기록이 없는 PENDING 상태의 Run만 삭제할 수 있습니다. 삭제하시겠습니까?',
       okText: '삭제',
       cancelText: '취소',
       okType: 'danger',
@@ -587,8 +592,8 @@ export function ValidationRunSection({
         <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
           {overrideModalMode === 'edit' ? (
             <>
-              현재 Run의 실행 구성, 평가 모델 정보를 수정합니다. 실행 대기 상태만 수정할 수
-              있습니다.
+              현재 Run의 실행 구성, 평가 모델 정보를 수정합니다. 실행 대기
+              상태만 수정할 수 있습니다.
             </>
           ) : (
             <>
@@ -641,7 +646,6 @@ export function ValidationRunSection({
           >
             <Select options={EVAL_MODEL_OPTIONS} />
           </Form.Item>
-
           <Space style={{ width: '100%' }} wrap>
             <Form.Item
               label="반복 수"
@@ -672,6 +676,15 @@ export function ValidationRunSection({
               <InputNumber min={1000} />
             </Form.Item>
           </Space>
+          <Typography.Paragraph type="secondary" style={{ marginTop: 0 }}>
+            • 채팅방 수: 채팅방 단위로 순차 실행됩니다. A 방 완료 후 B 방이
+            시작됩니다.
+            <br />
+            • 반복 수: 채팅방 내 질의를 반복 실행합니다.
+            <br />
+            • 동시 실행 수: 채팅방 내 질의를 동시에 실행합니다.
+            <br />• 타임아웃(ms): 실행 타임아웃(ms)입니다.
+          </Typography.Paragraph>
           <Form.Item
             label="Context"
             name="contextJson"

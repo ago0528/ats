@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.repositories.validation_queries import ValidationQueryRepository
 from app.repositories.validation_query_groups import ValidationQueryGroupRepository
+from app.services.validation_scoring import (
+    apply_latency_class_to_criteria,
+    build_aqb_v1_criteria,
+    normalize_latency_class,
+)
 
 router = APIRouter(tags=["validation-queries"])
 
@@ -34,6 +39,15 @@ LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES = [
     "logic_expected",
     "expected_value",
 ]
+FORM_TYPE_COLUMN_CANDIDATES = ["formType", "form_type", "폼타입"]
+ACTION_TYPE_COLUMN_CANDIDATES = ["actionType", "action_type", "액션타입"]
+DATA_KEY_COLUMN_CANDIDATES = ["dataKey", "data_key"]
+BUTTON_KEY_COLUMN_CANDIDATES = ["buttonKey", "button_key"]
+BUTTON_URL_CONTAINS_COLUMN_CANDIDATES = ["buttonUrlContains", "button_url_contains"]
+MULTI_SELECT_ALLOW_YN_COLUMN_CANDIDATES = ["multiSelectAllowYn", "multi_select_allow_yn"]
+INTENT_RUBRIC_JSON_COLUMN_CANDIDATES = ["의도 루브릭(JSON)", "intentRubricJson", "intent_rubric_json"]
+ACCURACY_CHECKS_JSON_COLUMN_CANDIDATES = ["정확성 체크(JSON)", "accuracyChecksJson", "accuracy_checks_json"]
+LATENCY_CLASS_COLUMN_CANDIDATES = ["latencyClass", "latency_class", "응답속도유형", "응답속도 유형"]
 
 
 def _parse_json_text(value: str) -> Any:
@@ -102,6 +116,8 @@ def _parse_bulk_upload_rows(
     missing_query_rows: list[int] = []
     unknown_group_rows: list[int] = []
     unknown_group_values: set[str] = set()
+    legacy_fallback_rows: list[int] = []
+    invalid_latency_class_rows: list[int] = []
 
     for idx, series in enumerate(df.to_dict(orient="records"), start=1):
         query_text = _extract_cell(series, ["query_text", "query", "질의"])
@@ -121,6 +137,35 @@ def _parse_bulk_upload_rows(
         )
         target_assistant = _extract_cell(series, ["target_assistant", "targetAssistant", "대상어시스턴트"])
         context_json = _extract_cell(series, ["context_json", "contextJson", "context", "컨텍스트"])
+        form_type = _extract_cell(series, FORM_TYPE_COLUMN_CANDIDATES)
+        action_type = _extract_cell(series, ACTION_TYPE_COLUMN_CANDIDATES)
+        data_key = _extract_cell(series, DATA_KEY_COLUMN_CANDIDATES)
+        button_key = _extract_cell(series, BUTTON_KEY_COLUMN_CANDIDATES)
+        button_url_contains = _extract_cell(series, BUTTON_URL_CONTAINS_COLUMN_CANDIDATES)
+        multi_select_allow_yn = _extract_cell(series, MULTI_SELECT_ALLOW_YN_COLUMN_CANDIDATES)
+        intent_rubric_json = _extract_cell(series, INTENT_RUBRIC_JSON_COLUMN_CANDIDATES)
+        accuracy_checks_json = _extract_cell(series, ACCURACY_CHECKS_JSON_COLUMN_CANDIDATES)
+        latency_class_raw = _extract_cell(series, LATENCY_CLASS_COLUMN_CANDIDATES)
+        latency_class = normalize_latency_class(latency_class_raw)
+        if latency_class_raw and latency_class is None:
+            invalid_rows.append(idx)
+            invalid_latency_class_rows.append(idx)
+            continue
+        aqb_criteria = build_aqb_v1_criteria(
+            llm_eval_criteria,
+            form_type=form_type,
+            action_type=action_type,
+            data_key=data_key,
+            button_key=button_key,
+            button_url_contains=button_url_contains,
+            multi_select_allow_yn=multi_select_allow_yn,
+            intent_rubric_json=intent_rubric_json,
+            accuracy_checks_json=accuracy_checks_json,
+        )
+        aqb_criteria = apply_latency_class_to_criteria(aqb_criteria, latency_class)
+        criteria_source = str((aqb_criteria.get("meta") or {}).get("source") or "legacy").strip()
+        if criteria_source == "legacy":
+            legacy_fallback_rows.append(idx)
 
         if group_value and group_value not in group_map_by_id and group_value not in group_id_by_name:
             unknown_group_rows.append(idx)
@@ -132,7 +177,8 @@ def _parse_bulk_upload_rows(
                 "expected_result": expected_result,
                 "category": category,
                 "group_value": group_value,
-                "llm_eval_criteria": llm_eval_criteria,
+                "llm_eval_criteria": aqb_criteria,
+                "criteria_source": criteria_source,
                 "logic_field_path": logic_field_path,
                 "logic_expected_value": logic_expected_value,
                 "target_assistant": target_assistant,
@@ -146,13 +192,25 @@ def _parse_bulk_upload_rows(
         "missing_query_rows": missing_query_rows,
         "unknown_group_rows": unknown_group_rows,
         "unknown_group_values": sorted(unknown_group_values),
+        "legacy_fallback_rows": legacy_fallback_rows,
+        "invalid_latency_class_rows": invalid_latency_class_rows,
     }
 
 
-def _build_all_rows_invalid_detail(*, missing_query_rows: list[int], unknown_group_rows: list[int], unknown_group_values: list[str]) -> str:
+def _build_all_rows_invalid_detail(
+    *,
+    missing_query_rows: list[int],
+    unknown_group_rows: list[int],
+    unknown_group_values: list[str],
+    invalid_latency_class_rows: list[int],
+) -> str:
     detail_parts = ["All rows are invalid"]
     if missing_query_rows:
         detail_parts.append(f"missing '질의' rows: {', '.join(str(row) for row in missing_query_rows)}")
+    if invalid_latency_class_rows:
+        detail_parts.append(
+            f"invalid 'latencyClass' rows (SINGLE|MULTI only): {', '.join(str(row) for row in invalid_latency_class_rows)}"
+        )
     if unknown_group_rows:
         detail_parts.append(f"unknown '그룹' rows: {', '.join(str(row) for row in unknown_group_rows)}")
     if unknown_group_values:
@@ -519,7 +577,7 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
         expected_result=body.expectedResult,
         category=_normalize_category(body.category),
         group_id=body.groupId,
-        llm_eval_criteria=body.llmEvalCriteria,
+        llm_eval_criteria=build_aqb_v1_criteria(body.llmEvalCriteria),
         logic_field_path=body.logicFieldPath,
         logic_expected_value=body.logicExpectedValue,
         context_json=body.contextJson,
@@ -547,9 +605,9 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
 @router.get("/queries/template")
 def download_query_template():
     csv_text = (
-        '질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값\n'
-        '리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,"채용 플랜이 단계별로 제시됨","{""정확성"": 5}",assistantMessage,역량검사\n'
-        '미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,,,,\n'
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값,formType,actionType,dataKey,buttonKey,buttonUrlContains,multiSelectAllowYn,의도 루브릭(JSON),정확성 체크(JSON),latencyClass\n"
+        '리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,"채용 플랜이 단계별로 제시됨 @check formType=ACTION @check buttonKey=RECRUIT_PLAN_CREATE_SAVE",,assistantMessage,역량검사,ACTION,,,RECRUIT_PLAN_CREATE_SAVE,,,"{""scale"":""0-5"",""policy"":""intent_only""}",,MULTI\n'
+        "미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,@check formType=SELECT,,,,SELECT,,,,,false,,,SINGLE\n"
     )
     csv_bytes = ("\ufeff" + csv_text).encode("utf-8")
     return StreamingResponse(
@@ -601,7 +659,11 @@ def update_query(query_id: str, body: QueryUpdateRequest, db: Session = Depends(
         category=_normalize_category(body.category) if body.category is not None else None,
         group_id=(str(payload.get("groupId")) if payload.get("groupId") is not None else None),
         update_group_id=("groupId" in payload),
-        llm_eval_criteria=body.llmEvalCriteria,
+        llm_eval_criteria=(
+            build_aqb_v1_criteria(body.llmEvalCriteria)
+            if body.llmEvalCriteria is not None
+            else None
+        ),
         logic_field_path=body.logicFieldPath,
         logic_expected_value=body.logicExpectedValue,
         context_json=body.contextJson,
@@ -667,6 +729,7 @@ async def preview_bulk_upload_queries(
                 missing_query_rows=parsed["missing_query_rows"],
                 unknown_group_rows=parsed["unknown_group_rows"],
                 unknown_group_values=parsed["unknown_group_values"],
+                invalid_latency_class_rows=parsed["invalid_latency_class_rows"],
             ),
         )
 
@@ -677,6 +740,9 @@ async def preview_bulk_upload_queries(
         "missingQueryRows": parsed["missing_query_rows"],
         "groupsToCreate": parsed["unknown_group_values"],
         "groupsToCreateRows": parsed["unknown_group_rows"],
+        "legacyFallbackCount": len(parsed["legacy_fallback_rows"]),
+        "legacyFallbackRows": parsed["legacy_fallback_rows"],
+        "invalidLatencyClassRows": parsed["invalid_latency_class_rows"],
     }
 
 
@@ -712,6 +778,7 @@ async def bulk_upload_queries(
                 missing_query_rows=parsed["missing_query_rows"],
                 unknown_group_rows=parsed["unknown_group_rows"],
                 unknown_group_values=parsed["unknown_group_values"],
+                invalid_latency_class_rows=parsed["invalid_latency_class_rows"],
             ),
         )
 
@@ -758,6 +825,9 @@ async def bulk_upload_queries(
         "unmappedGroupRows": [],
         "unmappedGroupValues": [],
         "createdGroupNames": created_group_names,
+        "legacyFallbackCount": len(parsed["legacy_fallback_rows"]),
+        "legacyFallbackRows": parsed["legacy_fallback_rows"],
+        "invalidLatencyClassRows": parsed["invalid_latency_class_rows"],
     }
 
 
@@ -898,7 +968,11 @@ async def bulk_update_queries(
             category=plan.get("category"),
             group_id=resolved_group_id,
             update_group_id=update_group_id,
-            llm_eval_criteria=plan.get("llmEvalCriteria"),
+            llm_eval_criteria=(
+                build_aqb_v1_criteria(plan.get("llmEvalCriteria"))
+                if plan.get("llmEvalCriteria") is not None
+                else None
+            ),
             logic_field_path=plan.get("logicFieldPath"),
             logic_expected_value=plan.get("logicExpectedValue"),
             context_json=plan.get("contextJson"),

@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import datetime as dt
+import io
 import json
 import os
+import re
 import uuid
 from typing import Any, Optional
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -78,6 +80,10 @@ class SaveQueryPayload(BaseModel):
     logicExpectedValue: Optional[str] = None
 
 
+class UpdateRunItemSnapshotPayload(BaseModel):
+    expectedResult: str = ""
+
+
 class ValidationRunUpdateRequest(BaseModel):
     name: Optional[str] = None
     agentId: Optional[str] = None
@@ -87,6 +93,10 @@ class ValidationRunUpdateRequest(BaseModel):
     agentParallelCalls: Optional[int] = None
     timeoutMs: Optional[int] = None
     context: Optional[dict[str, Any] | None] = None
+
+
+RUN_ITEM_ID_COLUMN_CANDIDATES = ["Item ID", "itemId", "runItemId", "run_item_id", "item_id"]
+RUN_ITEM_EXPECTED_RESULT_COLUMN_CANDIDATES = ["기대결과", "기대 결과", "expectedResult", "expected_result", "expected"]
 
 
 def _parse_context_json(raw: Optional[Any]) -> Optional[dict]:
@@ -128,6 +138,37 @@ def _serialize_json(value: str) -> Any:
         return json.loads(text)
     except Exception:
         return text
+
+
+def _metric_scores(value: str) -> dict[str, float]:
+    text = (value or "").strip()
+    if not text:
+        return {}
+    try:
+        payload = json.loads(text)
+    except Exception:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, metric in payload.items():
+        if isinstance(metric, (int, float)):
+            out[str(key)] = float(metric)
+    return out
+
+
+def _extract_accuracy_source_tag(comment: str) -> str:
+    match = re.search(r"\[ACCURACY_SOURCE:([^\]]+)\]", str(comment or ""))
+    if not match:
+        return ""
+    return str(match.group(1) or "").strip()
+
+
+def _extract_failed_checks_tag(comment: str) -> str:
+    match = re.search(r"\[ACCURACY_FAILED_PATHS:([^\]]+)\]", str(comment or ""))
+    if not match:
+        return ""
+    return str(match.group(1) or "").strip()
 
 
 def _normalize_run_name(name: str | None, fallback: str) -> str:
@@ -223,6 +264,202 @@ def _normalize_run_defaults(
     return changed
 
 
+def _normalized_header_set(df: pd.DataFrame) -> set[str]:
+    return {str(column).replace("\ufeff", "").strip() for column in df.columns}
+
+
+def _extract_cell(row: dict[str, Any], candidates: list[str], default: str = "") -> str:
+    normalized_candidates = {candidate.replace("\ufeff", "").strip() for candidate in candidates}
+    for raw_key, cell in row.items():
+        key = str(raw_key).replace("\ufeff", "").strip()
+        if key not in normalized_candidates:
+            continue
+        if cell is None or pd.isna(cell):
+            continue
+        text = str(cell).strip()
+        if not text or text.lower() == "nan":
+            continue
+        return text
+    return default
+
+
+def _load_bulk_update_dataframe(filename: str, raw: bytes) -> pd.DataFrame:
+    try:
+        if filename.endswith(".xlsx") or filename.endswith(".xls"):
+            df = pd.read_excel(io.BytesIO(raw))
+        else:
+            df = pd.read_csv(io.BytesIO(raw))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {exc}") from exc
+
+    if df.empty:
+        raise HTTPException(status_code=400, detail="No rows found")
+    return df
+
+
+def _parse_expected_result_bulk_rows(df: pd.DataFrame) -> dict[str, Any]:
+    headers = _normalized_header_set(df)
+    has_item_id = any(candidate.replace("\ufeff", "").strip() in headers for candidate in RUN_ITEM_ID_COLUMN_CANDIDATES)
+    has_expected_result = any(
+        candidate.replace("\ufeff", "").strip() in headers for candidate in RUN_ITEM_EXPECTED_RESULT_COLUMN_CANDIDATES
+    )
+    if not has_item_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required column: Item ID (Item ID/itemId/runItemId/run_item_id)",
+        )
+    if not has_expected_result:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing required column: 기대결과 (기대결과/기대 결과/expectedResult/expected_result)",
+        )
+
+    rows: list[dict[str, Any]] = []
+    missing_item_id_rows: list[int] = []
+    duplicate_item_id_rows: list[int] = []
+    seen_item_ids: set[str] = set()
+
+    for row_no, series in enumerate(df.to_dict(orient="records"), start=1):
+        item_id = _extract_cell(series, RUN_ITEM_ID_COLUMN_CANDIDATES).strip()
+        expected_result = _extract_cell(series, RUN_ITEM_EXPECTED_RESULT_COLUMN_CANDIDATES)
+        missing_item_id = not item_id
+        duplicate_item_id = False
+        if missing_item_id:
+            missing_item_id_rows.append(row_no)
+        elif item_id in seen_item_ids:
+            duplicate_item_id = True
+            duplicate_item_id_rows.append(row_no)
+        else:
+            seen_item_ids.add(item_id)
+
+        rows.append(
+            {
+                "rowNo": row_no,
+                "itemId": item_id,
+                "expectedResult": expected_result,
+                "missingItemId": missing_item_id,
+                "duplicateItemId": duplicate_item_id,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "missingItemIdRows": missing_item_id_rows,
+        "duplicateItemIdRows": duplicate_item_id_rows,
+    }
+
+
+def _analyze_expected_result_bulk_rows(
+    *,
+    parsed_rows: list[dict[str, Any]],
+    missing_item_id_rows: list[int],
+    duplicate_item_id_rows: list[int],
+    existing_items_by_id: dict[str, Any],
+    all_items: list[Any],
+) -> dict[str, Any]:
+    preview_rows: list[dict[str, Any]] = []
+    planned_updates: dict[str, str] = {}
+    unmapped_item_rows: list[int] = []
+    unchanged_count = 0
+
+    final_expected_result_by_item_id = {
+        str(item.id): str(item.expected_result_snapshot or "") for item in all_items
+    }
+
+    for row in parsed_rows:
+        row_no = int(row["rowNo"])
+        item_id = str(row.get("itemId") or "").strip()
+        if row.get("missingItemId"):
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "itemId": "",
+                    "status": "missing-item-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+        if row.get("duplicateItemId"):
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "itemId": item_id,
+                    "status": "duplicate-item-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        existing_item = existing_items_by_id.get(item_id)
+        if existing_item is None:
+            unmapped_item_rows.append(row_no)
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "itemId": item_id,
+                    "status": "unmapped-item-id",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        next_expected_result = str(row.get("expectedResult") or "")
+        if not next_expected_result.strip():
+            unchanged_count += 1
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "itemId": item_id,
+                    "status": "unchanged",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        current_expected_result = str(existing_item.expected_result_snapshot or "")
+        if next_expected_result == current_expected_result:
+            unchanged_count += 1
+            preview_rows.append(
+                {
+                    "rowNo": row_no,
+                    "itemId": item_id,
+                    "status": "unchanged",
+                    "changedFields": [],
+                }
+            )
+            continue
+
+        planned_updates[item_id] = next_expected_result
+        final_expected_result_by_item_id[item_id] = next_expected_result
+        preview_rows.append(
+            {
+                "rowNo": row_no,
+                "itemId": item_id,
+                "status": "planned-update",
+                "changedFields": ["expectedResult"],
+            }
+        )
+
+    remaining_missing_expected_count_after_apply = sum(
+        1 for value in final_expected_result_by_item_id.values() if not str(value or "").strip()
+    )
+    invalid_rows = sorted(set(missing_item_id_rows + duplicate_item_id_rows))
+    valid_rows = max(0, len(preview_rows) - len(missing_item_id_rows) - len(duplicate_item_id_rows))
+    return {
+        "totalRows": len(parsed_rows),
+        "validRows": valid_rows,
+        "plannedUpdateCount": len(planned_updates),
+        "unchangedCount": unchanged_count,
+        "invalidRows": invalid_rows,
+        "missingItemIdRows": missing_item_id_rows,
+        "duplicateItemIdRows": duplicate_item_id_rows,
+        "unmappedItemRows": unmapped_item_rows,
+        "previewRows": preview_rows,
+        "plannedUpdates": planned_updates,
+        "remainingMissingExpectedCountAfterApply": remaining_missing_expected_count_after_apply,
+    }
+
+
 @router.get("/validation-runs")
 def list_validation_runs(
     environment: Optional[Environment] = Query(default=None),
@@ -284,7 +521,9 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
     test_model = (body.testModel or setting.test_model_default).strip()
     eval_model = (body.evalModel or setting.eval_model_default).strip()
     repeat_in_conversation = body.repeatInConversation if body.repeatInConversation is not None else setting.repeat_in_conversation_default
+    # conversation_room_count is treated as sequential room batches in execution.
     conversation_room_count = body.conversationRoomCount if body.conversationRoomCount is not None else setting.conversation_room_count_default
+    # agent_parallel_calls is treated as query-level parallelism per room batch.
     agent_parallel_calls = body.agentParallelCalls if body.agentParallelCalls is not None else setting.agent_parallel_calls_default
     timeout_ms = body.timeoutMs if body.timeoutMs is not None else setting.timeout_ms_default
 
@@ -329,7 +568,7 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
             for repeat_index in range(1, int(repeat_in_conversation) + 1):
                 for query in selected_queries:
                     criteria = query.llm_eval_criteria_json
-                    target_assistant = (query.target_assistant or "").strip()
+                    target_assistant = (query.target_assistant or "").strip() or agent_id
                     items_payload.append(
                         {
                             "ordinal": ordinal,
@@ -525,6 +764,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
             body.mrs,
             default_context,
             run_default_target_assistant,
+            # Query-level parallelism (not room count).
             run.agent_parallel_calls,
             run.timeout_ms,
         )
@@ -550,6 +790,25 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
         raise HTTPException(status_code=409, detail="Evaluation is already running")
     if repo.count_done_items(run.id) == 0 and repo.count_error_items(run.id) == 0:
         raise HTTPException(status_code=409, detail="No execution results found for evaluation")
+    run_items = repo.list_items(run.id, limit=100000)
+    missing_expected_items = [
+        item for item in run_items if not str(item.expected_result_snapshot or "").strip()
+    ]
+    if missing_expected_items:
+        sample_query_ids = [
+            str(item.query_id or item.id or "")
+            for item in missing_expected_items[:5]
+            if str(item.query_id or item.id or "").strip()
+        ]
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "expected_result_missing",
+                "message": "expected_result is required for all run items",
+                "missingCount": len(missing_expected_items),
+                "sampleQueryIds": sample_query_ids,
+            },
+        )
 
     job_id = str(uuid.uuid4())
     eval_model = body.openaiModel or run.eval_model
@@ -585,7 +844,7 @@ def rerun(run_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/validation-runs/{run_id}/export.xlsx")
-def export_run(run_id: str, db: Session = Depends(get_db)):
+def export_run(run_id: str, includeDebug: bool = Query(default=False), db: Session = Depends(get_db)):
     repo = ValidationRunRepository(db)
     run = repo.get_run(run_id)
     if run is None:
@@ -597,31 +856,39 @@ def export_run(run_id: str, db: Session = Depends(get_db)):
 
     logic_map = repo.get_logic_eval_map([row.id for row in items])
     llm_map = repo.get_llm_eval_map([row.id for row in items])
-    df = pd.DataFrame(
-        [
-            {
-                "Run ID": run.id,
-                "Item ID": row.id,
-                "Ordinal": row.ordinal,
-                "Query ID": row.query_id or "",
-                "질의": row.query_text_snapshot,
-                "기대결과": row.expected_result_snapshot,
-                "카테고리": row.category_snapshot,
-                "방/반복": f"{row.conversation_room_index}/{row.repeat_index}",
-                "실행시각": row.executed_at.isoformat() if row.executed_at else "",
-                "응답": row.raw_response or "",
-                "오류": row.error or "",
-                "Logic 결과": logic_map[row.id].result if row.id in logic_map else "",
-                "Logic 사유": logic_map[row.id].fail_reason if row.id in logic_map else "",
-                "LLM 상태": llm_map[row.id].status if row.id in llm_map else "",
-                "LLM 모델": llm_map[row.id].eval_model if row.id in llm_map else "",
-                "LLM 점수": llm_map[row.id].total_score if row.id in llm_map else "",
-                "LLM 코멘트": llm_map[row.id].llm_comment if row.id in llm_map else "",
-                "Raw JSON": row.raw_json or "",
-            }
-            for row in items
-        ]
-    )
+    rows: list[dict[str, Any]] = []
+    for row in items:
+        llm = llm_map.get(row.id)
+        llm_metrics = _metric_scores(llm.metric_scores_json) if llm is not None else {}
+        llm_comment = str(llm.llm_comment or "") if llm is not None else ""
+        output_row = {
+            "Run ID": run.id,
+            "Item ID": row.id,
+            "Ordinal": row.ordinal,
+            "Query ID": row.query_id or "",
+            "질의": row.query_text_snapshot,
+            "기대결과": row.expected_result_snapshot,
+            "카테고리": row.category_snapshot,
+            "방/반복": f"{row.conversation_room_index}/{row.repeat_index}",
+            "실행시각": row.executed_at.isoformat() if row.executed_at else "",
+            "응답": row.raw_response or "",
+            "오류": row.error or "",
+            "Logic 결과": logic_map[row.id].result if row.id in logic_map else "",
+            "Logic 사유": logic_map[row.id].fail_reason if row.id in logic_map else "",
+            "LLM 상태": llm.status if llm is not None else "",
+            "LLM 모델": llm.eval_model if llm is not None else "",
+            "의도충족 점수": llm_metrics.get("의도충족", ""),
+            "정확성 점수": llm_metrics.get("정확성", ""),
+            "안정성 점수": llm_metrics.get("안정성", ""),
+            "Raw JSON": row.raw_json or "",
+        }
+        if includeDebug:
+            output_row["LLM 코멘트"] = llm_comment
+            output_row["정확성 실패체크"] = _extract_failed_checks_tag(llm_comment)
+            output_row["정확성 소스"] = _extract_accuracy_source_tag(llm_comment)
+        rows.append(output_row)
+
+    df = pd.DataFrame(rows)
     xlsx = dataframe_to_excel_bytes(df, sheet_name="validation_history")
     file_name = f"validation_run_{run_id}_{dt.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return StreamingResponse(
@@ -629,6 +896,150 @@ def export_run(run_id: str, db: Session = Depends(get_db)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
     )
+
+
+@router.get("/validation-runs/{run_id}/expected-results/template.csv")
+def download_run_expected_results_template(run_id: str, db: Session = Depends(get_db)):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    items = repo.list_items(run_id, limit=100000)
+    if not items:
+        raise HTTPException(status_code=404, detail="No items")
+
+    rows = [
+        {
+            "Item ID": item.id,
+            "Query ID": item.query_id or "",
+            "방/반복": f"{item.conversation_room_index}/{item.repeat_index}",
+            "질의": item.query_text_snapshot,
+            "기존 기대결과": item.expected_result_snapshot,
+            "기대결과": item.expected_result_snapshot,
+        }
+        for item in items
+    ]
+    csv_text = pd.DataFrame(rows).to_csv(index=False)
+    csv_bytes = ("\ufeff" + csv_text).encode("utf-8")
+    file_name = f"validation_run_{run_id}_expected_results_template.csv"
+    return StreamingResponse(
+        iter([csv_bytes]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
+
+
+@router.post("/validation-runs/{run_id}/expected-results/bulk-update/preview")
+async def preview_run_expected_results_bulk_update(
+    run_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    filename = (file.filename or "").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    df = _load_bulk_update_dataframe(filename, raw)
+    parsed = _parse_expected_result_bulk_rows(df)
+    candidate_item_ids = [
+        str(row.get("itemId") or "").strip()
+        for row in parsed["rows"]
+        if not row.get("missingItemId") and not row.get("duplicateItemId")
+    ]
+    unique_item_ids = list(dict.fromkeys(candidate_item_ids))
+    existing_items = repo.list_items_by_ids(run.id, unique_item_ids)
+    existing_items_by_id = {item.id: item for item in existing_items}
+    all_items = repo.list_items(run.id, limit=100000)
+
+    analysis = _analyze_expected_result_bulk_rows(
+        parsed_rows=parsed["rows"],
+        missing_item_id_rows=parsed["missingItemIdRows"],
+        duplicate_item_id_rows=parsed["duplicateItemIdRows"],
+        existing_items_by_id=existing_items_by_id,
+        all_items=all_items,
+    )
+    return {
+        "totalRows": analysis["totalRows"],
+        "validRows": analysis["validRows"],
+        "plannedUpdateCount": analysis["plannedUpdateCount"],
+        "unchangedCount": analysis["unchangedCount"],
+        "invalidRows": analysis["invalidRows"],
+        "missingItemIdRows": analysis["missingItemIdRows"],
+        "duplicateItemIdRows": analysis["duplicateItemIdRows"],
+        "unmappedItemRows": analysis["unmappedItemRows"],
+        "previewRows": analysis["previewRows"],
+        "remainingMissingExpectedCountAfterApply": analysis["remainingMissingExpectedCountAfterApply"],
+    }
+
+
+@router.post("/validation-runs/{run_id}/expected-results/bulk-update")
+async def bulk_update_run_expected_results(
+    run_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.status == RunStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Run is still executing")
+    if run.eval_status == EvalStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Evaluation is already running")
+
+    filename = (file.filename or "").lower()
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    df = _load_bulk_update_dataframe(filename, raw)
+    parsed = _parse_expected_result_bulk_rows(df)
+    candidate_item_ids = [
+        str(row.get("itemId") or "").strip()
+        for row in parsed["rows"]
+        if not row.get("missingItemId") and not row.get("duplicateItemId")
+    ]
+    unique_item_ids = list(dict.fromkeys(candidate_item_ids))
+    existing_items = repo.list_items_by_ids(run.id, unique_item_ids)
+    existing_items_by_id = {item.id: item for item in existing_items}
+    all_items = repo.list_items(run.id, limit=100000)
+    analysis = _analyze_expected_result_bulk_rows(
+        parsed_rows=parsed["rows"],
+        missing_item_id_rows=parsed["missingItemIdRows"],
+        duplicate_item_id_rows=parsed["duplicateItemIdRows"],
+        existing_items_by_id=existing_items_by_id,
+        all_items=all_items,
+    )
+
+    updated_count = repo.bulk_update_item_expected_results(run.id, analysis["plannedUpdates"])
+    eval_reset = False
+    if updated_count > 0:
+        repo.clear_llm_evaluations_for_run(run.id)
+        repo.clear_score_snapshots_for_run(run.id)
+        repo.reset_eval_state_to_pending(run.id)
+        eval_reset = True
+
+    all_items_after = repo.list_items(run.id, limit=100000)
+    remaining_missing_expected_count = sum(
+        1 for item in all_items_after if not str(item.expected_result_snapshot or "").strip()
+    )
+    db.commit()
+    return {
+        "requestedRowCount": analysis["totalRows"],
+        "updatedCount": int(updated_count),
+        "unchangedCount": analysis["unchangedCount"],
+        "skippedMissingItemIdCount": len(analysis["missingItemIdRows"]),
+        "skippedDuplicateItemIdCount": len(analysis["duplicateItemIdRows"]),
+        "skippedUnmappedCount": len(analysis["unmappedItemRows"]),
+        "evalReset": eval_reset,
+        "remainingMissingExpectedCount": remaining_missing_expected_count,
+    }
 
 
 @router.post("/validation-runs/{run_id}/items/{item_id}/save-query")
@@ -660,6 +1071,31 @@ def save_run_item_as_query(run_id: str, item_id: str, body: SaveQueryPayload, db
     )
     db.commit()
     return {"queryId": query.id}
+
+
+@router.patch("/validation-runs/{run_id}/items/{item_id}")
+def update_run_item_snapshot(run_id: str, item_id: str, body: UpdateRunItemSnapshotPayload, db: Session = Depends(get_db)):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    item = repo.get_item(item_id)
+    if item is None or item.run_id != run.id:
+        raise HTTPException(status_code=404, detail="Run item not found")
+
+    updated = repo.update_item_snapshots(
+        item.id,
+        expected_result_snapshot=body.expectedResult,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Run item not found")
+
+    db.commit()
+    return {
+        "id": updated.id,
+        "runId": updated.run_id,
+        "expectedResult": updated.expected_result_snapshot,
+    }
 
 
 @router.get("/validation-runs/{run_id}/compare")

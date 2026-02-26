@@ -419,10 +419,6 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
       ) : null}
       <Card className="backoffice-content-card">
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Typography.Title level={5} style={{ margin: 0 }}>
-            프롬프트 조회/수정
-          </Typography.Title>
-
           <Alert
             message="메뉴에서 선택한 워커의 최신 프롬프트를 조회하고 즉시 수정/초기화할 수 있습니다."
             type="info"

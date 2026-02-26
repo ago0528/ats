@@ -6,7 +6,6 @@ import {
   Input,
   InputNumber,
   Select,
-  Typography,
 } from 'antd';
 
 import { ENV_OPTIONS, type Environment } from '../../app/EnvironmentScope';
@@ -136,10 +135,6 @@ export function ValidationSettingsPage({
 
   return (
     <div className="settings-page-surface">
-      <Typography.Title level={4} style={{ margin: 0 }}>
-        환경설정
-      </Typography.Title>
-
       <Form
         form={form}
         layout="vertical"
@@ -166,6 +161,7 @@ export function ValidationSettingsPage({
           className="settings-field-block"
           label="채팅방 개수"
           name="conversationRoomCountDefault"
+          extra="채팅방 단위로 순차 실행됩니다. A 방 완료 후 B 방이 시작됩니다."
           rules={[{ required: true, message: '채팅방 개수를 입력해 주세요.' }]}
         >
           <InputNumber min={1} precision={0} />
@@ -174,6 +170,7 @@ export function ValidationSettingsPage({
           className="settings-field-block"
           label="에이전트 동시 실행 수"
           name="agentParallelCallsDefault"
+          extra="각 채팅방 내 질의를 N개씩 병렬 처리합니다."
           rules={[{ required: true, message: '병렬 수를 입력해 주세요.' }]}
         >
           <InputNumber min={1} precision={0} />

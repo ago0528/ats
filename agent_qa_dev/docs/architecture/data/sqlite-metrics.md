@@ -18,6 +18,7 @@ sqlite3 backoffice/backend/backoffice.db
 - 테스트 세트: `validation_test_sets`
 - 테스트 세트 항목: `validation_test_set_items`
 - 실행(run): `validation_runs`
+- 실행 알림 읽음: `validation_run_activity_reads`
 - 실행 항목(run item): `validation_run_items`
 - LLM 평가: `validation_llm_evaluations`
 - 로직 평가: `validation_logic_evaluations`
@@ -44,6 +45,8 @@ UNION ALL
 SELECT 'validation_test_set_items', COUNT(*) FROM validation_test_set_items
 UNION ALL
 SELECT 'validation_runs', COUNT(*) FROM validation_runs
+UNION ALL
+SELECT 'validation_run_activity_reads', COUNT(*) FROM validation_run_activity_reads
 UNION ALL
 SELECT 'validation_run_items', COUNT(*) FROM validation_run_items
 UNION ALL
@@ -481,6 +484,27 @@ SELECT
   s.actor
 FROM prompt_snapshots s
 ORDER BY s.updated_at DESC
+LIMIT (SELECT row_limit FROM params);
+```
+
+## Q20. 진행 알림 읽음 현황 (actor별)
+
+- 무엇을 보는가: actor별 진행 알림 읽음 누적 현황과 최근 읽음 시각
+- 파라미터: `row_limit`
+- 주의사항: `actor_key`는 토큰 해시 기반 식별 키일 수 있음
+
+```sql
+WITH params AS (
+  SELECT 50 AS row_limit
+)
+SELECT
+  r.actor_key,
+  COUNT(*) AS read_rows,
+  COUNT(DISTINCT r.run_id) AS run_count,
+  MAX(r.read_at) AS last_read_at
+FROM validation_run_activity_reads r
+GROUP BY r.actor_key
+ORDER BY last_read_at DESC
 LIMIT (SELECT row_limit FROM params);
 ```
 

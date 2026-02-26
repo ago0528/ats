@@ -43,7 +43,7 @@ export function StandardModal({
   cancelText = '취소',
   ...props
 }: StandardModalProps) {
-  const mergedStyles: StandardModalStyles = {
+  const mergedStyles = {
     ...DEFAULT_MODAL_STYLES,
     ...styles,
     content: {
@@ -56,7 +56,7 @@ export function StandardModal({
       ...(styles?.body || {}),
       ...(bodyPadding !== undefined ? { padding: bodyPadding } : {}),
     },
-  };
+  } as StandardModalStyles;
 
   return (
     <Modal

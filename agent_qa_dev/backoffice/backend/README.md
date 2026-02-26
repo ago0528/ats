@@ -40,6 +40,29 @@ export BACKOFFICE_ALLOW_DB_RESET=1
 python -m pytest -q
 ```
 
+## Test (offline / internal mirror)
+
+오프라인 wheelhouse 또는 사내 PyPI 미러를 강제하는 실행 방식:
+
+```bash
+cd backoffice/backend
+
+# 방법 1) wheelhouse 기반(완전 오프라인)
+export BACKOFFICE_WHEELHOUSE=/path/to/wheelhouse
+./scripts/run_tests_offline.sh
+
+# 방법 2) 사내 미러 기반
+export BACKOFFICE_PIP_INDEX_URL=https://<internal-pypi>/simple
+# 선택: export BACKOFFICE_PIP_EXTRA_INDEX_URL=https://<extra-index>/simple
+# 선택: export BACKOFFICE_PIP_TRUSTED_HOST=<internal-host>
+./scripts/run_tests_offline.sh
+```
+
+옵션:
+- `BACKOFFICE_TEST_VENV_PATH` : 테스트 전용 venv 경로 (기본 `backoffice/backend/.venv-test`)
+- `BACKOFFICE_DB_PATH` : 테스트 DB 경로 (기본 `backoffice/backend/backoffice_test.db`)
+- `./scripts/run_tests_offline.sh tests/test_validation_runs_api.py -q` 처럼 pytest 인자를 그대로 전달 가능
+
 ## Safe DB reset (test DB only)
 ```bash
 source .venv/bin/activate

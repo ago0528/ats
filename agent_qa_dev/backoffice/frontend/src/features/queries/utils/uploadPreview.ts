@@ -39,6 +39,15 @@ export async function parseUploadPreviewFile(file: File): Promise<UploadPreviewP
     'logic_expected',
     'expected_value',
   ]);
+  const formTypeIndex = resolveColumnIndex(headers, ['formType', 'form_type', '폼타입']);
+  const actionTypeIndex = resolveColumnIndex(headers, ['actionType', 'action_type', '액션타입']);
+  const dataKeyIndex = resolveColumnIndex(headers, ['dataKey', 'data_key']);
+  const buttonKeyIndex = resolveColumnIndex(headers, ['buttonKey', 'button_key']);
+  const buttonUrlContainsIndex = resolveColumnIndex(headers, ['buttonUrlContains', 'button_url_contains']);
+  const multiSelectAllowYnIndex = resolveColumnIndex(headers, ['multiSelectAllowYn', 'multi_select_allow_yn']);
+  const intentRubricJsonIndex = resolveColumnIndex(headers, ['의도 루브릭(JSON)', 'intentRubricJson', 'intent_rubric_json']);
+  const accuracyChecksJsonIndex = resolveColumnIndex(headers, ['정확성 체크(JSON)', 'accuracyChecksJson', 'accuracy_checks_json']);
+  const latencyClassIndex = resolveColumnIndex(headers, ['latencyClass', 'latency_class', '응답속도유형', '응답속도 유형']);
 
   const parsedRows = lines.slice(1).reduce<UploadPreviewRow[]>((acc, line, index) => {
     const columns = splitCsvLine(line).map(normalizeCsvCell);
@@ -51,6 +60,15 @@ export async function parseUploadPreviewFile(file: File): Promise<UploadPreviewP
     const llmEvalCriteria = llmEvalCriteriaIndex >= 0 ? (columns[llmEvalCriteriaIndex] || '') : '';
     const logicFieldPath = logicFieldPathIndex >= 0 ? (columns[logicFieldPathIndex] || '') : '';
     const logicExpectedValue = logicExpectedValueIndex >= 0 ? (columns[logicExpectedValueIndex] || '') : '';
+    const formType = formTypeIndex >= 0 ? (columns[formTypeIndex] || '') : '';
+    const actionType = actionTypeIndex >= 0 ? (columns[actionTypeIndex] || '') : '';
+    const dataKey = dataKeyIndex >= 0 ? (columns[dataKeyIndex] || '') : '';
+    const buttonKey = buttonKeyIndex >= 0 ? (columns[buttonKeyIndex] || '') : '';
+    const buttonUrlContains = buttonUrlContainsIndex >= 0 ? (columns[buttonUrlContainsIndex] || '') : '';
+    const multiSelectAllowYn = multiSelectAllowYnIndex >= 0 ? (columns[multiSelectAllowYnIndex] || '') : '';
+    const intentRubricJson = intentRubricJsonIndex >= 0 ? (columns[intentRubricJsonIndex] || '') : '';
+    const accuracyChecksJson = accuracyChecksJsonIndex >= 0 ? (columns[accuracyChecksJsonIndex] || '') : '';
+    const latencyClass = latencyClassIndex >= 0 ? (columns[latencyClassIndex] || '') : '';
 
     if (
       !queryText
@@ -62,9 +80,32 @@ export async function parseUploadPreviewFile(file: File): Promise<UploadPreviewP
       && !llmEvalCriteria
       && !logicFieldPath
       && !logicExpectedValue
+      && !formType
+      && !actionType
+      && !dataKey
+      && !buttonKey
+      && !buttonUrlContains
+      && !multiSelectAllowYn
+      && !intentRubricJson
+      && !accuracyChecksJson
+      && !latencyClass
     ) {
       return acc;
     }
+
+    const hasAqbV1 = (() => {
+      if (!llmEvalCriteria) return false;
+      try {
+        const parsed = JSON.parse(llmEvalCriteria);
+        return parsed && parsed.schemaVersion === 'aqb.v1';
+      } catch {
+        return false;
+      }
+    })();
+    const hasHelperInputs =
+      Boolean(formType || actionType || dataKey || buttonKey || buttonUrlContains || multiSelectAllowYn)
+      || Boolean(intentRubricJson || accuracyChecksJson);
+    const criteriaSource = hasAqbV1 ? 'aqb.v1' : (hasHelperInputs ? 'helper->aqb.v1' : 'legacy');
 
     acc.push({
       key: String(index + 1),
@@ -77,6 +118,16 @@ export async function parseUploadPreviewFile(file: File): Promise<UploadPreviewP
       llmEvalCriteria: llmEvalCriteria || '-',
       logicFieldPath: logicFieldPath || '-',
       logicExpectedValue: logicExpectedValue || '-',
+      formType: formType || '-',
+      actionType: actionType || '-',
+      dataKey: dataKey || '-',
+      buttonKey: buttonKey || '-',
+      buttonUrlContains: buttonUrlContains || '-',
+      multiSelectAllowYn: multiSelectAllowYn || '-',
+      intentRubricJson: intentRubricJson || '-',
+      accuracyChecksJson: accuracyChecksJson || '-',
+      latencyClass: latencyClass || '-',
+      criteriaSource,
     });
     return acc;
   }, []);

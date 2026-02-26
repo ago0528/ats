@@ -482,6 +482,12 @@ export function useQueryManagement({
     if ((result.createdGroupNames?.length || 0) > 0) {
       message.info(`그룹이 자동 생성됐어요. (${result.createdGroupNames?.join(', ')})`);
     }
+    if ((result.legacyFallbackCount || 0) > 0) {
+      message.warning(`legacy 폴백으로 저장된 질의가 ${result.legacyFallbackCount}건 있습니다. 정확성 자동채점 신뢰도가 낮을 수 있어요.`);
+    }
+    if ((result.invalidLatencyClassRows?.length || 0) > 0) {
+      message.warning(`latencyClass 값이 유효하지 않은 행 ${result.invalidLatencyClassRows?.length}건은 업로드되지 않았어요. (허용값: SINGLE, MULTI)`);
+    }
     setBulkUploadGroupConfirmOpen(false);
     setBulkUploadModalOpen(false);
     resetBulkUploadState();
@@ -497,6 +503,12 @@ export function useQueryManagement({
     try {
       setBulkUploading(true);
       const preview = await previewQueriesBulkUpload(file);
+      if ((preview.legacyFallbackCount || 0) > 0) {
+        message.warning(`aqb.v1 규칙이 없는 legacy 질의가 ${preview.legacyFallbackCount}건 있습니다. 업로드 후 폴백 경고가 표시됩니다.`);
+      }
+      if ((preview.invalidLatencyClassRows?.length || 0) > 0) {
+        message.warning(`latencyClass 값이 유효하지 않은 행 ${preview.invalidLatencyClassRows?.length}건이 있어요. (허용값: SINGLE, MULTI)`);
+      }
       if ((preview.groupsToCreate?.length || 0) > 0) {
         setBulkUploadPendingGroupNames(preview.groupsToCreate);
         setBulkUploadPendingGroupRows(preview.groupsToCreateRows || []);

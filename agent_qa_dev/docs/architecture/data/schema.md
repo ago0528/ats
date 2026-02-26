@@ -1,6 +1,6 @@
 # Backoffice 데이터 테이블 정의서 (PM Friendly)
 
-- 최신 갱신일: 2026-02-20
+- 최신 갱신일: 2026-02-25
 - 대상: PM, PO, QA, 운영 담당자
 - 스키마 기준: `backoffice/backend/app/models/*.py` + `backoffice/backend/app/main.py` startup 보정 + `backoffice/backend/backoffice.db`
 
@@ -21,11 +21,12 @@
 8. `validation_test_sets`
 9. `validation_test_set_items`
 10. `validation_runs`
-11. `validation_run_items`
-12. `validation_llm_evaluations`
-13. `validation_logic_evaluations`
-14. `validation_score_snapshots`
-15. `automation_jobs`
+11. `validation_run_activity_reads`
+12. `validation_run_items`
+13. `validation_llm_evaluations`
+14. `validation_logic_evaluations`
+15. `validation_score_snapshots`
+16. `automation_jobs`
 
 ---
 
@@ -271,9 +272,9 @@
 | ------------------------------------ | -------------- | -------- | ---------------------- | ------------------------------- | -------------------------------------- | ----------------- |
 | `id`                                 | `varchar(36)`  | No       | UUID (app)             | 설정 ID                         | `6fe2bf53-240d-4880-8125-1da616495ca6` | PK                |
 | `environment`                        | `enum`         | No       | 없음                   | 설정 대상 환경                  | `pr`                                   | unique + index    |
-| `repeat_in_conversation_default`     | `integer`      | No       | `1` (app)              | 같은 방에서 반복 실행 기본 횟수 | `2`                                    |                   |
-| `conversation_room_count_default`    | `integer`      | No       | `1` (app)              | 대화 방 개수 기본값             | `3`                                    |                   |
-| `agent_parallel_calls_default`       | `integer`      | No       | `3` (app)              | 에이전트 병렬 호출 기본값       | `5`                                    |                   |
+| `repeat_in_conversation_default`     | `integer`      | No       | `1` (app)              | 동일 room 배치 내 반복 실행 기본 횟수 | `2`                                    |                   |
+| `conversation_room_count_default`    | `integer`      | No       | `1` (app)              | room 배치 개수 기본값(순차 처리)      | `3`                                    |                   |
+| `agent_parallel_calls_default`       | `integer`      | No       | `3` (app)              | 각 room 배치 내 질의 동시 실행 기본값  | `5`                                    |                   |
 | `timeout_ms_default`                 | `integer`      | No       | `120000` (app)         | 타임아웃 기본값(ms)             | `180000`                               |                   |
 | `test_model_default`                 | `varchar(120)` | No       | `gpt-5.2` (app)        | 실행 모델 기본값                | `gpt-5.2`                              |                   |
 | `eval_model_default`                 | `varchar(120)` | No       | `gpt-5.2` (app)        | 평가 모델 기본값                | `gpt-5.2`                              |                   |
@@ -366,6 +367,7 @@
 - Important relationships:
   - `base_run_id -> validation_runs.id` (self reference, N:1)
   - `test_set_id -> validation_test_sets.id` (N:1)
+  - `validation_run_activity_reads.run_id -> validation_runs.id` (1:N)
   - `validation_run_items.run_id -> validation_runs.id` (1:N)
 - Data lifecycle:
   - 생성: 실행 계획 등록 시 PENDING run 생성
@@ -385,9 +387,9 @@
 | `agent_id`                | `varchar(120)` | No       | `ORCHESTRATOR_WORKER_V3` (app) | 실행 워커 ID                 | `ORCHESTRATOR_WORKER_V3`                       |                                          |
 | `test_model`              | `varchar(120)` | No       | `gpt-5.2` (app)                | 실행 모델                    | `gpt-5.2`                                      |                                          |
 | `eval_model`              | `varchar(120)` | No       | `gpt-5.2` (app)                | 평가 모델                    | `gpt-5.2`                                      |                                          |
-| `repeat_in_conversation`  | `integer`      | No       | `1` (app)                      | 동일 방 반복 횟수            | `2`                                            |                                          |
-| `conversation_room_count` | `integer`      | No       | `1` (app)                      | 대화 방 수                   | `3`                                            |                                          |
-| `agent_parallel_calls`    | `integer`      | No       | `3` (app)                      | 동시 실행 수                 | `4`                                            |                                          |
+| `repeat_in_conversation`  | `integer`      | No       | `1` (app)                      | 동일 room 배치 내 반복 횟수      | `2`                                            |                                          |
+| `conversation_room_count` | `integer`      | No       | `1` (app)                      | 실행 room 배치 수(순차 처리)     | `3`                                            |                                          |
+| `agent_parallel_calls`    | `integer`      | No       | `3` (app)                      | 각 room 배치 내 질의 동시 실행 수 | `4`                                            |                                          |
 | `timeout_ms`              | `integer`      | No       | `120000` (app)                 | 실행 타임아웃(ms)            | `180000`                                       |                                          |
 | `options_json`            | `text`         | No       | `{}` (app)                     | 실행 옵션(JSON 문자열)       | `{"batchSize":20}`                             | JSON string                              |
 | `created_at`              | `datetime`     | No       | UTC now (app)                  | run 생성 시각                | `2026-02-18 10:41:01`                          |                                          |
@@ -409,7 +411,42 @@
 
 ---
 
-## 11) `validation_run_items`
+## 11) `validation_run_activity_reads`
+
+### 테이블 개요
+
+- Table name: `validation_run_activity_reads`
+- Business purpose: GNB 진행 알림에서 run별 읽음 상태를 사용자(actor_key) 단위로 저장
+- Primary key: `id`
+- Important relationships:
+  - `run_id -> validation_runs.id` (N:1)
+- Data lifecycle:
+  - 생성: 특정 actor가 run 알림을 읽었을 때 upsert
+  - 수정: 동일 `(run_id, actor_key)` 조합에서 `read_at` 갱신
+  - 삭제: 현재 별도 정리 배치 없음(필요 시 운영 배치로 정리)
+
+### 컬럼 정의
+
+| Column name  | Type           | Nullable | Default       | Description              | Example value                          | Notes      |
+| ------------ | -------------- | -------- | ------------- | ------------------------ | -------------------------------------- | ---------- |
+| `id`         | `varchar(36)`  | No       | UUID (app)    | 읽음 레코드 ID           | `93ec3bf0-5daf-4c9e-a3dc-8a0e7b53ec2a` | PK         |
+| `run_id`     | `varchar(36)`  | No       | 없음          | 대상 run ID              | `35efe819-03de-468a-8f3a-0c5f68a9f1d0` | FK, index  |
+| `actor_key`  | `varchar(128)` | No       | 없음          | 읽음 주체 식별 키        | `3e46fb691ac201eb...`                  | index      |
+| `read_at`    | `datetime`     | Yes      | `NULL`        | 읽음 처리 시각(UTC)      | `2026-02-25 09:44:12`                  |            |
+| `created_at` | `datetime`     | No       | UTC now (app) | 레코드 생성 시각         | `2026-02-25 09:44:12`                  |            |
+| `updated_at` | `datetime`     | No       | UTC now (app) | 레코드 수정 시각         | `2026-02-25 09:50:01`                  | on update  |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- FK: `run_id -> validation_runs.id`
+- Unique: `uq_validation_run_activity_reads_run_actor(run_id, actor_key)`
+- Index: `ix_validation_run_activity_reads_run_id(run_id)`
+- Index: `ix_validation_run_activity_reads_actor_key(actor_key)`
+
+---
+
+## 12) `validation_run_items`
 
 ### 테이블 개요
 
@@ -442,9 +479,9 @@
 | `logic_expected_value_snapshot` | `text`         | No       | `""` (app)         | 실행 적용 로직 기대값 스냅샷      | `SALE`                                 | snapshot          |
 | `context_json_snapshot`         | `text`         | No       | `""` (app)         | 실행 컨텍스트 스냅샷(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
 | `target_assistant_snapshot`     | `text`         | No       | `""` (app)         | 실행 대상 어시스턴트 스냅샷       | `apt_sales_bot`                        | startup 보정 컬럼 |
-| `conversation_room_index`       | `integer`      | No       | `1` (app)          | 대화 방 번호                      | `2`                                    |                   |
-| `repeat_index`                  | `integer`      | No       | `1` (app)          | 반복 실행 번호                    | `1`                                    |                   |
-| `conversation_id`               | `varchar(120)` | No       | `""` (app)         | 대화방 식별자                     | `conv_20260218_001`                    |                   |
+| `conversation_room_index`       | `integer`      | No       | `1` (app)          | 실행 room 배치 번호                  | `2`                                    |                   |
+| `repeat_index`                  | `integer`      | No       | `1` (app)          | 해당 room 배치 내 반복 실행 번호      | `1`                                    |                   |
+| `conversation_id`               | `varchar(120)` | No       | `""` (app)         | 항목 단위 대화 식별자                | `conv_20260218_001`                    | room 공유 보장 없음 |
 | `raw_response`                  | `text`         | No       | `""` (app)         | 원문 응답 텍스트                  | `조건에 맞는 매물 3건입니다...`        |                   |
 | `latency_ms`                    | `integer`      | Yes      | `NULL`             | 응답 지연시간(ms)                 | `1820`                                 |                   |
 | `error`                         | `text`         | No       | `""` (app)         | 실행 오류 메시지                  | `HTTP 504 gateway timeout`             |                   |
@@ -462,7 +499,7 @@
 
 ---
 
-## 12) `validation_llm_evaluations`
+## 13) `validation_llm_evaluations`
 
 ### 테이블 개요
 
@@ -498,7 +535,7 @@
 
 ---
 
-## 13) `validation_logic_evaluations`
+## 14) `validation_logic_evaluations`
 
 ### 테이블 개요
 
@@ -532,7 +569,7 @@
 
 ---
 
-## 14) `validation_score_snapshots`
+## 15) `validation_score_snapshots`
 
 ### 테이블 개요
 
@@ -579,7 +616,7 @@
 
 ---
 
-## 15) `automation_jobs`
+## 16) `automation_jobs`
 
 ### 테이블 개요
 

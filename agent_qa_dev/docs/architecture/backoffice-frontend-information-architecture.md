@@ -3,7 +3,7 @@
 - 문서 목적: AQB Backoffice의 화면 구조, 도메인 객체, 핵심 운영 흐름을 PM/운영 관점에서 빠르게 파악
 - 대상 독자: PM, PO, 운영 리드, QA 리드
 - 기준 코드: `backoffice/frontend/src`
-- 최신 갱신일: 2026-02-20
+- 최신 갱신일: 2026-02-25
 
 ## 1. 제품 구조 한눈에 보기
 
@@ -48,7 +48,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 |---|---|---|---|
 | 검증 실행 | `/validation/run` | `AgentValidationManagementPage` (run 섹션) | 테스트 세트 선택/Run 생성/Run 실행/평가/비교 워크벤치 |
 | 검증 이력 | `/validation/history` | `AgentValidationManagementPage` (history 섹션) | Run 목록 조회 |
-| 검증 이력 상세 | `/validation/history/:runId` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세 조회 및 실행 워크벤치 연결 |
+| 검증 이력 상세 | `/validation/history/:runId?tab=history|results` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세를 `검증 이력`/`평가 결과` 탭으로 조회하고 실행 워크벤치 연결 |
 | 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 테스트 세트 기준 성과/실패 패턴 조회 |
 | 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD(질의 묶기) |
@@ -56,6 +56,14 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | Validation Settings | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값 관리 |
 | Prompt | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
 | Generic Legacy | `/generic-legacy` | `GenericRunPage` | 레거시 검증 플로우 운영 |
+
+### 2.3 공통 페이지 헤더 포맷
+
+모든 메뉴 페이지는 `AppLayout`에서 동일한 상단 포맷을 사용한다.
+
+1. 페이지 최상단에 브레드크럼만 1회 노출한다.
+2. 각 페이지 내부(`Card title`, `Typography.Title`)의 페이지 타이틀은 사용하지 않는다.
+3. 상세 화면의 로컬 브레드크럼은 제거하고 전역 브레드크럼으로 경로 문맥을 통일한다.
 
 ## 3. 핵심 도메인 객체
 
@@ -122,17 +130,31 @@ flowchart LR
 
 `검증 이력`은 조회/다운로드 중심(read-only)이며 실행 액션은 제공하지 않는다.
 
+검증 이력 상세의 정보 위계:
+
+1. 페이지 헤더(전역): 브레드크럼(1회)
+2. 상세 헤더(로컬): Run 이름/상태/액션
+3. 컨텍스트: `테스트 세트/에이전트/평가 모델/마지막 업데이트` 라벨-값 메타
+4. 탭 콘텐츠: `검증 이력`/`평가 결과`는 섹션 타이틀 + 툴바 + 테이블 구조로 렌더링
+
+평가 결과 탭:
+
+1. 분포 섹션은 제거한다.
+2. 저점/오류/느림 탐색은 결과 테이블의 정렬/필터에서 수행한다.
+
 ## 5. 화면 간 상태 전달 전략
 
 페이지 간 전달은 query param 기준을 기본으로 사용한다.
 
 1. `testSetId`
 2. `runId`
+3. `tab` (`history` | `results`, 검증 이력 상세 전용)
 
 예시:
 
 1. `테스트 세트` -> `검증 실행`: `/validation/run?testSetId=ts1`
 2. `검증 이력 상세` -> `검증 실행`: `/validation/run?runId=r1&testSetId=ts1`
+3. `검증 이력 상세` 내부 탭 상태: `/validation/history/r1?tab=history`, `/validation/history/r1?tab=results`
 
 ## 6. 도메인 용어 정리 (Mermaid)
 

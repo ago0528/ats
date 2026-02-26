@@ -32,10 +32,14 @@ class ValidationQueryGroupRepository:
         self,
         group_name: str,
         description: str = "",
+        default_target_assistant: str = "",
+        llm_eval_criteria_default_json: str = "[]",
     ) -> ValidationQueryGroup:
         group = ValidationQueryGroup(
             group_name=group_name.strip(),
             description=description or "",
+            default_target_assistant=default_target_assistant.strip(),
+            llm_eval_criteria_default_json=llm_eval_criteria_default_json,
         )
         self.db.add(group)
         self.db.flush()

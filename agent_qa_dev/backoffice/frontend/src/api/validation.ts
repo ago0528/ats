@@ -9,10 +9,16 @@ import type {
   ValidationTestSetConfig,
   ValidationQuery,
   ValidationRun,
+  ValidationRunActivityReadRequest,
+  ValidationRunActivityResponse,
   ValidationRunCreateRequest,
   ValidationRunUpdateRequest,
   ValidationRunItem,
+  ValidationRunExpectedBulkPreviewResult,
+  ValidationRunExpectedBulkUpdateResult,
   ValidationSettings,
+  ValidationDashboardScoring,
+  ValidationDashboardDistributions,
 } from './types/validation';
 import type { Environment } from '../app/EnvironmentScope';
 
@@ -117,6 +123,9 @@ export async function uploadQueriesBulk(file: File, groupId?: string, createdBy 
     unmappedGroupRows?: number[];
     unmappedGroupValues?: string[];
     createdGroupNames?: string[];
+    legacyFallbackCount?: number;
+    legacyFallbackRows?: number[];
+    invalidLatencyClassRows?: number[];
   }>(
     '/queries/bulk-upload',
     formData,
@@ -137,6 +146,9 @@ export async function previewQueriesBulkUpload(file: File, groupId?: string) {
     missingQueryRows: number[];
     groupsToCreate: string[];
     groupsToCreateRows: number[];
+    legacyFallbackCount?: number;
+    legacyFallbackRows?: number[];
+    invalidLatencyClassRows?: number[];
   }>(
     '/queries/bulk-upload/preview',
     formData,
@@ -175,6 +187,20 @@ export async function listValidationRuns(params?: {
   limit?: number;
 }) {
   const { data } = await api.get<{ items: ValidationRun[]; total: number }>('/validation-runs', { params });
+  return data;
+}
+
+export async function listValidationRunActivity(params: {
+  environment: Environment;
+  actorKey: string;
+  limit?: number;
+}) {
+  const { data } = await api.get<ValidationRunActivityResponse>('/validation-run-activity', { params });
+  return data;
+}
+
+export async function markValidationRunActivityRead(payload: ValidationRunActivityReadRequest) {
+  const { data } = await api.post<{ updatedCount: number }>('/validation-run-activity/read', payload);
   return data;
 }
 
@@ -221,8 +247,33 @@ export async function rerunValidationRun(runId: string) {
   return data;
 }
 
-export function buildValidationRunExportUrl(runId: string) {
-  return `${api.defaults.baseURL}/validation-runs/${encodeURIComponent(runId)}/export.xlsx`;
+export function buildValidationRunExportUrl(runId: string, options?: { includeDebug?: boolean }) {
+  const includeDebug = options?.includeDebug ? '?includeDebug=1' : '';
+  return `${api.defaults.baseURL}/validation-runs/${encodeURIComponent(runId)}/export.xlsx${includeDebug}`;
+}
+
+export function buildValidationRunExpectedResultsTemplateUrl(runId: string) {
+  return `${api.defaults.baseURL}/validation-runs/${encodeURIComponent(runId)}/expected-results/template.csv`;
+}
+
+export async function previewValidationRunExpectedResultsBulkUpdate(runId: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<ValidationRunExpectedBulkPreviewResult>(
+    `/validation-runs/${runId}/expected-results/bulk-update/preview`,
+    formData,
+  );
+  return data;
+}
+
+export async function updateValidationRunExpectedResultsBulk(runId: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<ValidationRunExpectedBulkUpdateResult>(
+    `/validation-runs/${runId}/expected-results/bulk-update`,
+    formData,
+  );
+  return data;
 }
 
 export async function saveValidationRunItemAsQuery(
@@ -240,6 +291,20 @@ export async function saveValidationRunItemAsQuery(
   },
 ) {
   const { data } = await api.post<{ queryId: string }>(`/validation-runs/${runId}/items/${itemId}/save-query`, payload);
+  return data;
+}
+
+export async function updateValidationRunItemSnapshot(
+  runId: string,
+  itemId: string,
+  payload: {
+    expectedResult: string;
+  },
+) {
+  const { data } = await api.patch<{ id: string; runId: string; expectedResult: string }>(
+    `/validation-runs/${runId}/items/${itemId}`,
+    payload,
+  );
   return data;
 }
 
@@ -366,6 +431,8 @@ export async function getValidationTestSetDashboard(
       logicPassItems: number;
       llmDoneItems: number;
     }>;
+    scoring?: ValidationDashboardScoring;
+    distributions?: ValidationDashboardDistributions;
   }>(`/validation-dashboard/test-sets/${testSetId}`, { params });
   return data;
 }

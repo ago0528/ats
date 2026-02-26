@@ -11,6 +11,7 @@ from app.core.enums import Environment, EvalStatus, RunStatus
 from app.models.validation_llm_evaluation import ValidationLlmEvaluation
 from app.models.validation_logic_evaluation import ValidationLogicEvaluation
 from app.models.validation_query import ValidationQuery
+from app.models.validation_run_activity_read import ValidationRunActivityRead
 from app.models.validation_run import ValidationRun
 from app.models.validation_run_item import ValidationRunItem
 from app.models.validation_score_snapshot import ValidationScoreSnapshot
@@ -49,7 +50,7 @@ def _build_item_progress_query(session: Session):
             ValidationLlmEvaluation,
             and_(
                 ValidationLlmEvaluation.run_item_id == ValidationRunItem.id,
-                ValidationLlmEvaluation.status == EvalStatus.DONE,
+                ValidationLlmEvaluation.status.like("DONE%"),
             ),
         )
         .group_by(ValidationRunItem.run_id)
@@ -262,6 +263,97 @@ class ValidationRunRepository:
         query = _apply_evaluation_status_filter(query, self.db, evaluation_status)
         return int(query.scalar() or 0)
 
+    def list_active_runs(
+        self,
+        *,
+        environment: Environment,
+        limit: int = 20,
+    ) -> list[ValidationRun]:
+        active_filter = or_(
+            ValidationRun.status == RunStatus.RUNNING,
+            and_(
+                ValidationRun.status == RunStatus.DONE,
+                ValidationRun.eval_status == EvalStatus.RUNNING,
+            ),
+        )
+        query = (
+            self.db.query(ValidationRun)
+            .filter(ValidationRun.environment == environment, active_filter)
+            .order_by(ValidationRun.created_at.desc())
+            .limit(max(1, int(limit)))
+        )
+        return list(query.all())
+
+    def list_run_ids_by_environment(self, *, environment: Environment, run_ids: list[str]) -> list[str]:
+        normalized_ids = [str(run_id or "").strip() for run_id in run_ids]
+        normalized_ids = [run_id for run_id in normalized_ids if run_id]
+        if not normalized_ids:
+            return []
+        rows = (
+            self.db.query(ValidationRun.id)
+            .filter(
+                ValidationRun.environment == environment,
+                ValidationRun.id.in_(normalized_ids),
+            )
+            .all()
+        )
+        return [str(row[0] if not isinstance(row, str) else row) for row in rows]
+
+    def get_run_activity_read_map(self, *, actor_key: str, run_ids: list[str]) -> dict[str, bool]:
+        normalized_actor_key = str(actor_key or "").strip()
+        normalized_run_ids = [str(run_id or "").strip() for run_id in run_ids]
+        normalized_run_ids = [run_id for run_id in normalized_run_ids if run_id]
+        if not normalized_actor_key or not normalized_run_ids:
+            return {}
+
+        rows = (
+            self.db.query(ValidationRunActivityRead)
+            .filter(
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+                ValidationRunActivityRead.run_id.in_(normalized_run_ids),
+                ValidationRunActivityRead.read_at.isnot(None),
+            )
+            .all()
+        )
+        return {row.run_id: True for row in rows}
+
+    def mark_run_activity_read(self, *, actor_key: str, run_ids: list[str]) -> int:
+        normalized_actor_key = str(actor_key or "").strip()
+        normalized_run_ids = [str(run_id or "").strip() for run_id in run_ids]
+        normalized_run_ids = [run_id for run_id in normalized_run_ids if run_id]
+        if not normalized_actor_key or not normalized_run_ids:
+            return 0
+
+        unique_run_ids = list(dict.fromkeys(normalized_run_ids))
+        existing_rows = (
+            self.db.query(ValidationRunActivityRead)
+            .filter(
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+                ValidationRunActivityRead.run_id.in_(unique_run_ids),
+            )
+            .all()
+        )
+        existing_by_run_id = {row.run_id: row for row in existing_rows}
+        now = dt.datetime.utcnow()
+        touched = 0
+
+        for run_id in unique_run_ids:
+            existing = existing_by_run_id.get(run_id)
+            if existing is None:
+                self.db.add(
+                    ValidationRunActivityRead(
+                        run_id=run_id,
+                        actor_key=normalized_actor_key,
+                        read_at=now,
+                    )
+                )
+            else:
+                existing.read_at = now
+            touched += 1
+
+        self.db.flush()
+        return touched
+
     def set_status(self, run_id: str, status: RunStatus) -> None:
         run = self.get_run(run_id)
         if run is None:
@@ -324,8 +416,67 @@ class ValidationRunRepository:
             .all()
         )
 
+    def list_items_by_ids(self, run_id: str, item_ids: list[str]) -> list[ValidationRunItem]:
+        if not item_ids:
+            return []
+        return list(
+            self.db.query(ValidationRunItem)
+            .filter(ValidationRunItem.run_id == run_id, ValidationRunItem.id.in_(item_ids))
+            .order_by(ValidationRunItem.ordinal.asc())
+            .all()
+        )
+
     def get_item(self, item_id: str) -> Optional[ValidationRunItem]:
         return self.db.get(ValidationRunItem, item_id)
+
+    def update_item_snapshots(
+        self,
+        item_id: str,
+        *,
+        expected_result_snapshot: Optional[str] = None,
+    ) -> Optional[ValidationRunItem]:
+        item = self.get_item(item_id)
+        if item is None:
+            return None
+        if expected_result_snapshot is not None:
+            item.expected_result_snapshot = str(expected_result_snapshot)
+        self.db.flush()
+        return item
+
+    def bulk_update_item_expected_results(self, run_id: str, updates: dict[str, str]) -> int:
+        if not updates:
+            return 0
+        rows = self.list_items_by_ids(run_id, list(updates.keys()))
+        updated_count = 0
+        for row in rows:
+            next_expected_result = str(updates.get(row.id, ""))
+            if str(row.expected_result_snapshot or "") == next_expected_result:
+                continue
+            row.expected_result_snapshot = next_expected_result
+            updated_count += 1
+        self.db.flush()
+        return updated_count
+
+    def clear_llm_evaluations_for_run(self, run_id: str) -> None:
+        item_rows = self.db.query(ValidationRunItem.id).filter(ValidationRunItem.run_id == run_id).all()
+        item_ids = [row[0] if not isinstance(row, str) else row for row in item_rows]
+        item_ids = [item_id for item_id in item_ids if item_id is not None]
+        if item_ids:
+            self.db.execute(
+                delete(ValidationLlmEvaluation).where(
+                    ValidationLlmEvaluation.run_item_id.in_(item_ids)
+                )
+            )
+        self.db.flush()
+
+    def reset_eval_state_to_pending(self, run_id: str) -> None:
+        run = self.get_run(run_id)
+        if run is None:
+            return
+        run.eval_status = EvalStatus.PENDING
+        run.eval_started_at = None
+        run.eval_finished_at = None
+        self.db.flush()
 
     def update_item_execution(
         self,
@@ -431,7 +582,7 @@ class ValidationRunRepository:
         return int(
             self.db.query(func.count(ValidationLlmEvaluation.id))
             .join(ValidationRunItem, ValidationRunItem.id == ValidationLlmEvaluation.run_item_id)
-            .filter(ValidationRunItem.run_id == run_id, ValidationLlmEvaluation.status == "DONE")
+            .filter(ValidationRunItem.run_id == run_id, ValidationLlmEvaluation.status.like("DONE%"))
             .scalar()
             or 0
         )
@@ -605,6 +756,126 @@ class ValidationRunRepository:
             return {}
         rows = self.db.query(ValidationQuery.id, ValidationQuery.group_id).filter(ValidationQuery.id.in_(query_ids)).all()
         return {str(query_id): str(group_id) for query_id, group_id in rows if query_id and group_id}
+
+    def ensure_run_activity_rows(
+        self,
+        *,
+        environment: Environment,
+        actor_key: str,
+        limit: int = 1000,
+    ) -> int:
+        normalized_actor_key = str(actor_key or "").strip()
+        if not normalized_actor_key:
+            return 0
+        active_runs = self.list_active_runs(environment=environment, limit=max(1, int(limit)))
+        run_ids = [str(run.id or "").strip() for run in active_runs if str(run.id or "").strip()]
+        if not run_ids:
+            return 0
+
+        existing_rows = (
+            self.db.query(ValidationRunActivityRead.run_id)
+            .filter(
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+                ValidationRunActivityRead.run_id.in_(run_ids),
+            )
+            .all()
+        )
+        existing_run_ids = {str(row[0]) for row in existing_rows if row and row[0]}
+        now = dt.datetime.utcnow()
+        inserted = 0
+        for run_id in run_ids:
+            if run_id in existing_run_ids:
+                continue
+            self.db.add(
+                ValidationRunActivityRead(
+                    id=str(uuid.uuid4()),
+                    run_id=run_id,
+                    actor_key=normalized_actor_key,
+                    read_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            inserted += 1
+        if inserted:
+            self.db.flush()
+        return inserted
+
+    def list_run_activity_items(
+        self,
+        *,
+        environment: Environment,
+        actor_key: str,
+        limit: int = 20,
+    ) -> list[tuple[ValidationRun, bool]]:
+        normalized_actor_key = str(actor_key or "").strip()
+        if not normalized_actor_key:
+            return []
+
+        rows = (
+            self.db.query(ValidationRun, ValidationRunActivityRead.read_at)
+            .join(ValidationRunActivityRead, ValidationRunActivityRead.run_id == ValidationRun.id)
+            .filter(
+                ValidationRun.environment == environment,
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+            )
+            .order_by(ValidationRun.created_at.desc())
+            .limit(max(1, int(limit)))
+            .all()
+        )
+        return [(run, bool(read_at)) for run, read_at in rows]
+
+    def count_unread_run_activity_items(
+        self,
+        *,
+        environment: Environment,
+        actor_key: str,
+    ) -> int:
+        normalized_actor_key = str(actor_key or "").strip()
+        if not normalized_actor_key:
+            return 0
+
+        count = (
+            self.db.query(func.count(ValidationRunActivityRead.id))
+            .join(ValidationRun, ValidationRunActivityRead.run_id == ValidationRun.id)
+            .filter(
+                ValidationRun.environment == environment,
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+                ValidationRunActivityRead.read_at.is_(None),
+            )
+            .scalar()
+        )
+        return int(count or 0)
+
+    def mark_all_run_activity_read(
+        self,
+        *,
+        environment: Environment,
+        actor_key: str,
+    ) -> int:
+        normalized_actor_key = str(actor_key or "").strip()
+        if not normalized_actor_key:
+            return 0
+
+        rows = (
+            self.db.query(ValidationRunActivityRead)
+            .join(ValidationRun, ValidationRunActivityRead.run_id == ValidationRun.id)
+            .filter(
+                ValidationRun.environment == environment,
+                ValidationRunActivityRead.actor_key == normalized_actor_key,
+                ValidationRunActivityRead.read_at.is_(None),
+            )
+            .all()
+        )
+        if not rows:
+            return 0
+
+        now = dt.datetime.utcnow()
+        for row in rows:
+            row.read_at = now
+            row.updated_at = now
+        self.db.flush()
+        return len(rows)
 
     def build_run_payload(self, run: ValidationRun) -> dict[str, Any]:
         score_snapshot = self.get_run_score_snapshot(run.id)

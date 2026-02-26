@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AxiosError } from 'axios';
 import { FileTextOutlined, RobotOutlined, SafetyOutlined, SyncOutlined } from '@ant-design/icons';
-import { App, Button, Form, Input, Layout, Menu, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import { App, Breadcrumb, Button, Form, Input, Layout, Menu, Space, Tag, Tooltip, Typography, theme } from 'antd';
+import type { BreadcrumbProps } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import { EnvironmentScope, type Environment } from './EnvironmentScope';
@@ -16,6 +17,7 @@ import { api } from '../api/client';
 import { getValidationSettings } from '../api/validation';
 import { RuntimeSecrets } from './types';
 import { StandardModal, StandardModalMetaBlock } from '../components/common/StandardModal';
+import { ValidationRunActivityPopover } from './components/ValidationRunActivityPopover';
 import {
   StandardPaginationConfigContext,
   STANDARD_PAGE_SIZE_LIMIT_DEFAULT,
@@ -26,6 +28,7 @@ import {
   MENU_PATHS,
   isKnownPath,
   normalizePathname,
+  resolveHistoryDetailTab,
   resolveHistoryRunId,
   resolveMenu,
   resolveValidationSection,
@@ -244,6 +247,71 @@ export function AppLayout() {
   const menu = useMemo(() => resolveMenu(pathname), [pathname]);
   const validationSection = useMemo(() => resolveValidationSection(pathname), [pathname]);
   const historyRunId = useMemo(() => resolveHistoryRunId(pathname), [pathname]);
+  const historyDetailTab = useMemo(() => resolveHistoryDetailTab(location.search), [location.search]);
+  const toBreadcrumbLink = useCallback((label: string, path: string) => (
+    <a
+      href={path}
+      onClick={(event) => {
+        event.preventDefault();
+        navigate(path);
+      }}
+    >
+      {label}
+    </a>
+  ), [navigate]);
+
+  const pageBreadcrumbItems = useMemo<BreadcrumbProps['items']>(() => {
+    if (menu === 'validation-run') {
+      return [{ title: '에이전트 검증 운영' }, { title: '검증 실행' }];
+    }
+    if (menu === 'validation-history') {
+      if (validationSection === 'history-detail') {
+        return [
+          { title: '에이전트 검증 운영' },
+          { title: toBreadcrumbLink('검증 이력', '/validation/history') },
+          { title: historyDetailTab === 'results' ? '평가 결과' : '검증 이력 상세' },
+        ];
+      }
+      return [{ title: '에이전트 검증 운영' }, { title: '검증 이력' }];
+    }
+    if (menu === 'validation-dashboard') {
+      return [{ title: '에이전트 검증 운영' }, { title: '대시보드' }];
+    }
+    if (menu === 'validation-data-queries') {
+      return [{ title: '검증 데이터 관리' }, { title: '질의 관리' }];
+    }
+    if (menu === 'validation-data-query-groups') {
+      return [{ title: '검증 데이터 관리' }, { title: '질의 그룹' }];
+    }
+    if (menu === 'validation-data-test-sets') {
+      return [{ title: '검증 데이터 관리' }, { title: '테스트 세트' }];
+    }
+    if (menu === 'validation-settings') {
+      return [{ title: '환경설정' }];
+    }
+    if (menu === 'prompt') {
+      return [{ title: '프롬프트 관리' }];
+    }
+    if (menu === 'generic-legacy') {
+      return [{ title: '레거시 검증' }];
+    }
+    return [{ title: '에이전트 검증 운영' }];
+  }, [historyDetailTab, menu, toBreadcrumbLink, validationSection]);
+
+  const openRunWorkspace = useCallback(({
+    runId,
+    testSetId,
+  }: {
+    runId: string;
+    testSetId?: string | null;
+  }) => {
+    const params = new URLSearchParams();
+    params.set('runId', runId);
+    if (testSetId) {
+      params.set('testSetId', testSetId);
+    }
+    navigate(`/validation/run?${params.toString()}`);
+  }, [navigate]);
 
   const content = useMemo(() => {
     if (menu === 'validation-data-queries') {
@@ -295,14 +363,7 @@ export function AppLayout() {
         historyRunId={historyRunId}
         onOpenHistoryRunDetail={(runId) => navigate(`/validation/history/${encodeURIComponent(runId)}`)}
         onBackToHistory={() => navigate('/validation/history')}
-        onOpenRunWorkspace={({ runId, testSetId }) => {
-          const params = new URLSearchParams();
-          params.set('runId', runId);
-          if (testSetId) {
-            params.set('testSetId', testSetId);
-          }
-          navigate(`/validation/run?${params.toString()}`);
-        }}
+        onOpenRunWorkspace={openRunWorkspace}
       />
     );
   }, [
@@ -312,6 +373,7 @@ export function AppLayout() {
     navigate,
     validationSection,
     historyRunId,
+    openRunWorkspace,
   ]);
 
   return (
@@ -329,6 +391,12 @@ export function AppLayout() {
               </Tooltip>
             </Space>
             <Space align="center" size="small">
+              <ValidationRunActivityPopover
+                environment={environment}
+                runtimeSecrets={runtimeSecrets}
+                onOpenRunWorkspace={openRunWorkspace}
+                onOpenHistoryRunDetail={(runId) => navigate(`/validation/history/${encodeURIComponent(runId)}`)}
+              />
               <EnvironmentScope value={environment} onChange={setEnvironment} controlHeight={antdToken.controlHeight} />
               <Button
                 type="default"
@@ -498,6 +566,7 @@ export function AppLayout() {
           </Sider>
           <Content className="backoffice-content">
             <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Breadcrumb className="backoffice-page-breadcrumb" items={pageBreadcrumbItems} />
               {content}
             </Space>
           </Content>

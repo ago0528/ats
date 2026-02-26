@@ -24,7 +24,6 @@ def test_validation_score_snapshot_created_after_evaluation(monkeypatch):
             "expectedResult": "결과 score",
             "category": "Happy path",
             "groupId": group_id,
-            "llmEvalCriteria": '{"accuracy": 1.0}',
             "logicFieldPath": "assistantMessage",
             "logicExpectedValue": "결과",
         },
@@ -55,9 +54,17 @@ def test_validation_score_snapshot_created_after_evaluation(monkeypatch):
     db.commit()
     db.close()
 
-    async def _fake_judge(self, session, api_key, model, prompt):
+    async def _fake_judge(self, session, api_key, model, prompt, **kwargs):
         return (
-            {"metric_scores": {"accuracy": 4.0}, "total_score": 4.0, "comment": "ok"},
+            {
+                "intent": 4.0,
+                "accuracy": 4.0,
+                "consistency": None,
+                "latencySingle": 5.0,
+                "latencyMulti": None,
+                "stability": 5.0,
+                "reasoning": "ok",
+            },
             {},
             "",
         )

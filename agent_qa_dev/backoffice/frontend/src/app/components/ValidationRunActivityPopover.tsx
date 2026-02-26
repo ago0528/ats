@@ -71,12 +71,16 @@ function getStatusTag(item: ValidationRunActivityItem) {
 function isInProgressActivity(item: ValidationRunActivityItem) {
   const status = String(item.status || '').toUpperCase();
   const evalStatus = String(item.evalStatus || '').toUpperCase();
-  return status === 'RUNNING' || (status === 'DONE' && evalStatus === 'RUNNING');
+  return (
+    status === 'RUNNING' || (status === 'DONE' && evalStatus === 'RUNNING')
+  );
 }
 
 function loadPersistedFilter(): ActivityFilter {
   if (typeof window === 'undefined') return 'ALL';
-  const value = String(window.localStorage.getItem(ACTIVITY_FILTER_STORAGE_KEY) || '').toUpperCase();
+  const value = String(
+    window.localStorage.getItem(ACTIVITY_FILTER_STORAGE_KEY) || '',
+  ).toUpperCase();
   if (value === 'UNREAD') return 'UNREAD';
   return 'ALL';
 }
@@ -89,7 +93,10 @@ function getProgressMeta(item: ValidationRunActivityItem): {
   strokeColor?: string;
 } {
   const total = Math.max(0, Number(item.totalItems || 0));
-  const executionDone = Math.max(0, Number(item.doneItems || 0) + Number(item.errorItems || 0));
+  const executionDone = Math.max(
+    0,
+    Number(item.doneItems || 0) + Number(item.errorItems || 0),
+  );
   const evaluationDone = Math.max(0, Number(item.llmDoneItems || 0));
   const status = String(item.status || '').toUpperCase();
   const evalStatus = String(item.evalStatus || '').toUpperCase();
@@ -112,7 +119,8 @@ function getProgressMeta(item: ValidationRunActivityItem): {
     };
   }
   if (status === 'FAILED' || evalStatus === 'FAILED') {
-    const failedPercent = total > 0 ? Math.min(100, Math.round((executionDone / total) * 100)) : 0;
+    const failedPercent =
+      total > 0 ? Math.min(100, Math.round((executionDone / total) * 100)) : 0;
     return {
       label: '실패',
       done: executionDone,
@@ -151,7 +159,9 @@ export function ValidationRunActivityPopover({
     runtimeSecrets,
     pollingMs: 5000,
   });
-  const [filterMode, setFilterMode] = useState<ActivityFilter>(() => loadPersistedFilter());
+  const [filterMode, setFilterMode] = useState<ActivityFilter>(() =>
+    loadPersistedFilter(),
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -160,9 +170,7 @@ export function ValidationRunActivityPopover({
 
   const filterItems = useMemo(
     () =>
-      filterMode === 'UNREAD'
-        ? items.filter((item) => !item.isRead)
-        : items,
+      filterMode === 'UNREAD' ? items.filter((item) => !item.isRead) : items,
     [filterMode, items],
   );
 
@@ -233,7 +241,11 @@ export function ValidationRunActivityPopover({
       {hasActorKey && filterItems.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={items.length === 0 ? '알림이 없습니다.' : '읽지 않은 알림이 없습니다.'}
+          description={
+            items.length === 0
+              ? '알림이 없습니다.'
+              : '읽지 않은 알림이 없습니다.'
+          }
         />
       ) : null}
 

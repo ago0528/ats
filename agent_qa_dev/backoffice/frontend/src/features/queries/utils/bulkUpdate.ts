@@ -13,7 +13,6 @@ export const BULK_UPDATE_CSV_HEADERS = [
   'targetAssistant',
   'contextJson',
   '기대 결과',
-  'LLM 평가기준(JSON)',
   'Logic 검증 필드',
   'Logic 기대값',
   '등록일자',
@@ -25,7 +24,6 @@ const CHANGED_FIELD_LABELS: Record<string, string> = {
   group: '그룹',
   queryText: '질의',
   expectedResult: '기대 결과',
-  llmEvalCriteria: 'LLM 평가기준(JSON)',
   logicFieldPath: 'Logic 검증 필드',
   logicExpectedValue: 'Logic 기대값',
   targetAssistant: 'targetAssistant',
@@ -42,16 +40,6 @@ function toStringValue(value: unknown) {
   return String(value);
 }
 
-function stringifyCriteria(value: ValidationQuery['llmEvalCriteria']) {
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value);
-  } catch (error) {
-    console.error(error);
-    return '';
-  }
-}
-
 export function buildBulkUpdateCsvContent(items: ValidationQuery[]) {
   const lines = [
     BULK_UPDATE_CSV_HEADERS.join(','),
@@ -65,7 +53,6 @@ export function buildBulkUpdateCsvContent(items: ValidationQuery[]) {
       item.targetAssistant || '',
       item.contextJson || '',
       item.expectedResult || '',
-      stringifyCriteria(item.llmEvalCriteria),
       item.logicFieldPath || '',
       item.logicExpectedValue || '',
       formatDateYYYYMMDD(item.createdAt, ''),
@@ -89,4 +76,3 @@ export function mapBulkUpdatePreviewRows(rows: QueryBulkUpdatePreviewApiRow[]): 
     changedFields: toChangedFieldLabels(Array.isArray(row.changedFields) ? row.changedFields : []),
   }));
 }
-

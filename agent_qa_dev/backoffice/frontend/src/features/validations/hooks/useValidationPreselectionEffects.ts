@@ -3,7 +3,6 @@ import type { MessageInstance } from 'antd/es/message/interface';
 
 import { getValidationRun, listValidationRunItems } from '../../../api/validation';
 import type { ValidationQuery } from '../../../api/types/validation';
-import { stringifyPretty } from '../../../shared/utils/json';
 import type { RunCreateOverrides } from './useValidationActions';
 
 export function useValidationPreselectionEffects({
@@ -104,7 +103,7 @@ export function useValidationPreselectionEffects({
           setSelectedQueries([]);
           setAdHocQueryText(firstItem?.queryText ?? '');
           setAdHocExpected(firstItem?.expectedResult ?? '');
-          setAdHocCriteria(firstItem ? stringifyPretty(firstItem.appliedCriteria) : '');
+          setAdHocCriteria('');
           setAdHocLogicFieldPath(firstItem?.logicFieldPath ?? '');
           setAdHocLogicExpected(firstItem?.logicExpectedValue ?? '');
         }

@@ -30,7 +30,6 @@ import type {
 import type { Environment } from '../../../app/EnvironmentScope';
 import type { RuntimeSecrets } from '../../../app/types';
 import { toTimestamp } from '../../../shared/utils/dateTime';
-import { parseJsonOrOriginal, stringifyPretty } from '../../../shared/utils/json';
 import { BULK_UPDATE_EMPTY_TEXT, BULK_UPLOAD_EMPTY_TEXT } from '../constants';
 import type { BulkUpdatePreviewRow, UploadPreviewRow } from '../types';
 import { buildBulkUpdateCsvContent, mapBulkUpdatePreviewRows } from '../utils/bulkUpdate';
@@ -41,7 +40,6 @@ type QueryFormValues = {
   expectedResult: string;
   category: QueryCategory;
   groupId?: string;
-  llmEvalCriteria: string;
   logicFieldPath: string;
   logicExpectedValue: string;
   contextJson: string;
@@ -321,7 +319,6 @@ export function useQueryManagement({
       expectedResult: '',
       category: 'Happy path',
       groupId: undefined,
-      llmEvalCriteria: '',
       logicFieldPath: '',
       logicExpectedValue: '',
       contextJson: '',
@@ -337,7 +334,6 @@ export function useQueryManagement({
       expectedResult: row.expectedResult,
       category: row.category as QueryCategory,
       groupId: row.groupId || undefined,
-      llmEvalCriteria: stringifyPretty(row.llmEvalCriteria),
       logicFieldPath: row.logicFieldPath,
       logicExpectedValue: row.logicExpectedValue,
       contextJson: row.contextJson || '',
@@ -350,7 +346,6 @@ export function useQueryManagement({
     try {
       const values = await form.validateFields();
       setSaving(true);
-      const criteria = parseJsonOrOriginal<Record<string, unknown>>(values.llmEvalCriteria);
 
       if (editing) {
         await updateQuery(editing.id, {
@@ -358,7 +353,6 @@ export function useQueryManagement({
           expectedResult: values.expectedResult,
           category: values.category,
           groupId: values.groupId ?? null,
-          llmEvalCriteria: criteria,
           logicFieldPath: values.logicFieldPath,
           logicExpectedValue: values.logicExpectedValue,
           contextJson: values.contextJson,
@@ -371,7 +365,6 @@ export function useQueryManagement({
           expectedResult: values.expectedResult,
           category: values.category,
           groupId: values.groupId,
-          llmEvalCriteria: criteria,
           logicFieldPath: values.logicFieldPath,
           logicExpectedValue: values.logicExpectedValue,
           contextJson: values.contextJson,
@@ -482,9 +475,6 @@ export function useQueryManagement({
     if ((result.createdGroupNames?.length || 0) > 0) {
       message.info(`그룹이 자동 생성됐어요. (${result.createdGroupNames?.join(', ')})`);
     }
-    if ((result.legacyFallbackCount || 0) > 0) {
-      message.warning(`legacy 폴백으로 저장된 질의가 ${result.legacyFallbackCount}건 있습니다. 정확성 자동채점 신뢰도가 낮을 수 있어요.`);
-    }
     if ((result.invalidLatencyClassRows?.length || 0) > 0) {
       message.warning(`latencyClass 값이 유효하지 않은 행 ${result.invalidLatencyClassRows?.length}건은 업로드되지 않았어요. (허용값: SINGLE, MULTI)`);
     }
@@ -503,9 +493,6 @@ export function useQueryManagement({
     try {
       setBulkUploading(true);
       const preview = await previewQueriesBulkUpload(file);
-      if ((preview.legacyFallbackCount || 0) > 0) {
-        message.warning(`aqb.v1 규칙이 없는 legacy 질의가 ${preview.legacyFallbackCount}건 있습니다. 업로드 후 폴백 경고가 표시됩니다.`);
-      }
       if ((preview.invalidLatencyClassRows?.length || 0) > 0) {
         message.warning(`latencyClass 값이 유효하지 않은 행 ${preview.invalidLatencyClassRows?.length}건이 있어요. (허용값: SINGLE, MULTI)`);
       }

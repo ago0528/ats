@@ -19,5 +19,8 @@ class ValidationLlmEvaluation(Base):
     metric_scores_json: Mapped[str] = mapped_column(Text, nullable=False, default="")
     total_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     llm_comment: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    llm_output_json: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    prompt_version: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    input_hash: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="PENDING", index=True)
     evaluated_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=dt.datetime.utcnow)

@@ -75,7 +75,6 @@ export async function createQuery(payload: {
   expectedResult?: string;
   category?: string;
   groupId?: string;
-  llmEvalCriteria?: Record<string, unknown> | string;
   logicFieldPath?: string;
   logicExpectedValue?: string;
   contextJson?: string;
@@ -93,7 +92,6 @@ export async function updateQuery(
     expectedResult: string;
     category: string;
     groupId: string | null;
-    llmEvalCriteria: Record<string, unknown> | string;
     logicFieldPath: string;
     logicExpectedValue: string;
     contextJson: string;
@@ -123,8 +121,6 @@ export async function uploadQueriesBulk(file: File, groupId?: string, createdBy 
     unmappedGroupRows?: number[];
     unmappedGroupValues?: string[];
     createdGroupNames?: string[];
-    legacyFallbackCount?: number;
-    legacyFallbackRows?: number[];
     invalidLatencyClassRows?: number[];
   }>(
     '/queries/bulk-upload',
@@ -146,8 +142,6 @@ export async function previewQueriesBulkUpload(file: File, groupId?: string) {
     missingQueryRows: number[];
     groupsToCreate: string[];
     groupsToCreateRows: number[];
-    legacyFallbackCount?: number;
-    legacyFallbackRows?: number[];
     invalidLatencyClassRows?: number[];
   }>(
     '/queries/bulk-upload/preview',
@@ -285,7 +279,6 @@ export async function saveValidationRunItemAsQuery(
     createdBy?: string;
     queryText?: string;
     expectedResult?: string;
-    llmEvalCriteria?: Record<string, unknown> | string;
     logicFieldPath?: string;
     logicExpectedValue?: string;
   },

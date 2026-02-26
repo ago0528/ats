@@ -18,7 +18,6 @@ export type ValidationQuery = {
   category: QueryCategory;
   groupId?: string | null;
   groupName?: string;
-  llmEvalCriteria: Record<string, unknown> | string;
   logicFieldPath: string;
   logicExpectedValue: string;
   contextJson: string;
@@ -174,7 +173,6 @@ export type ValidationRunItem = {
   queryText: string;
   expectedResult: string;
   category: QueryCategory;
-  appliedCriteria: Record<string, unknown> | string;
   logicFieldPath: string;
   logicExpectedValue: string;
   contextJson?: string;
@@ -278,7 +276,6 @@ export type ValidationRunCreateRequest = {
     queryText: string;
     expectedResult?: string;
     category?: QueryCategory;
-    llmEvalCriteria?: Record<string, unknown> | string;
     logicFieldPath?: string;
     logicExpectedValue?: string;
   };

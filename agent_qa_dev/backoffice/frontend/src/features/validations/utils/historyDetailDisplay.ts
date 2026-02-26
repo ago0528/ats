@@ -80,7 +80,13 @@ export function getLatencyClassLabel(rawLatencyClass?: string | null) {
 }
 
 export function getLastUpdatedText(run: ValidationRun | null) {
-  if (!run) return UNKNOWN_LABEL;
+  const lastUpdatedAt = getLastUpdatedAt(run);
+  if (!lastUpdatedAt) return NOT_AGGREGATED_LABEL;
+  return formatDateTime(lastUpdatedAt);
+}
+
+export function getLastUpdatedAt(run: ValidationRun | null) {
+  if (!run) return null;
   const lastUpdatedAt =
     run.evalFinishedAt ||
     run.finishedAt ||
@@ -88,8 +94,8 @@ export function getLastUpdatedText(run: ValidationRun | null) {
     run.startedAt ||
     run.createdAt ||
     null;
-  if (!lastUpdatedAt) return NOT_AGGREGATED_LABEL;
-  return formatDateTime(lastUpdatedAt);
+  if (!lastUpdatedAt) return null;
+  return String(lastUpdatedAt);
 }
 
 export function formatScoreText(value?: number | null, fallback = NOT_AGGREGATED_LABEL) {
@@ -144,4 +150,3 @@ export function getRunItemStatusColor(status: DisplayRunItemStatus) {
   if (status === 'stopped') return 'default';
   return 'warning';
 }
-

@@ -18,7 +18,6 @@ const baseItem = (partial?: Partial<ValidationRunItem>): ValidationRunItem =>
     queryText: 'query',
     expectedResult: '',
     category: 'Happy path',
-    appliedCriteria: '',
     logicFieldPath: '',
     logicExpectedValue: '',
     conversationRoomIndex: 1,
@@ -71,4 +70,3 @@ describe('history detail display labels', () => {
     expect(UNCLASSIFIED_LABEL).toBe('미분류');
   });
 });
-

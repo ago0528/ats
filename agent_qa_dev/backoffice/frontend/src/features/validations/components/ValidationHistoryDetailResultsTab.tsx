@@ -1,7 +1,7 @@
 import { Alert, Button, Col, Collapse, Descriptions, Row, Select, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
-import { EyeOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined } from '@ant-design/icons';
 
 import { StandardDataTable } from '../../../components/common/StandardDataTable';
 import {
@@ -46,14 +46,14 @@ function MetricTile({
   title,
   value,
   primaryText,
-  secondaryText,
+  notAggregatedReason,
   selected,
   onClick,
 }: {
   title: string;
   value: string;
   primaryText: string;
-  secondaryText?: string;
+  notAggregatedReason?: string;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -63,16 +63,16 @@ function MetricTile({
       className={`validation-metric-tile validation-metric-tile-clickable${selected ? ' is-selected' : ''}`}
       onClick={onClick}
     >
-      <Typography.Text strong>{title}</Typography.Text>
-      <Typography.Title level={4} style={{ margin: 0 }}>
-        {value}
-      </Typography.Title>
+      <Typography.Text className="validation-kpi-tile-title">{title}</Typography.Text>
+      <div className="validation-kpi-tile-value-row">
+        <Typography.Text className="validation-kpi-tile-value">{value}</Typography.Text>
+        {notAggregatedReason ? (
+          <Tooltip title={notAggregatedReason}>
+            <InfoCircleOutlined className="validation-kpi-tile-info" />
+          </Tooltip>
+        ) : null}
+      </div>
       <Typography.Text type="secondary">{primaryText}</Typography.Text>
-      {secondaryText ? (
-        <Typography.Text type="secondary" className="validation-metric-help-text">
-          <InfoCircleOutlined /> {secondaryText}
-        </Typography.Text>
-      ) : null}
     </button>
   );
 }
@@ -109,8 +109,15 @@ export function ValidationHistoryDetailResultsTab({
   const columns = useMemo<ColumnsType<ResultsRowView>>(
     () => [
       {
+        key: 'queryText',
+        title: '질의',
+        width: RESULTS_TAB_INITIAL_COLUMN_WIDTHS.queryText,
+        ellipsis: true,
+        render: (_, row) => row.item.queryText || '-',
+      },
+      {
         key: 'totalScore',
-        title: '대표 점수',
+        title: '총 점수',
         dataIndex: 'totalScoreText',
         width: RESULTS_TAB_INITIAL_COLUMN_WIDTHS.totalScore,
       },
@@ -148,23 +155,8 @@ export function ValidationHistoryDetailResultsTab({
           </Tag>
         ),
       },
-      {
-        key: 'detail',
-        title: '상세보기',
-        width: RESULTS_TAB_INITIAL_COLUMN_WIDTHS.detail,
-        render: (_, row) => (
-          <Button
-            type="text"
-            icon={<EyeOutlined />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenRow(row);
-            }}
-          />
-        ),
-      },
     ],
-    [onOpenRow],
+    [],
   );
 
   const toggleFocusMetric = (metric: FocusMetric) => {
@@ -188,7 +180,7 @@ export function ValidationHistoryDetailResultsTab({
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <Row gutter={[12, 12]} className="validation-kpi-grid">
+      <Row gutter={[12, 12]} className="validation-kpi-grid validation-results-kpi-grid">
         <Col xs={24} sm={12} md={8} lg={4}>
           <MetricTile
             title="의도 충족"
@@ -196,7 +188,9 @@ export function ValidationHistoryDetailResultsTab({
             onClick={() => toggleFocusMetric('intent')}
             value={toMetricValue(kpi.intent.score)}
             primaryText={`대상 질의 ${kpi.intent.sampleCount}개`}
-            secondaryText={kpi.intent.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.intent.score === null ? (kpi.intent.notAggregatedReason || undefined) : undefined
+            }
           />
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
@@ -206,10 +200,15 @@ export function ValidationHistoryDetailResultsTab({
             onClick={() => toggleFocusMetric('accuracy')}
             value={toMetricValue(kpi.accuracy.score)}
             primaryText={`대상 질의 ${kpi.accuracy.sampleCount}개`}
-            secondaryText={kpi.accuracy.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.accuracy.score === null ? (kpi.accuracy.notAggregatedReason || undefined) : undefined
+            }
           />
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
+          {/*
+            consistency는 sampleCount가 0이면 PENDING(=집계 없음) 상태로 렌더링한다.
+          */}
           <MetricTile
             title="일관성"
             selected={filters.focusMetric === 'consistency'}
@@ -220,7 +219,11 @@ export function ValidationHistoryDetailResultsTab({
                 : toMetricValue(kpi.consistency.score)
             }
             primaryText={`대상 질의 ${kpi.consistency.sampleCount}개`}
-            secondaryText={kpi.consistency.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.consistency.status === 'PENDING'
+                ? (kpi.consistency.notAggregatedReason || undefined)
+                : undefined
+            }
           />
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
@@ -230,7 +233,9 @@ export function ValidationHistoryDetailResultsTab({
             onClick={() => toggleFocusMetric('speed')}
             value={toMetricValue(kpi.speedSingle.avgSec, formatSecText)}
             primaryText={`대상 질의 ${kpi.speedSingle.sampleCount}개`}
-            secondaryText={kpi.speedSingle.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.speedSingle.avgSec === null ? (kpi.speedSingle.notAggregatedReason || undefined) : undefined
+            }
           />
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
@@ -240,7 +245,9 @@ export function ValidationHistoryDetailResultsTab({
             onClick={() => toggleFocusMetric('speed')}
             value={toMetricValue(kpi.speedMulti.avgSec, formatSecText)}
             primaryText={`대상 질의 ${kpi.speedMulti.sampleCount}개`}
-            secondaryText={kpi.speedMulti.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.speedMulti.avgSec === null ? (kpi.speedMulti.notAggregatedReason || undefined) : undefined
+            }
           />
         </Col>
         <Col xs={24} sm={12} md={8} lg={4}>
@@ -250,7 +257,9 @@ export function ValidationHistoryDetailResultsTab({
             onClick={() => toggleFocusMetric('stability')}
             value={toMetricValue(kpi.stability.score)}
             primaryText={`에러율 ${formatPercentText(kpi.stability.errorRate)}`}
-            secondaryText={kpi.stability.notAggregatedReason || undefined}
+            notAggregatedReason={
+              kpi.stability.score === null ? (kpi.stability.notAggregatedReason || undefined) : undefined
+            }
           />
         </Col>
       </Row>

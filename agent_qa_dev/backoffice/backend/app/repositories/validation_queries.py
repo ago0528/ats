@@ -140,7 +140,7 @@ class ValidationQueryRepository:
         expected_result: str,
         category: str,
         group_id: Optional[str] = None,
-        llm_eval_criteria: Any = None,
+        llm_eval_meta: Any = None,
         logic_field_path: str = "",
         logic_expected_value: str = "",
         context_json: str = "",
@@ -152,7 +152,7 @@ class ValidationQueryRepository:
             expected_result=expected_result or "",
             category=category or "Happy path",
             group_id=group_id or "",
-            llm_eval_criteria_json=_to_json_text(llm_eval_criteria),
+            llm_eval_criteria_json=_to_json_text(llm_eval_meta),
             logic_field_path=logic_field_path or "",
             logic_expected_value=logic_expected_value or "",
             context_json=context_json or "",
@@ -171,7 +171,7 @@ class ValidationQueryRepository:
                 expected_result=str(row.get("expected_result", "")),
                 category=str(row.get("category", "Happy path")),
                 group_id=(str(row.get("group_id")).strip() if row.get("group_id") is not None else None),
-                llm_eval_criteria=row.get("llm_eval_criteria"),
+                llm_eval_meta=row.get("llm_eval_meta"),
                 logic_field_path=str(row.get("logic_field_path", "")),
                 logic_expected_value=str(row.get("logic_expected_value", "")),
                 context_json=(str(row.get("context_json")).strip() if row.get("context_json") is not None else ""),
@@ -190,7 +190,6 @@ class ValidationQueryRepository:
         category: Optional[str] = None,
         group_id: Optional[str] = None,
         update_group_id: bool = False,
-        llm_eval_criteria: Any = None,
         logic_field_path: Optional[str] = None,
         logic_expected_value: Optional[str] = None,
         context_json: Optional[str] = None,
@@ -208,8 +207,6 @@ class ValidationQueryRepository:
             query.category = category
         if update_group_id:
             query.group_id = group_id or ""
-        if llm_eval_criteria is not None:
-            query.llm_eval_criteria_json = _to_json_text(llm_eval_criteria)
         if logic_field_path is not None:
             query.logic_field_path = logic_field_path
         if logic_expected_value is not None:

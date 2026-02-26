@@ -48,7 +48,8 @@ import {
   type ResultsFilters,
   type ResultsRowView,
 } from '../utils/historyDetailRows';
-import { getAgentModeLabel, getLastUpdatedText, getModelLabel } from '../utils/historyDetailDisplay';
+import { formatDateTime, toTimestamp } from '../../../shared/utils/dateTime';
+import { getAgentModeLabel, getLastUpdatedAt, getModelLabel, NOT_AGGREGATED_LABEL } from '../utils/historyDetailDisplay';
 
 const CONTEXT_SAMPLE =
   '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
@@ -88,6 +89,19 @@ const stringifyContext = (value?: unknown) => {
   } catch {
     return '';
   }
+};
+
+const formatRelativeUpdatedTime = (updatedAt?: string | null) => {
+  const ts = toTimestamp(updatedAt || null);
+  if (!ts) return NOT_AGGREGATED_LABEL;
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return '방금 전';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}분 전`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}시간 전`;
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}일 전`;
+  if (diffSec < 2592000) return `${Math.floor(diffSec / 604800)}주 전`;
+  if (diffSec < 31536000) return `${Math.floor(diffSec / 2592000)}개월 전`;
+  return `${Math.floor(diffSec / 31536000)}년 전`;
 };
 
 const normalizeAgentModeValue = (value?: string) => {
@@ -431,6 +445,10 @@ export function ValidationHistoryDetailSection({
     return <Empty description="런 상세를 찾을 수 없습니다." />;
   }
 
+  const lastUpdatedAt = getLastUpdatedAt(currentRun);
+  const lastUpdatedAbsolute = lastUpdatedAt ? formatDateTime(lastUpdatedAt) : NOT_AGGREGATED_LABEL;
+  const lastUpdatedRelative = formatRelativeUpdatedTime(lastUpdatedAt);
+
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
       <ValidationHistoryDetailHeaderBar
@@ -450,7 +468,7 @@ export function ValidationHistoryDetailSection({
           { key: 'testSet', label: '테스트 세트', value: testSetName },
           { key: 'agent', label: '에이전트', value: getAgentModeLabel(currentRun.agentId) },
           { key: 'evalModel', label: '평가 모델', value: getModelLabel(currentRun.evalModel) },
-          { key: 'updatedAt', label: '마지막 업데이트', value: getLastUpdatedText(currentRun) },
+          { key: 'updatedAt', label: '마지막 업데이트', value: lastUpdatedRelative, valueTooltip: lastUpdatedAbsolute },
         ]}
       />
 

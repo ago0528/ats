@@ -73,9 +73,6 @@ const toRatePercent = (value?: number | null, denominator?: number | null) => {
 const countLlmDone = (items: ValidationRunItem[]) =>
   items.filter((item) => (item.llmEvaluation?.status || '').toUpperCase().startsWith('DONE')).length;
 
-const LEGACY_ACCURACY_FALLBACK_TAG = '[LEGACY_ACCURACY_FALLBACK]';
-const ACCURACY_LLM_EXTRACT_FALLBACK_TAG = '[ACCURACY_LLM_EXTRACT_FALLBACK]';
-
 export const getResponseTimeText = (responseTimeSec?: NullableNumber, latencyMs?: NullableNumber) => {
   const secFromMs = responseTimeSec ?? (latencyMs === null || latencyMs === undefined ? null : latencyMs / 1000);
   return toFixedSeconds(secFromMs) || '-';
@@ -150,22 +147,13 @@ const parseMetricScores = (value: unknown): Record<string, unknown> => {
   return {};
 };
 
-const parseAppliedCriteria = (value: unknown): Record<string, unknown> => {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+const getMetricByAliases = (metricScores: Record<string, unknown>, aliases: string[]) => {
+  for (const key of aliases) {
+    if (!(key in metricScores)) continue;
+    const parsed = toFiniteNumber(metricScores[key] as NullableNumber);
+    if (parsed !== null) return parsed;
   }
-  if (typeof value !== 'string') return {};
-  const text = value.trim();
-  if (!text) return {};
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    return {};
-  }
-  return {};
+  return null;
 };
 
 const parseRawPayload = (value: string): { payload: Record<string, unknown>; parseOk: boolean } => {
@@ -180,15 +168,6 @@ const parseRawPayload = (value: string): { payload: Record<string, unknown>; par
     return { payload: {}, parseOk: false };
   }
   return { payload: {}, parseOk: false };
-};
-
-const getLatencyClass = (appliedCriteria: unknown): 'SINGLE' | 'MULTI' | null => {
-  const criteria = parseAppliedCriteria(appliedCriteria);
-  const meta = criteria.meta;
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
-  const raw = String((meta as Record<string, unknown>).latencyClass || '').trim().toUpperCase();
-  if (raw === 'SINGLE' || raw === 'MULTI') return raw;
-  return null;
 };
 
 const hasResponseContent = (payload: Record<string, unknown>) => {
@@ -307,29 +286,31 @@ export const getValidationRunAdvancedScoringSummary = (
   const stabilityScores: number[] = [];
   const latencySingleSecs: number[] = [];
   const latencyMultiSecs: number[] = [];
-  const consistencyMap = new Map<string, Array<{ pass: boolean }>>();
+  const consistencyByQuery = new Map<string, number>();
   let emptyCount = 0;
   let errorCount = 0;
   let latencyUnclassifiedCount = 0;
-  let accuracyFallbackCount = 0;
+  const accuracyFallbackCount = 0;
   let accuracySampleCount = 0;
 
   runItems.forEach((row) => {
     const metricScores = parseMetricScores(row.llmEvaluation?.metricScores);
-    const intentScore = toFiniteNumber(metricScores['의도충족'] as NullableNumber);
-    const accuracyScore = toFiniteNumber(metricScores['정확성'] as NullableNumber);
-    const stabilityMetric = toFiniteNumber(metricScores['안정성'] as NullableNumber);
+    const intentScore = getMetricByAliases(metricScores, ['intent', '의도충족']);
+    const accuracyScore = getMetricByAliases(metricScores, ['accuracy', '정확성']);
+    const consistencyScore = getMetricByAliases(metricScores, ['consistency']);
+    const latencySingleScore = getMetricByAliases(metricScores, ['latencySingle']);
+    const latencyMultiScore = getMetricByAliases(metricScores, ['latencyMulti']);
+    const stabilityMetric = getMetricByAliases(metricScores, ['stability', '안정성']);
     if (intentScore !== null) intentScores.push(intentScore);
     if (accuracyScore !== null) {
       accuracyScores.push(accuracyScore);
       accuracySampleCount += 1;
     }
-    const llmComment = String(row.llmEvaluation?.comment || '');
-    if (
-      llmComment.includes(LEGACY_ACCURACY_FALLBACK_TAG)
-      || llmComment.includes(ACCURACY_LLM_EXTRACT_FALLBACK_TAG)
-    ) {
-      accuracyFallbackCount += 1;
+    if (consistencyScore !== null) {
+      const queryKey = String(row.queryId || row.queryText || row.id || '').trim();
+      if (queryKey && !consistencyByQuery.has(queryKey)) {
+        consistencyByQuery.set(queryKey, consistencyScore);
+      }
     }
 
     const { payload: rawPayload, parseOk } = parseRawPayload(String(row.rawJson || ''));
@@ -346,10 +327,9 @@ export const getValidationRunAdvancedScoringSummary = (
     })();
     const responseSec = toFiniteNumber(row.responseTimeSec) ?? rawResponseSec ?? latencySec;
     if (responseSec !== null) {
-      const latencyClass = getLatencyClass(row.appliedCriteria);
-      if (latencyClass === 'SINGLE') {
+      if (latencySingleScore !== null && latencyMultiScore === null) {
         latencySingleSecs.push(responseSec);
-      } else if (latencyClass === 'MULTI') {
+      } else if (latencyMultiScore !== null && latencySingleScore === null) {
         latencyMultiSecs.push(responseSec);
       } else {
         latencyUnclassifiedCount += 1;
@@ -365,28 +345,13 @@ export const getValidationRunAdvancedScoringSummary = (
       scoreBuckets[String(Math.max(0, Math.min(5, Math.round(quality))))] += 1;
     }
 
-    const pass = (intentScore ?? 0) >= 3 && (accuracyScore ?? 0) >= 3 && stabilityScore >= 5;
-    const queryKey = String(row.queryId || row.queryText || '').trim();
-    if (!queryKey) return;
-    const prev = consistencyMap.get(queryKey) || [];
-    prev.push({ pass });
-    consistencyMap.set(queryKey, prev);
   });
 
-  let consistencyEligibleQueryCount = 0;
-  let consistencyMatched = 0;
-  consistencyMap.forEach((records) => {
-    if (records.length < 2) return;
-    consistencyEligibleQueryCount += 1;
-    const passFlags = records.map((record) => record.pass);
-    if (passFlags.every(Boolean) || passFlags.every((value) => !value)) {
-      consistencyMatched += 1;
-    }
-  });
-
+  const consistencyValues = [...consistencyByQuery.values()];
+  const consistencyEligibleQueryCount = consistencyValues.length;
   const consistencyStatus = consistencyEligibleQueryCount > 0 ? 'READY' : 'PENDING';
   const consistencyScore = consistencyEligibleQueryCount > 0
-    ? (5 * consistencyMatched) / consistencyEligibleQueryCount
+    ? averageNumber(consistencyValues)
     : null;
 
   const total = runItems.length;

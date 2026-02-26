@@ -57,45 +57,29 @@ const quantile = (values: number[], q: number): number | null => {
   return sorted[idx];
 };
 
-const computeConsistencyByQueryKey = (rows: Array<{ queryKey: string; pass: boolean }>) => {
-  const grouped = new Map<string, boolean[]>();
-  rows.forEach((row) => {
-    const prev = grouped.get(row.queryKey) || [];
-    prev.push(row.pass);
-    grouped.set(row.queryKey, prev);
-  });
-
-  const result = new Map<string, number | null>();
-  grouped.forEach((values, queryKey) => {
-    if (values.length < 2) {
-      result.set(queryKey, null);
-      return;
-    }
-    const passCount = values.filter(Boolean).length;
-    const failCount = values.length - passCount;
-    const dominant = Math.max(passCount, failCount);
-    result.set(queryKey, (dominant / values.length) * 5);
-  });
-  return result;
-};
-
-const getLatencyClass = (item: ValidationRunItem) => {
-  const criteria = parseJsonObject(item.appliedCriteria);
-  const meta = criteria.meta;
-  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) {
-    return '';
-  }
-  return String((meta as Record<string, unknown>).latencyClass || '').trim().toUpperCase();
-};
-
 const getMetricScore = (item: ValidationRunItem, key: string) => {
   const metrics = parseJsonObject(item.llmEvaluation?.metricScores);
-  const value = toFiniteNumber(metrics[key] as number | null | undefined);
-  return value;
+  if (key in metrics) {
+    const exact = toFiniteNumber(metrics[key] as number | null | undefined);
+    if (exact !== null) return exact;
+  }
+  const aliasMap: Record<string, string[]> = {
+    intent: ['의도충족'],
+    accuracy: ['정확성'],
+    consistency: [],
+    latencySingle: [],
+    latencyMulti: [],
+    stability: ['안정성'],
+  };
+  for (const alias of aliasMap[key] || []) {
+    const fallback = toFiniteNumber(metrics[alias] as number | null | undefined);
+    if (fallback !== null) return fallback;
+  }
+  return null;
 };
 
 const getStabilityScore = (item: ValidationRunItem) => {
-  const metricValue = getMetricScore(item, '안정성');
+  const metricValue = getMetricScore(item, 'stability');
   if (metricValue !== null) return metricValue;
   return normalizeText(item.error) ? 0 : 5;
 };
@@ -261,8 +245,11 @@ export type ResultsFilters = {
 
 export function buildResultsRows(items: ValidationRunItem[]) {
   const baseRows = items.map((item) => {
-    const intentScore = getMetricScore(item, '의도충족');
-    const accuracyScore = getMetricScore(item, '정확성');
+    const intentScore = getMetricScore(item, 'intent');
+    const accuracyScore = getMetricScore(item, 'accuracy');
+    const consistencyScore = getMetricScore(item, 'consistency');
+    const latencySingleScore = getMetricScore(item, 'latencySingle');
+    const latencyMultiScore = getMetricScore(item, 'latencyMulti');
     const stabilityScore = getStabilityScore(item);
     const speedSec = getResponseTimeSec(item);
     const queryKey = normalizeText(item.queryId) || normalizeText(item.queryText) || item.id;
@@ -275,30 +262,25 @@ export function buildResultsRows(items: ValidationRunItem[]) {
     const abnormal = Boolean(normalizeText(item.error))
       || String(item.llmEvaluation?.status || '').toUpperCase().includes('ERROR')
       || String(item.llmEvaluation?.status || '').toUpperCase().includes('FAILED');
-    const latencyClass = getLatencyClass(item);
-    const normalizedLatencyClass =
-      latencyClass === 'SINGLE' || latencyClass === 'MULTI'
-        ? latencyClass
-        : 'UNCLASSIFIED';
+    const normalizedLatencyClass: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' =
+      latencySingleScore !== null && latencyMultiScore === null
+        ? 'SINGLE'
+        : latencyMultiScore !== null && latencySingleScore === null
+          ? 'MULTI'
+          : 'UNCLASSIFIED';
     return {
       item,
       queryKey,
       intentScore,
       accuracyScore,
+      consistencyScore,
       stabilityScore,
       speedSec,
       totalScore,
-      latencyClass: normalizedLatencyClass as 'SINGLE' | 'MULTI' | 'UNCLASSIFIED',
+      latencyClass: normalizedLatencyClass,
       abnormal,
     };
   });
-
-  const consistencyByQueryKey = computeConsistencyByQueryKey(
-    baseRows.map((row) => ({
-      queryKey: row.queryKey,
-      pass: (row.intentScore ?? 0) >= 3 && (row.accuracyScore ?? 0) >= 3 && (row.stabilityScore ?? 0) >= 5,
-    })),
-  );
 
   return baseRows.map<ResultsRowView>((row) => ({
     key: row.item.id,
@@ -310,8 +292,8 @@ export function buildResultsRows(items: ValidationRunItem[]) {
     intentScoreText: formatScoreText(row.intentScore),
     accuracyScore: row.accuracyScore,
     accuracyScoreText: formatScoreText(row.accuracyScore),
-    consistencyScore: consistencyByQueryKey.get(row.queryKey) ?? null,
-    consistencyScoreText: formatScoreText(consistencyByQueryKey.get(row.queryKey) ?? null),
+    consistencyScore: row.consistencyScore,
+    consistencyScoreText: formatScoreText(row.consistencyScore),
     speedSec: row.speedSec,
     speedText: formatSecText(row.speedSec),
     latencyClass: row.latencyClass,
@@ -377,8 +359,8 @@ export function filterResultsRows(
 export function buildResultsKpi(run: ValidationRun | null, items: ValidationRunItem[]) {
   const advanced = getValidationRunAdvancedScoringSummary(items);
   const aggregate = getValidationRunAggregateSummary(run, items);
-  const intentSampleCount = items.filter((item) => getMetricScore(item, '의도충족') !== null).length;
-  const accuracySampleCount = items.filter((item) => getMetricScore(item, '정확성') !== null).length;
+  const intentSampleCount = items.filter((item) => getMetricScore(item, 'intent') !== null).length;
+  const accuracySampleCount = items.filter((item) => getMetricScore(item, 'accuracy') !== null).length;
   const stabilitySampleCount = items.length;
   const lowScoreCount = buildResultsRows(items).filter(
     (row) => (row.totalScore ?? Number.POSITIVE_INFINITY) <= RESULT_LOW_SCORE_THRESHOLD,

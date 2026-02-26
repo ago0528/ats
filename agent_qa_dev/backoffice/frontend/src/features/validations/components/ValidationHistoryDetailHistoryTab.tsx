@@ -8,11 +8,12 @@ import {
   Space,
   Statistic,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMemo } from 'react';
-import { EyeOutlined } from '@ant-design/icons';
+import { WarningOutlined } from '@ant-design/icons';
 
 import { StandardDataTable } from '../../../components/common/StandardDataTable';
 import {
@@ -66,25 +67,28 @@ export function ValidationHistoryDetailHistoryTab({
   const columns = useMemo<ColumnsType<HistoryRowView>>(
     () => [
       {
-        key: 'errorSummary',
-        title: '오류',
-        dataIndex: 'errorSummary',
-        width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.errorSummary,
-        ellipsis: true,
-        render: (value: string, row) => {
-          if (!row.hasError) {
-            return <Typography.Text type="secondary">정상</Typography.Text>;
-          }
-          return (
-            <Typography.Text type="danger" ellipsis={{ tooltip: value }}>
-              {value}
+        key: 'queryText',
+        title: '질의',
+        width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.queryText,
+        render: (_, row) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Typography.Text
+              style={{ flex: 1, minWidth: 0 }}
+              ellipsis={{ tooltip: row.item.queryText || '-' }}
+            >
+              {row.item.queryText || '-'}
             </Typography.Text>
-          );
-        },
+            {row.hasError ? (
+              <Tooltip title={row.errorSummary}>
+                <WarningOutlined style={{ color: '#faad14' }} />
+              </Tooltip>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: 'responseTimeSec',
-        title: '총 응답시간',
+        title: '응답속도',
         dataIndex: 'responseTimeText',
         width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.responseTimeSec,
         render: (value: string) => value || NOT_AGGREGATED_LABEL,
@@ -103,28 +107,13 @@ export function ValidationHistoryDetailHistoryTab({
           <Tag color={getRunItemStatusColor(row.status)}>{row.statusLabel}</Tag>
         ),
       },
-      {
-        key: 'detail',
-        title: '상세보기',
-        width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.detail,
-        render: (_, row) => (
-          <Button
-            type="text"
-            icon={<EyeOutlined />}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenRow(row);
-            }}
-          />
-        ),
-      },
     ],
-    [onOpenRow],
+    [],
   );
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <Row gutter={[12, 12]} className="validation-kpi-grid">
+      <Row gutter={[12, 12]} className="validation-kpi-grid validation-history-summary-grid">
         <Col xs={24} sm={12} md={8} lg={4}>
           <div className="validation-metric-tile">
             <Statistic title="실행 상태" value={summary.executionStatusText} />

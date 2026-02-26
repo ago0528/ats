@@ -12,11 +12,7 @@ from app.models.validation_run import ValidationRun
 from app.models.validation_run_item import ValidationRunItem
 from app.repositories.validation_runs import ValidationRunRepository
 from app.services.validation_scoring import (
-    ACCURACY_LLM_EXTRACT_FALLBACK_TAG,
-    LEGACY_ACCURACY_FALLBACK_TAG,
     average,
-    build_consistency_summary,
-    extract_latency_class,
     extract_response_time_sec,
     parse_raw_payload,
     quantile,
@@ -171,10 +167,6 @@ def build_test_set_dashboard(
                 "accuracy": {
                     "score": None,
                     "sampleCount": 0,
-                    "legacyFallbackCount": 0,
-                    "accuracyFallbackCount": 0,
-                    "accuracyExtractFallbackCount": 0,
-                    "accuracyFallbackRate": 0.0,
                 },
                 "consistency": {"status": "PENDING", "score": None, "eligibleQueryCount": 0, "consistentQueryCount": 0},
                 "latencySingle": {"avgSec": None, "p50Sec": None, "p90Sec": None, "count": 0},
@@ -208,12 +200,9 @@ def build_test_set_dashboard(
     intent_scores: list[float] = []
     accuracy_scores: list[float] = []
     stability_scores: list[float] = []
+    consistency_by_query: dict[str, float] = {}
     latency_single_secs: list[float] = []
     latency_multi_secs: list[float] = []
-    consistency_records: list[dict[str, Any]] = []
-    legacy_fallback_count = 0
-    accuracy_fallback_count = 0
-    accuracy_extract_fallback_count = 0
     latency_unclassified_count = 0
     empty_response_count = 0
     run_summaries: dict[str, dict[str, Any]] = {
@@ -265,42 +254,45 @@ def build_test_set_dashboard(
             empty_response_count += 1
 
         response_time_sec = extract_response_time_sec(raw_payload, item.latency_ms)
-        if response_time_sec is not None:
-            latency_class = extract_latency_class(item.applied_criteria_json or "")
-            if latency_class == "SINGLE":
-                latency_single_secs.append(response_time_sec)
-            elif latency_class == "MULTI":
-                latency_multi_secs.append(response_time_sec)
-            else:
-                latency_unclassified_count += 1
 
         llm = llm_map.get(item.id)
         intent_score_value = None
         accuracy_score_value = None
         stability_metric_value = None
+        latency_single_score_value = None
+        latency_multi_score_value = None
+        consistency_score_value = None
         if llm:
-            llm_comment_text = str(llm.llm_comment or "")
-            has_legacy_fallback = LEGACY_ACCURACY_FALLBACK_TAG in llm_comment_text
-            has_llm_extract_fallback = ACCURACY_LLM_EXTRACT_FALLBACK_TAG in llm_comment_text
-            if has_legacy_fallback:
-                legacy_fallback_count += 1
-            if has_llm_extract_fallback:
-                accuracy_extract_fallback_count += 1
-            if has_legacy_fallback or has_llm_extract_fallback:
-                accuracy_fallback_count += 1
+            if _is_llm_done(getattr(llm, "status", None)):
+                summary["llmDoneItems"] += 1
+                if isinstance(llm.total_score, (int, float)):
+                    total_score_sum += float(llm.total_score)
+                    total_score_count += 1
+                metrics = _metric_scores(llm.metric_scores_json)
+                intent_score_value = metrics.get("intent")
+                accuracy_score_value = metrics.get("accuracy")
+                consistency_score_value = metrics.get("consistency")
+                latency_single_score_value = metrics.get("latencySingle")
+                latency_multi_score_value = metrics.get("latencyMulti")
+                stability_metric_value = metrics.get("stability")
+                for metric_name, metric_score in metrics.items():
+                    metric_sums[metric_name] += metric_score
+                    metric_counts[metric_name] += 1
 
-        if llm and _is_llm_done(getattr(llm, "status", None)):
-            summary["llmDoneItems"] += 1
-            if isinstance(llm.total_score, (int, float)):
-                total_score_sum += float(llm.total_score)
-                total_score_count += 1
-            metrics = _metric_scores(llm.metric_scores_json)
-            intent_score_value = metrics.get("의도충족")
-            accuracy_score_value = metrics.get("정확성")
-            stability_metric_value = metrics.get("안정성")
-            for metric_name, metric_score in metrics.items():
-                metric_sums[metric_name] += metric_score
-                metric_counts[metric_name] += 1
+        if response_time_sec is not None:
+            has_single = isinstance(latency_single_score_value, (int, float))
+            has_multi = isinstance(latency_multi_score_value, (int, float))
+            if has_single and not has_multi:
+                latency_single_secs.append(response_time_sec)
+            elif has_multi and not has_single:
+                latency_multi_secs.append(response_time_sec)
+            else:
+                latency_unclassified_count += 1
+
+        if isinstance(consistency_score_value, (int, float)):
+            query_key = str(item.query_id or item.query_text_snapshot or item.id)
+            if query_key and query_key not in consistency_by_query:
+                consistency_by_query[query_key] = float(consistency_score_value)
 
         if isinstance(intent_score_value, (int, float)):
             intent_scores.append(float(intent_score_value))
@@ -325,15 +317,6 @@ def build_test_set_dashboard(
         if score_key is not None:
             item_score_buckets[score_key] += 1
 
-        consistency_records.append(
-            {
-                "queryKey": str(item.query_id or item.query_text_snapshot or ""),
-                "intentScore": float(intent_score_value) if isinstance(intent_score_value, (int, float)) else 0.0,
-                "accuracyScore": float(accuracy_score_value) if isinstance(accuracy_score_value, (int, float)) else 0.0,
-                "stabilityScore": stability_for_scoring,
-            }
-        )
-
     metric_avg = {
         metric_name: round(metric_sums[metric_name] / metric_counts[metric_name], 4)
         for metric_name in metric_sums
@@ -341,7 +324,14 @@ def build_test_set_dashboard(
     }
     failure_patterns = [{"category": key, "count": count} for key, count in sorted(failure_counts.items(), key=lambda x: -x[1])]
     llm_total_score_avg = round(total_score_sum / total_score_count, 4) if total_score_count > 0 else None
-    consistency_summary = build_consistency_summary(consistency_records)
+    consistency_values = list(consistency_by_query.values())
+    consistency_avg = average(consistency_values)
+    consistency_summary = {
+        "status": "READY" if consistency_values else "PENDING",
+        "score": round(consistency_avg, 4) if consistency_avg is not None else None,
+        "eligibleQueryCount": len(consistency_values),
+        "consistentQueryCount": len(consistency_values),
+    }
 
     latency_single_avg_sec = average(latency_single_secs)
     latency_single_p50 = quantile(latency_single_secs, 0.5)
@@ -361,14 +351,6 @@ def build_test_set_dashboard(
         "accuracy": {
             "score": round(accuracy_avg, 4) if accuracy_avg is not None else None,
             "sampleCount": len(accuracy_scores),
-            "legacyFallbackCount": int(legacy_fallback_count),
-            "accuracyFallbackCount": int(accuracy_fallback_count),
-            "accuracyExtractFallbackCount": int(accuracy_extract_fallback_count),
-            "accuracyFallbackRate": (
-                round((accuracy_fallback_count / len(accuracy_scores)), 4)
-                if len(accuracy_scores) > 0
-                else 0.0
-            ),
         },
         "consistency": consistency_summary,
         "latencySingle": {

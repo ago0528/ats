@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import json
 from typing import Any, Optional
 
 import pandas as pd
@@ -13,11 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.repositories.validation_queries import ValidationQueryRepository
 from app.repositories.validation_query_groups import ValidationQueryGroupRepository
-from app.services.validation_scoring import (
-    apply_latency_class_to_criteria,
-    build_aqb_v1_criteria,
-    normalize_latency_class,
-)
+from app.services.validation_scoring import normalize_latency_class
 
 router = APIRouter(tags=["validation-queries"])
 
@@ -29,7 +24,6 @@ GROUP_COLUMN_CANDIDATES = ["group_id", "groupId", "group", "group_name", "그룹
 TARGET_ASSISTANT_COLUMN_CANDIDATES = ["target_assistant", "targetAssistant", "대상어시스턴트"]
 CONTEXT_JSON_COLUMN_CANDIDATES = ["context_json", "contextJson", "context", "컨텍스트"]
 EXPECTED_RESULT_COLUMN_CANDIDATES = ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"]
-LLM_EVAL_CRITERIA_COLUMN_CANDIDATES = ["llm_eval_criteria", "llmEvalCriteria", "LLM 평가기준", "LLM 평가기준(JSON)"]
 LOGIC_FIELD_PATH_COLUMN_CANDIDATES = ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"]
 LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES = [
     "logic_expected_value",
@@ -39,25 +33,13 @@ LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES = [
     "logic_expected",
     "expected_value",
 ]
-FORM_TYPE_COLUMN_CANDIDATES = ["formType", "form_type", "폼타입"]
-ACTION_TYPE_COLUMN_CANDIDATES = ["actionType", "action_type", "액션타입"]
-DATA_KEY_COLUMN_CANDIDATES = ["dataKey", "data_key"]
-BUTTON_KEY_COLUMN_CANDIDATES = ["buttonKey", "button_key"]
-BUTTON_URL_CONTAINS_COLUMN_CANDIDATES = ["buttonUrlContains", "button_url_contains"]
-MULTI_SELECT_ALLOW_YN_COLUMN_CANDIDATES = ["multiSelectAllowYn", "multi_select_allow_yn"]
-INTENT_RUBRIC_JSON_COLUMN_CANDIDATES = ["의도 루브릭(JSON)", "intentRubricJson", "intent_rubric_json"]
-ACCURACY_CHECKS_JSON_COLUMN_CANDIDATES = ["정확성 체크(JSON)", "accuracyChecksJson", "accuracy_checks_json"]
 LATENCY_CLASS_COLUMN_CANDIDATES = ["latencyClass", "latency_class", "응답속도유형", "응답속도 유형"]
 
 
-def _parse_json_text(value: str) -> Any:
-    text = (value or "").strip()
-    if not text:
+def _build_internal_eval_meta(latency_class: Optional[str]) -> dict[str, Any]:
+    if not latency_class:
         return {}
-    try:
-        return json.loads(text)
-    except Exception:
-        return text
+    return {"meta": {"latencyClass": latency_class}}
 
 
 def _normalize_category(value: str) -> str:
@@ -116,7 +98,6 @@ def _parse_bulk_upload_rows(
     missing_query_rows: list[int] = []
     unknown_group_rows: list[int] = []
     unknown_group_values: set[str] = set()
-    legacy_fallback_rows: list[int] = []
     invalid_latency_class_rows: list[int] = []
 
     for idx, series in enumerate(df.to_dict(orient="records"), start=1):
@@ -129,7 +110,6 @@ def _parse_bulk_upload_rows(
         expected_result = _extract_cell(series, ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"])
         category = _normalize_category(_extract_cell(series, ["category", "카테고리"], default="Happy path"))
         group_value = _extract_cell(series, ["group_id", "groupId", "group", "group_name", "그룹"]).strip()
-        llm_eval_criteria = _extract_cell(series, ["llm_eval_criteria", "llmEvalCriteria", "LLM 평가기준", "LLM 평가기준(JSON)"])
         logic_field_path = _extract_cell(series, ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"])
         logic_expected_value = _extract_cell(
             series,
@@ -137,35 +117,13 @@ def _parse_bulk_upload_rows(
         )
         target_assistant = _extract_cell(series, ["target_assistant", "targetAssistant", "대상어시스턴트"])
         context_json = _extract_cell(series, ["context_json", "contextJson", "context", "컨텍스트"])
-        form_type = _extract_cell(series, FORM_TYPE_COLUMN_CANDIDATES)
-        action_type = _extract_cell(series, ACTION_TYPE_COLUMN_CANDIDATES)
-        data_key = _extract_cell(series, DATA_KEY_COLUMN_CANDIDATES)
-        button_key = _extract_cell(series, BUTTON_KEY_COLUMN_CANDIDATES)
-        button_url_contains = _extract_cell(series, BUTTON_URL_CONTAINS_COLUMN_CANDIDATES)
-        multi_select_allow_yn = _extract_cell(series, MULTI_SELECT_ALLOW_YN_COLUMN_CANDIDATES)
-        intent_rubric_json = _extract_cell(series, INTENT_RUBRIC_JSON_COLUMN_CANDIDATES)
-        accuracy_checks_json = _extract_cell(series, ACCURACY_CHECKS_JSON_COLUMN_CANDIDATES)
         latency_class_raw = _extract_cell(series, LATENCY_CLASS_COLUMN_CANDIDATES)
         latency_class = normalize_latency_class(latency_class_raw)
         if latency_class_raw and latency_class is None:
             invalid_rows.append(idx)
             invalid_latency_class_rows.append(idx)
             continue
-        aqb_criteria = build_aqb_v1_criteria(
-            llm_eval_criteria,
-            form_type=form_type,
-            action_type=action_type,
-            data_key=data_key,
-            button_key=button_key,
-            button_url_contains=button_url_contains,
-            multi_select_allow_yn=multi_select_allow_yn,
-            intent_rubric_json=intent_rubric_json,
-            accuracy_checks_json=accuracy_checks_json,
-        )
-        aqb_criteria = apply_latency_class_to_criteria(aqb_criteria, latency_class)
-        criteria_source = str((aqb_criteria.get("meta") or {}).get("source") or "legacy").strip()
-        if criteria_source == "legacy":
-            legacy_fallback_rows.append(idx)
+        eval_meta = _build_internal_eval_meta(latency_class)
 
         if group_value and group_value not in group_map_by_id and group_value not in group_id_by_name:
             unknown_group_rows.append(idx)
@@ -177,8 +135,7 @@ def _parse_bulk_upload_rows(
                 "expected_result": expected_result,
                 "category": category,
                 "group_value": group_value,
-                "llm_eval_criteria": aqb_criteria,
-                "criteria_source": criteria_source,
+                "llm_eval_meta": eval_meta,
                 "logic_field_path": logic_field_path,
                 "logic_expected_value": logic_expected_value,
                 "target_assistant": target_assistant,
@@ -192,7 +149,6 @@ def _parse_bulk_upload_rows(
         "missing_query_rows": missing_query_rows,
         "unknown_group_rows": unknown_group_rows,
         "unknown_group_values": sorted(unknown_group_values),
-        "legacy_fallback_rows": legacy_fallback_rows,
         "invalid_latency_class_rows": invalid_latency_class_rows,
     }
 
@@ -219,17 +175,6 @@ def _build_all_rows_invalid_detail(
     return "; ".join(detail_parts)
 
 
-def _normalize_json_text_for_compare(value: str) -> str:
-    text = (value or "").strip()
-    if not text:
-        return ""
-    try:
-        payload = json.loads(text)
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    except Exception:
-        return text
-
-
 def _normalized_header_set(df: pd.DataFrame) -> set[str]:
     return {str(column).replace("\ufeff", "").strip() for column in df.columns}
 
@@ -247,7 +192,6 @@ def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
     has_target_assistant = _has_any_column(headers, TARGET_ASSISTANT_COLUMN_CANDIDATES)
     has_context_json = _has_any_column(headers, CONTEXT_JSON_COLUMN_CANDIDATES)
     has_expected_result = _has_any_column(headers, EXPECTED_RESULT_COLUMN_CANDIDATES)
-    has_llm_eval_criteria = _has_any_column(headers, LLM_EVAL_CRITERIA_COLUMN_CANDIDATES)
     has_logic_field_path = _has_any_column(headers, LOGIC_FIELD_PATH_COLUMN_CANDIDATES)
     has_logic_expected_value = _has_any_column(headers, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES)
 
@@ -279,7 +223,6 @@ def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
                 "targetAssistant": _extract_cell(series, TARGET_ASSISTANT_COLUMN_CANDIDATES) if has_target_assistant else None,
                 "contextJson": _extract_cell(series, CONTEXT_JSON_COLUMN_CANDIDATES) if has_context_json else None,
                 "expectedResult": _extract_cell(series, EXPECTED_RESULT_COLUMN_CANDIDATES) if has_expected_result else None,
-                "llmEvalCriteria": _extract_cell(series, LLM_EVAL_CRITERIA_COLUMN_CANDIDATES) if has_llm_eval_criteria else None,
                 "logicFieldPath": _extract_cell(series, LOGIC_FIELD_PATH_COLUMN_CANDIDATES) if has_logic_field_path else None,
                 "logicExpectedValue": _extract_cell(series, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES) if has_logic_expected_value else None,
                 "hasQueryText": has_query_text,
@@ -288,7 +231,6 @@ def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
                 "hasTargetAssistant": has_target_assistant,
                 "hasContextJson": has_context_json,
                 "hasExpectedResult": has_expected_result,
-                "hasLlmEvalCriteria": has_llm_eval_criteria,
                 "hasLogicFieldPath": has_logic_field_path,
                 "hasLogicExpectedValue": has_logic_expected_value,
                 "missingQueryId": row_no in missing_query_id_rows,
@@ -373,7 +315,6 @@ def _analyze_bulk_update_rows(
             "groupValue": None,
             "updateGroupId": bool(row.get("hasGroup")),
             "expectedResult": None,
-            "llmEvalCriteria": None,
             "logicFieldPath": None,
             "logicExpectedValue": None,
             "targetAssistant": None,
@@ -416,12 +357,6 @@ def _analyze_bulk_update_rows(
             if next_expected_result != str(existing.expected_result or ""):
                 changed_fields.append("expectedResult")
                 plan_payload["expectedResult"] = next_expected_result
-
-        if row.get("hasLlmEvalCriteria"):
-            next_llm_eval_criteria = str(row.get("llmEvalCriteria") or "")
-            if _normalize_json_text_for_compare(next_llm_eval_criteria) != _normalize_json_text_for_compare(str(existing.llm_eval_criteria_json or "")):
-                changed_fields.append("llmEvalCriteria")
-                plan_payload["llmEvalCriteria"] = next_llm_eval_criteria
 
         if row.get("hasLogicFieldPath"):
             next_logic_field_path = str(row.get("logicFieldPath") or "")
@@ -487,7 +422,6 @@ class QueryCreateRequest(BaseModel):
     expectedResult: str = ""
     category: str = "Happy path"
     groupId: Optional[str] = None
-    llmEvalCriteria: Any = None
     logicFieldPath: str = ""
     logicExpectedValue: str = ""
     contextJson: str = ""
@@ -500,7 +434,6 @@ class QueryUpdateRequest(BaseModel):
     expectedResult: Optional[str] = None
     category: Optional[str] = None
     groupId: Optional[str] = None
-    llmEvalCriteria: Any = None
     logicFieldPath: Optional[str] = None
     logicExpectedValue: Optional[str] = None
     contextJson: Optional[str] = None
@@ -548,7 +481,6 @@ def list_queries(
                 "category": row.category,
                 "groupId": _present_group_id(row.group_id),
                 "groupName": group_map[row.group_id].group_name if row.group_id and row.group_id in group_map else "",
-                "llmEvalCriteria": _parse_json_text(row.llm_eval_criteria_json),
                 "logicFieldPath": row.logic_field_path,
                 "logicExpectedValue": row.logic_expected_value,
                 "contextJson": row.context_json,
@@ -577,7 +509,6 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
         expected_result=body.expectedResult,
         category=_normalize_category(body.category),
         group_id=body.groupId,
-        llm_eval_criteria=build_aqb_v1_criteria(body.llmEvalCriteria),
         logic_field_path=body.logicFieldPath,
         logic_expected_value=body.logicExpectedValue,
         context_json=body.contextJson,
@@ -591,7 +522,6 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "llmEvalCriteria": _parse_json_text(row.llm_eval_criteria_json),
         "logicFieldPath": row.logic_field_path,
         "logicExpectedValue": row.logic_expected_value,
         "contextJson": row.context_json,
@@ -605,9 +535,9 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
 @router.get("/queries/template")
 def download_query_template():
     csv_text = (
-        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,LLM 평가기준(JSON),Logic 검증 필드,Logic 기대값,formType,actionType,dataKey,buttonKey,buttonUrlContains,multiSelectAllowYn,의도 루브릭(JSON),정확성 체크(JSON),latencyClass\n"
-        '리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,"채용 플랜이 단계별로 제시됨 @check formType=ACTION @check buttonKey=RECRUIT_PLAN_CREATE_SAVE",,assistantMessage,역량검사,ACTION,,,RECRUIT_PLAN_CREATE_SAVE,,,"{""scale"":""0-5"",""policy"":""intent_only""}",,MULTI\n'
-        "미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,@check formType=SELECT,,,,SELECT,,,,,false,,,SINGLE\n"
+        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,Logic 검증 필드,Logic 기대값,latencyClass\n"
+        "리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,채용 플랜이 단계별로 제시됨,assistantMessage,역량검사,MULTI\n"
+        "미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,독려 메일 작업으로 연결됨,assistantMessage,지원자,SINGLE\n"
     )
     csv_bytes = ("\ufeff" + csv_text).encode("utf-8")
     return StreamingResponse(
@@ -632,7 +562,6 @@ def get_query(query_id: str, db: Session = Depends(get_db)):
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "llmEvalCriteria": _parse_json_text(row.llm_eval_criteria_json),
         "logicFieldPath": row.logic_field_path,
         "logicExpectedValue": row.logic_expected_value,
         "contextJson": row.context_json,
@@ -659,11 +588,6 @@ def update_query(query_id: str, body: QueryUpdateRequest, db: Session = Depends(
         category=_normalize_category(body.category) if body.category is not None else None,
         group_id=(str(payload.get("groupId")) if payload.get("groupId") is not None else None),
         update_group_id=("groupId" in payload),
-        llm_eval_criteria=(
-            build_aqb_v1_criteria(body.llmEvalCriteria)
-            if body.llmEvalCriteria is not None
-            else None
-        ),
         logic_field_path=body.logicFieldPath,
         logic_expected_value=body.logicExpectedValue,
         context_json=body.contextJson,
@@ -678,7 +602,6 @@ def update_query(query_id: str, body: QueryUpdateRequest, db: Session = Depends(
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "llmEvalCriteria": _parse_json_text(row.llm_eval_criteria_json),
         "logicFieldPath": row.logic_field_path,
         "logicExpectedValue": row.logic_expected_value,
         "contextJson": row.context_json,
@@ -740,8 +663,6 @@ async def preview_bulk_upload_queries(
         "missingQueryRows": parsed["missing_query_rows"],
         "groupsToCreate": parsed["unknown_group_values"],
         "groupsToCreateRows": parsed["unknown_group_rows"],
-        "legacyFallbackCount": len(parsed["legacy_fallback_rows"]),
-        "legacyFallbackRows": parsed["legacy_fallback_rows"],
         "invalidLatencyClassRows": parsed["invalid_latency_class_rows"],
     }
 
@@ -806,7 +727,7 @@ async def bulk_upload_queries(
                 "expected_result": row["expected_result"],
                 "category": row["category"],
                 "group_id": resolved_group_id,
-                "llm_eval_criteria": row["llm_eval_criteria"],
+                "llm_eval_meta": row["llm_eval_meta"],
                 "logic_field_path": row["logic_field_path"],
                 "logic_expected_value": row["logic_expected_value"],
                 "target_assistant": row["target_assistant"],
@@ -825,8 +746,6 @@ async def bulk_upload_queries(
         "unmappedGroupRows": [],
         "unmappedGroupValues": [],
         "createdGroupNames": created_group_names,
-        "legacyFallbackCount": len(parsed["legacy_fallback_rows"]),
-        "legacyFallbackRows": parsed["legacy_fallback_rows"],
         "invalidLatencyClassRows": parsed["invalid_latency_class_rows"],
     }
 
@@ -968,11 +887,6 @@ async def bulk_update_queries(
             category=plan.get("category"),
             group_id=resolved_group_id,
             update_group_id=update_group_id,
-            llm_eval_criteria=(
-                build_aqb_v1_criteria(plan.get("llmEvalCriteria"))
-                if plan.get("llmEvalCriteria") is not None
-                else None
-            ),
             logic_field_path=plan.get("logicFieldPath"),
             logic_expected_value=plan.get("logicExpectedValue"),
             context_json=plan.get("contextJson"),

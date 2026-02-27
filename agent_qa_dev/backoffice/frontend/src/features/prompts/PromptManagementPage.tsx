@@ -331,9 +331,40 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     });
   }, []);
 
+  const fallbackCopyText = (text: string) => {
+    if (typeof document === 'undefined') return false;
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return copied;
+  };
+
   const copyTextToClipboard = async (label: string, text: string, successMessage?: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+      if (clipboard?.writeText) {
+        try {
+          await clipboard.writeText(text);
+        } catch (clipboardError) {
+          const copied = fallbackCopyText(text);
+          if (!copied) {
+            throw clipboardError;
+          }
+        }
+      } else {
+        const copied = fallbackCopyText(text);
+        if (!copied) {
+          throw new Error('Clipboard API is unavailable');
+        }
+      }
       message.success(successMessage ?? `${label}을(를) 클립보드에 복사했습니다.`);
     } catch (e) {
       message.error(`${label} 복사에 실패했습니다.`);

@@ -14,7 +14,8 @@ describe('login page', () => {
       />,
     );
 
-    expect(html).toContain('ATS 공식 로그인');
+    expect(html).toContain('Agent QA Backoffice');
+    expect(html).toContain('에이전트 검증 백오피스');
     expect(html).toContain('로그인');
   });
 

@@ -19,8 +19,6 @@ import { getEvaluationStateLabel, getExecutionStateLabel } from '../utils/runSta
 import {
   getAgentModeLabel,
   getRunItemStatus,
-  getRunItemStatusColor,
-  getRunItemStatusLabel,
 } from '../utils/historyDetailDisplay';
 
 function renderEllipsisCell(value?: string, type?: 'danger') {
@@ -58,10 +56,27 @@ const getRunStateTagColor = (state: string) => {
     case '평가중':
       return 'processing';
     case '실행실패':
+    case '평가실패':
       return 'error';
     default:
       return 'default';
   }
+};
+
+const getRunItemExecutionStateLabel = (row: ValidationRunItem) => {
+  const status = getRunItemStatus(row);
+  if (status === 'success') return '실행완료';
+  if (status === 'failed') return '실행실패';
+  return '실행대기';
+};
+
+const getRunItemEvaluationStateLabel = (row: ValidationRunItem) => {
+  const llmStatus = normalizeStatus(row.llmEvaluation?.status);
+  if (llmStatus.startsWith('DONE') || llmStatus.startsWith('SKIPPED')) return '평가완료';
+  if (llmStatus.startsWith('FAILED')) return '평가실패';
+  if (llmStatus === 'RUNNING') return '평가중';
+  if (llmStatus === 'PENDING') return '평가대기';
+  return '평가대기';
 };
 
 const getLogicResultTag = (value?: string) => {
@@ -150,15 +165,15 @@ export function useValidationColumns(options: UseValidationColumnsOptions = {}) 
           getResponseTimeText(row.responseTimeSec, row.latencyMs),
       },
       {
-        key: 'status',
-        title: '상태',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.status,
+        key: 'executionStatus',
+        title: '실행 상태',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.executionStatus,
         render: (_, row: ValidationRunItem) => {
-          const status = getRunItemStatus(row);
+          const stateLabel = getRunItemExecutionStateLabel(row);
           return (
-            <Tag color={getRunItemStatusColor(status)} style={{ marginInlineEnd: 0 }}>
-              {getRunItemStatusLabel(status)}
-            </Tag>
+            <Tooltip title={stateLabel}>
+              {renderStateTag(stateLabel, getRunStateTagColor(stateLabel))}
+            </Tooltip>
           );
         },
       },
@@ -168,6 +183,19 @@ export function useValidationColumns(options: UseValidationColumnsOptions = {}) 
         dataIndex: 'executedAt',
         width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.executedAt,
         render: (value?: string | null) => formatDateTime(value || undefined),
+      },
+      {
+        key: 'evaluationStatus',
+        title: '평가 상태',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.evaluationStatus,
+        render: (_, row: ValidationRunItem) => {
+          const stateLabel = getRunItemEvaluationStateLabel(row);
+          return (
+            <Tooltip title={stateLabel}>
+              {renderStateTag(stateLabel, getRunStateTagColor(stateLabel))}
+            </Tooltip>
+          );
+        },
       },
       {
         key: 'evaluatedAt',

@@ -231,6 +231,10 @@ export type ResultsRowView = {
   accuracyScoreText: string;
   consistencyScore: number | null;
   consistencyScoreText: string;
+  latencySingleScore: number | null;
+  latencySingleScoreText: string;
+  latencyMultiScore: number | null;
+  latencyMultiScoreText: string;
   speedSec: number | null;
   speedText: string;
   latencyClass: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED';
@@ -238,6 +242,8 @@ export type ResultsRowView = {
   scoreBucket: number | null;
   stabilityScore: number | null;
   stabilityScoreText: string;
+  evaluatedAtText: string;
+  evaluatedAtTs: number;
   abnormal: boolean;
 };
 
@@ -286,6 +292,8 @@ export function buildResultsRows(items: ValidationRunItem[]) {
       intentScore,
       accuracyScore,
       consistencyScore,
+      latencySingleScore,
+      latencyMultiScore,
       stabilityScore,
       speedSec,
       totalScore,
@@ -306,6 +314,10 @@ export function buildResultsRows(items: ValidationRunItem[]) {
     accuracyScoreText: formatScoreText(row.accuracyScore),
     consistencyScore: row.consistencyScore,
     consistencyScoreText: formatScoreText(row.consistencyScore),
+    latencySingleScore: row.latencySingleScore,
+    latencySingleScoreText: formatScoreText(row.latencySingleScore),
+    latencyMultiScore: row.latencyMultiScore,
+    latencyMultiScoreText: formatScoreText(row.latencyMultiScore),
     speedSec: row.speedSec,
     speedText: formatSecText(row.speedSec),
     latencyClass: row.latencyClass,
@@ -316,6 +328,10 @@ export function buildResultsRows(items: ValidationRunItem[]) {
         : Math.max(0, Math.min(5, Math.round(row.totalScore))),
     stabilityScore: row.stabilityScore,
     stabilityScoreText: formatScoreText(row.stabilityScore),
+    evaluatedAtText: row.item.llmEvaluation?.evaluatedAt
+      ? formatDateTime(row.item.llmEvaluation.evaluatedAt)
+      : NOT_AGGREGATED_LABEL,
+    evaluatedAtTs: toTimestamp(row.item.llmEvaluation?.evaluatedAt || null),
     abnormal: row.abnormal,
   }));
 }
@@ -379,10 +395,20 @@ export function buildResultsKpi(run: ValidationRun | null, items: ValidationRunI
   const aggregate = getValidationRunAggregateSummary(run, items);
   const intentSampleCount = items.filter((item) => getMetricScore(item, 'intent') !== null).length;
   const accuracySampleCount = items.filter((item) => getMetricScore(item, 'accuracy') !== null).length;
+  const speedSingleScores = items
+    .map((item) => getMetricScore(item, 'latencySingle'))
+    .filter((value): value is number => value !== null);
+  const speedMultiScores = items
+    .map((item) => getMetricScore(item, 'latencyMulti'))
+    .filter((value): value is number => value !== null);
   const stabilitySampleCount = items.length;
   const lowScoreCount = buildResultsRows(items).filter(
     (row) => (row.totalScore ?? Number.POSITIVE_INFINITY) <= RESULT_LOW_SCORE_THRESHOLD,
   ).length;
+  const getAverageScore = (scores: number[]) =>
+    scores.length
+      ? scores.reduce((acc, value) => acc + value, 0) / scores.length
+      : null;
 
   const noDataReason = '현재 Run은 해당 지표 계산 대상이 없어 집계되지 않았습니다.';
   return {
@@ -408,6 +434,7 @@ export function buildResultsKpi(run: ValidationRun | null, items: ValidationRunI
           : '',
     },
     speedSingle: {
+      score: getAverageScore(speedSingleScores),
       avgSec: advanced.latencySingleAvgSec,
       p50Sec: advanced.latencySingleP50Sec,
       p90Sec: advanced.latencySingleP90Sec,
@@ -415,6 +442,7 @@ export function buildResultsKpi(run: ValidationRun | null, items: ValidationRunI
       notAggregatedReason: advanced.latencySingleCount === 0 ? noDataReason : '',
     },
     speedMulti: {
+      score: getAverageScore(speedMultiScores),
       avgSec: advanced.latencyMultiAvgSec,
       p50Sec: advanced.latencyMultiP50Sec,
       p90Sec: advanced.latencyMultiP90Sec,

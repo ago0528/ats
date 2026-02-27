@@ -419,7 +419,7 @@ export function TestSetManagementPage({
             enterButton
           />
           <Button onClick={openCreate}>테스트 세트 생성</Button>
-          <Button onClick={onOpenValidationHistory}>질문 결과로 이동</Button>
+          <Button onClick={onOpenValidationHistory}>검증 결과로 이동</Button>
           <Button
             type="primary"
             disabled={!selectedTestSetId}

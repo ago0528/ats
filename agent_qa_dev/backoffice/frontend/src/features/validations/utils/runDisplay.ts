@@ -188,6 +188,25 @@ const getResponseTimeSec = (row: ValidationRunItem): number | null => {
   return latency === null ? null : latency / 1000;
 };
 
+const normalizeLatencyClass = (
+  value: unknown,
+): 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'SINGLE' || normalized === 'MULTI' || normalized === 'UNCLASSIFIED') {
+    return normalized;
+  }
+  return null;
+};
+
+const inferLatencyClass = (
+  latencySingleScore: number | null,
+  latencyMultiScore: number | null,
+): 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' => {
+  if (latencySingleScore !== null && latencyMultiScore === null) return 'SINGLE';
+  if (latencyMultiScore !== null && latencySingleScore === null) return 'MULTI';
+  return 'UNCLASSIFIED';
+};
+
 const quantile = (values: number[], q: number): number | null => {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -326,10 +345,12 @@ export const getValidationRunAdvancedScoringSummary = (
       return latency === null ? null : latency / 1000;
     })();
     const responseSec = toFiniteNumber(row.responseTimeSec) ?? rawResponseSec ?? latencySec;
+    const latencyClass = normalizeLatencyClass(row.latencyClass)
+      ?? inferLatencyClass(latencySingleScore, latencyMultiScore);
     if (responseSec !== null) {
-      if (latencySingleScore !== null && latencyMultiScore === null) {
+      if (latencyClass === 'SINGLE') {
         latencySingleSecs.push(responseSec);
-      } else if (latencyMultiScore !== null && latencySingleScore === null) {
+      } else if (latencyClass === 'MULTI') {
         latencyMultiSecs.push(responseSec);
       } else {
         latencyUnclassifiedCount += 1;

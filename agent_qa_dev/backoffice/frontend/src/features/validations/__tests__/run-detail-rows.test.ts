@@ -70,9 +70,9 @@ const item = (id: string, partial?: Partial<ValidationRunItem>): ValidationRunIt
 describe('history detail row helpers', () => {
   it('sorts and filters history rows', () => {
     const rows = buildHistoryRows([
-      item('a', { responseTimeSec: 7.1 }),
+      item('a', { responseTimeSec: 11.1 }),
       item('b', { error: 'failure', responseTimeSec: 0.5 }),
-      item('c', { responseTimeSec: 5.2 }),
+      item('c', { responseTimeSec: 10.2 }),
     ]);
 
     const sorted = sortHistoryRows(rows);
@@ -218,6 +218,41 @@ describe('history detail row helpers', () => {
     expect(kpi.accuracy.sampleCount).toBe(3);
     expect(kpi.runMeta.totalRows).toBe(3);
     expect(kpi.scoreBuckets['0'] + kpi.scoreBuckets['1'] + kpi.scoreBuckets['2'] + kpi.scoreBuckets['3'] + kpi.scoreBuckets['4'] + kpi.scoreBuckets['5']).toBe(3);
+  });
+
+  it('reflects explicit latencyClass updates in KPI immediately', () => {
+    const items = [
+      item('a', {
+        responseTimeSec: 1.1,
+        latencyClass: 'SINGLE',
+        llmEvaluation: {
+          status: 'DONE',
+          evalModel: 'gpt-5.2',
+          metricScores: { latencySingle: 4 },
+          totalScore: 4,
+          comment: '',
+        },
+      }),
+      item('b', {
+        responseTimeSec: 2.2,
+        latencyClass: 'MULTI',
+        llmEvaluation: {
+          status: 'DONE',
+          evalModel: 'gpt-5.2',
+          metricScores: { latencyMulti: 3 },
+          totalScore: 3,
+          comment: '',
+        },
+      }),
+      item('c', { responseTimeSec: 3.3, latencyClass: 'UNCLASSIFIED' }),
+    ];
+
+    const kpi = buildResultsKpi(run(), items);
+    expect(kpi.speedSingle.sampleCount).toBe(1);
+    expect(kpi.speedMulti.sampleCount).toBe(1);
+    expect(kpi.latencyUnclassifiedCount).toBe(1);
+    expect(kpi.speedSingle.score).toBeCloseTo(4);
+    expect(kpi.speedMulti.score).toBeCloseTo(3);
   });
 
   it('returns not-aggregated reasons when no items exist', () => {

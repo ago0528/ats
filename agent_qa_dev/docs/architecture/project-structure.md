@@ -1,6 +1,6 @@
 # Project Structure Map
 
-- 기준 시각: 2026-02-18
+- 기준 시각: 2026-02-27
 - 목적: 작업 시작 전에 "어디를 수정해야 하는지" 빠르게 판단하기 위한 구조 지도
 
 ## 1) 루트 구조
@@ -15,14 +15,17 @@ agent_qa_dev/
 │  ├─ architecture/
 │  │  └─ data/
 │  ├─ design-system/
+│  ├─ evaluating/
 │  ├─ feedback/
+│  ├─ note/
 │  ├─ plans/
 │  ├─ skills/
+│  ├─ test-result/
 │  └─ troubleshooting/
+├─ scripts/
 ├─ langfuse/
 ├─ ant-design/
-├─ ant-design-icons/
-└─ aqb_*.py
+└─ ant-design-icons/
 ```
 
 ## 2) 웹 개발 핵심 경로
@@ -30,6 +33,7 @@ agent_qa_dev/
 ### Frontend
 
 - 엔트리 및 앱 공통: `backoffice/frontend/src/app`
+- 앱 내비게이션/경로 해석: `backoffice/frontend/src/app/navigation`
 - 기능 페이지: `backoffice/frontend/src/features`
 - 테스트 세트(실제 CRUD 페이지): `backoffice/frontend/src/features/test-sets`
 - 공통 컴포넌트: `backoffice/frontend/src/components/common`
@@ -41,6 +45,7 @@ agent_qa_dev/
 - API 라우터: `backoffice/backend/app/api`
 - 테스트 세트 라우터: `backoffice/backend/app/api/routes/validation_test_sets.py`
 - 에이전트 잡 라우터: `backoffice/backend/app/api/routes/validation_agents.py`
+- GNB 진행 알림 라우터: `backoffice/backend/app/api/routes/validation_run_activity.py`
 - 내부 공용 라이브러리(AQB 이식): `backoffice/backend/app/lib`
 - 서비스 계층: `backoffice/backend/app/services`
 - 에이전트 작업 서비스: `backoffice/backend/app/services/agent_tasks`

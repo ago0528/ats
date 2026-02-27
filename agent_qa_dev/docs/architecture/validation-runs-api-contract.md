@@ -52,7 +52,7 @@
       "evalStatus": "DONE",
       "baseRunId": null,
       "testSetId": "uuid",
-      "agentId": "ORCHESTRATOR_WORKER_V3",
+      "agentId": "ORCHESTRATOR_ASSISTANT",
       "testModel": "gpt-4o",
       "evalModel": "gpt-4o-mini",
       "repeatInConversation": 1,
@@ -127,8 +127,8 @@
 
 #### 식별/수정 컬럼 후보
 
-- Item ID: `Item ID`, `itemId`, `runItemId`, `run_item_id`
-- 기대결과: `기대결과`, `기대 결과`, `expectedResult`, `expected_result`
+- Item ID: `Item ID`, `itemId`, `runItemId`, `run_item_id`, `item_id`
+- 기대결과: `기대결과`, `기대 결과`, `expectedResult`, `expected_result`, `expected`
 
 #### Response
 
@@ -257,4 +257,4 @@
 
 오류:
 - `actorKey` 누락/공백: `400`
-- `markAll=false` 이고 `runIds`가 비어 있음: `400`
+- `markAll=false` 이고 `runIds`가 비어 있거나 해당 환경(`environment`)에서 유효한 run ID가 없음: `400`

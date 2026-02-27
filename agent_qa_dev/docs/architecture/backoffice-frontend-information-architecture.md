@@ -3,7 +3,7 @@
 - 문서 목적: AQB Backoffice의 화면 구조, 도메인 객체, 핵심 운영 흐름을 PM/운영 관점에서 빠르게 파악
 - 대상 독자: PM, PO, 운영 리드, QA 리드
 - 기준 코드: `backoffice/frontend/src`
-- 최신 갱신일: 2026-02-25
+- 최신 갱신일: 2026-02-27
 
 ## 1. 제품 구조 한눈에 보기
 
@@ -12,15 +12,16 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 1. 에이전트 검증 운영
 2. 검증 데이터 관리
 3. 프롬프트 운영
-4. 검증 기본 설정 관리
+4. 환경설정 관리
 5. 레거시 Generic 검증 운영
-6. 공통 운영 컨트롤(환경/토큰)
+6. 공통 운영 컨트롤(환경/인증/진행 알림)
 
 상단 GNB 공통 컨트롤:
 
 1. 환경 전환 (`dev`, `st2`, `st`, `pr`)
-2. 공식 로그인 세션 상태/수동 갱신 (`/login` + 자동 갱신 루프)
-3. 레거시 cURL 파싱 fallback (기본 비활성, `VITE_ENABLE_LEGACY_CURL_LOGIN=true`일 때만 노출)
+2. 진행 중 Run 알림 Popover (실행/평가 중 run + unread 배지)
+3. 공식 로그인 세션 상태/수동 갱신 (`/login` + 자동 갱신 루프)
+4. 레거시 cURL 파싱 fallback (기본 비활성, `VITE_ENABLE_LEGACY_CURL_LOGIN=true`일 때만 노출)
 
 ## 2. 내비게이션 IA
 
@@ -34,9 +35,9 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 - `질의 관리` (`/validation-data/queries`)
 - `질의 그룹` (`/validation-data/query-groups`)
 - `테스트 세트` (`/validation-data/test-sets`)
-- `Validation Settings` (`/validation-settings`)
-- `Prompt` (`/prompt`)
-- `Generic Legacy` (`/generic-legacy`)
+- `환경설정` (`/validation-settings`)
+- `프롬프트 관리` (`/prompt`)
+- `레거시 검증` (`/generic-legacy`)
 - `Login` (`/login`, 인증 필요 경로 진입 전)
 
 레거시 URL 호환:
@@ -55,9 +56,9 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD(질의 묶기) |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |
-| Validation Settings | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값 관리 |
-| Prompt | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
-| Generic Legacy | `/generic-legacy` | `GenericRunPage` | 레거시 검증 플로우 운영 |
+| 환경설정 | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값/페이지네이션 기본 제한값 관리 |
+| 프롬프트 관리 | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
+| 레거시 검증 | `/generic-legacy` | `GenericRunPage` | 레거시 검증 플로우 운영 |
 
 ### 2.3 공통 페이지 헤더 포맷
 

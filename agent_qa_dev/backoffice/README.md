@@ -3,31 +3,39 @@
 ## 사내망 공유 빠른 실행
 
 1. 백엔드 실행
+
 ```bash
 cd /Users/ago0528/Desktop/files/01_work/01_planning/01_vibecoding/ats/agent_qa_dev/backoffice/backend
 source .venv/bin/activate
 export BACKOFFICE_VERSION=${BACKOFFICE_VERSION:-0.1.0}
 export BACKOFFICE_DB_PATH=${BACKOFFICE_DB_PATH:-$(pwd)/backoffice.db}
+# 필요 시 현재 프론트 origin 명시(예: http://10.11.3.52:5173)
+# export BACKOFFICE_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://10.11.3.52:5173
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 2. 프론트 API 주소를 사설 IP로 설정
+
 ```bash
 cd /Users/ago0528/Desktop/files/01_work/01_planning/01_vibecoding/ats/agent_qa_dev/backoffice/frontend
-cp -n .env.example .env
+cp -n .env
 ```
+
 `VITE_API_BASE_URL`을 아래처럼 수정:
+
 ```bash
 VITE_API_BASE_URL=http://<서버PC사설IP>:8000/api/v1
 ```
 
 3. 프론트 실행
+
 ```bash
 cd /Users/ago0528/Desktop/files/01_work/01_planning/01_vibecoding/ats/agent_qa_dev/backoffice
 pnpm dev --host 0.0.0.0 --port 5173
 ```
 
 4. 같은 사내망 사용자의 접속 주소
+
 - Frontend: `http://<서버PC사설IP>:5173`
 - Backend API: `http://<서버PC사설IP>:8000`
 - Swagger: `http://<서버PC사설IP>:8000/docs`
@@ -39,6 +47,7 @@ pnpm dev --host 0.0.0.0 --port 5173
 - 프론트 화면은 `5173`으로 열고, 데이터 요청은 `8000`으로 보냅니다.
 
 ## Frontend Dev Server
+
 ```bash
 cd /Users/ago0528/Desktop/files/01_work/01_planning/01_vibecoding/ats/agent_qa_dev/backoffice
 pnpm dev --host 0.0.0.0 --port 5173
@@ -57,6 +66,7 @@ pnpm --dir frontend dev --host 0.0.0.0 --port 5173
 로컬 PC에서만 접근하려면 `--host 127.0.0.1`로 실행하세요.
 
 ## Backend
+
 ```bash
 cd backoffice/backend
 source .venv/bin/activate
@@ -75,7 +85,32 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 로컬 PC에서만 접근하려면 `--host 127.0.0.1`로 실행하세요.
 
+### 로컬 개발 백도어키 로그인 (선택)
+
+로컬 UI 점검 시 ATS 계정 로그인 없이 접근하려면 백엔드에 아래 환경변수를 추가합니다.
+
+```bash
+export BACKOFFICE_ENABLE_LOCAL_DEV_BACKDOOR_LOGIN=true
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_KEY=<원하는_백도어키>
+```
+
+선택 값(미설정 시 기본 placeholder 사용):
+
+```bash
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_USER_ID=local-dev-bypass
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_BEARER=<bearer>
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_CMS=<cms>
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_MRS=<mrs>
+export BACKOFFICE_LOCAL_DEV_BACKDOOR_ACC_AUTH_TOKEN=<accAuthToken>
+```
+
+주의:
+
+- `/api/v1/auth/local-dev-bypass`는 `localhost/127.0.0.1/::1` 요청에서만 허용됩니다.
+- 배포/공유 환경에서는 반드시 `BACKOFFICE_ENABLE_LOCAL_DEV_BACKDOOR_LOGIN=false`로 유지하세요.
+
 ## Backend Test (safe mode)
+
 ```bash
 cd backoffice/backend
 source .venv/bin/activate
@@ -85,6 +120,7 @@ python -m pytest -q
 ```
 
 ## Backend Test (offline / internal mirror)
+
 ```bash
 cd backoffice/backend
 

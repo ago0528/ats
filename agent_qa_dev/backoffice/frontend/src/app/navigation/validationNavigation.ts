@@ -84,7 +84,9 @@ export function resolveHistoryDetailTab(search: string) {
 
 export function isKnownPath(pathname: string) {
   return (
-    pathname === '/validation/run'
+    pathname === '/login'
+    || pathname === '/'
+    || pathname === '/validation/run'
     || pathname === '/validation/history'
     || pathname.startsWith('/validation/history/')
     || pathname === '/validation/dashboard'

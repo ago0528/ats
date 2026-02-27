@@ -138,7 +138,7 @@ export function ValidationSettingsPage({
       <Form
         form={form}
         layout="vertical"
-        className="settings-form-stack"
+        className="settings-form-stack standard-form-stack"
         onValuesChange={handleValuesChange}
       >
         <Form.Item label="적용 환경" className="settings-field-block">

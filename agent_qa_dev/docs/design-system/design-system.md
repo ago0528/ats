@@ -330,8 +330,12 @@ KPI cards should include:
 - 수정은 별도 입력 단계 없이 바로 편집 가능한 상태에서 저장.
 
 ### 11.5 토큰 운영 규칙
-- ATS 토큰(`Bearer`, `cms-access-token`, `mrs-session`)은 오직 상단 `cURL 토큰 파싱` 모달에서만 입력/조회.
-- 각 메뉴에서 토큰 입력 폼을 노출하지 않으며, 메뉴 내부에는 상태 안내만 표시.
+- ATS 토큰(`Bearer`, `cms-access-token`, `mrs-session`)은 공식 로그인(`/login`) 후 자동 발급/자동 갱신을 기본으로 사용.
+- 헤더에서는 사용자에게 `세션 상태`, `수동 새로고침`, `로그아웃`만 노출한다.
+- 레거시 cURL 파싱은 fallback 전용이며 기본 비활성:
+  - 프론트: `VITE_ENABLE_LEGACY_CURL_LOGIN=true`
+  - 백엔드: `BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN=true`
+  - 두 플래그가 모두 켜져야 사용 가능
 - OpenAI Key는 `에이전트 검증`에서만 2단계 평가 입력으로 허용.
 
 ### 11.6 상태/오류 규칙
@@ -341,7 +345,8 @@ KPI cards should include:
 
 ### 11.7 UI/UX 품질 체크리스트 (v0.2)
 - [ ] 용어 정합: 메뉴/버튼/상태 문구가 `에이전트 검증`, `프롬프트 관리`, `검증 실행 생성`으로 통일.
-- [ ] 토큰 UX: ATS 토큰 입력은 cURL 모달 1곳으로만 제한.
+- [ ] 토큰 UX: ATS 토큰은 공식 로그인 + 자동 갱신 루프를 기본으로 사용.
+- [ ] fallback UX: cURL fallback은 feature flag 2종이 켜졌을 때만 노출.
 - [ ] 플로우 가시성: 생성-1단계-2단계 Steps가 항상 보임.
 - [ ] 데이터 탐색성: 검색/필터/확장 상세가 가능.
 - [ ] 에러 안전성: 토큰 미입력/대상 미생성/실행 실패 시 즉시 안내.
@@ -351,7 +356,7 @@ KPI cards should include:
 
 ### 화면별 매핑
 - Generic
-  - `AppLayout` 상단 헤더: 환경/버전/cURL 파서
+  - `AppLayout` 상단 헤더: 환경/버전/공식 로그인 세션 상태(필요 시 cURL fallback)
   - `GenericRunPage` 상단: 실행 상태 카드, 2단계 Step 바, 실행 옵션, 템플릿/실행 버튼
   - `RunTable`: 테이블 + 행 확장 상세 + 오류 하이라이트 + 컬럼 정렬
 - Prompt

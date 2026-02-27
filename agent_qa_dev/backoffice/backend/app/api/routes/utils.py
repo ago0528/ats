@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import httpx
 
@@ -40,6 +41,17 @@ class CurlStatusCheck(BaseModel):
 class CurlStatusResponse(BaseModel):
     checks: list[CurlStatusCheck]
     allValid: bool
+
+
+def _legacy_curl_login_enabled() -> bool:
+    raw_value = str(os.getenv("BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN", "false")).strip().lower()
+    return raw_value in {"1", "true", "yes", "on"}
+
+
+def _assert_legacy_curl_login_enabled() -> None:
+    if _legacy_curl_login_enabled():
+        return
+    raise HTTPException(status_code=404, detail="Legacy cURL login API is disabled.")
 
 
 def _summarize_token(value: str) -> str:
@@ -122,11 +134,13 @@ def _build_status(field: str, label: str, present: bool, valid: bool, message: s
 
 @router.post("/utils/parse-curl")
 def parse_curl(req: ParseCurlRequest):
+    _assert_legacy_curl_login_enabled()
     return parse_curl_headers(req.curlText)
 
 
 @router.post("/utils/curl-status", response_model=CurlStatusResponse)
 def check_curl_status(req: CurlStatusRequest) -> CurlStatusResponse:
+    _assert_legacy_curl_login_enabled()
     bearer_present, bearer_valid, bearer_message = _check_bearer(req.bearer)
     cms_present, cms_valid, cms_message = _check_token(req.cms)
     mrs_present, mrs_valid, mrs_message = _check_token(req.mrs)

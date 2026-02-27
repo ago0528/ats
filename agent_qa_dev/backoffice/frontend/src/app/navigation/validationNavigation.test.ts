@@ -40,6 +40,8 @@ describe('validation navigation helpers', () => {
   });
 
   it('checks known paths', () => {
+    expect(isKnownPath('/login')).toBe(true);
+    expect(isKnownPath('/')).toBe(true);
     expect(isKnownPath('/validation-data/queries')).toBe(true);
     expect(isKnownPath('/validation-data/query-groups')).toBe(true);
     expect(isKnownPath('/validation-data/test-sets')).toBe(true);

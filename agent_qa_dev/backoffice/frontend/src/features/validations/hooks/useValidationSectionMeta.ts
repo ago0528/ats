@@ -15,7 +15,7 @@ export function useValidationSectionMeta({
   currentRun: ValidationRun | null;
 }) {
   const sectionTitle = useMemo(() => {
-    if (section === 'history') return '질문 결과';
+    if (section === 'history') return '검증 결과';
     if (section === 'history-detail') {
       if (historyDetailTab === 'results') {
         return '평가 결과';

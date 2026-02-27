@@ -1,18 +1,16 @@
-import { Button, Dropdown, Space, Tag, Typography } from 'antd';
+import { Button, Dropdown, Space, Tooltip, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { EllipsisOutlined } from '@ant-design/icons';
+import { EllipsisOutlined, ExportOutlined, LinkOutlined } from '@ant-design/icons';
 
 import { buildValidationRunExportUrl } from '../../../api/validation';
 import type { ValidationRun } from '../../../api/types/validation';
-import {
-  getRunStatusColor,
-  getRunStatusLabel,
-} from '../utils/historyDetailDisplay';
 import { getRunDisplayName } from '../utils/runDisplay';
 
 export function ValidationHistoryDetailHeaderBar({
   currentRun,
+  summaryItems,
   onOpenInRunWorkspace,
+  onCopyShareLink,
   onOpenUpdateRun,
   onOpenExpectedBulkUpdate,
   onDeleteRun,
@@ -22,7 +20,9 @@ export function ValidationHistoryDetailHeaderBar({
   hasItems,
 }: {
   currentRun: ValidationRun | null;
+  summaryItems: Array<{ key: string; label: string; value: string; valueTooltip?: string }>;
   onOpenInRunWorkspace?: (payload: { runId: string; testSetId?: string | null }) => void;
+  onCopyShareLink?: () => void;
   onOpenUpdateRun?: () => void;
   onOpenExpectedBulkUpdate?: () => void;
   onDeleteRun?: () => void;
@@ -34,8 +34,6 @@ export function ValidationHistoryDetailHeaderBar({
   const isDisabled = !currentRun;
   const isDownloadDisabled = !currentRun || !hasItems;
   const runName = currentRun ? getRunDisplayName(currentRun) : '-';
-  const runStatusLabel = getRunStatusLabel(currentRun?.status);
-  const runStatusColor = getRunStatusColor(currentRun?.status);
 
   const menuItems: MenuProps['items'] = [
     {
@@ -101,26 +99,51 @@ export function ValidationHistoryDetailHeaderBar({
           <Typography.Title level={5} style={{ margin: 0 }}>
             {runName}
           </Typography.Title>
-          <Tag color={runStatusColor}>{runStatusLabel}</Tag>
         </div>
         <Space>
-          <Button
-            type="primary"
-            disabled={isDisabled}
-            onClick={() => {
-              if (!currentRun) return;
-              onOpenInRunWorkspace?.({
-                runId: currentRun.id,
-                testSetId: currentRun.testSetId ?? undefined,
-              });
-            }}
-          >
-            검증 실행에서 이 Run 열기
-          </Button>
+          <Tooltip title="검증 실행 화면으로 이동합니다.">
+            <Button
+              type="primary"
+              icon={<ExportOutlined />}
+              disabled={isDisabled}
+              onClick={() => {
+                if (!currentRun) return;
+                onOpenInRunWorkspace?.({
+                  runId: currentRun.id,
+                  testSetId: currentRun.testSetId ?? undefined,
+                });
+              }}
+            >
+              검증하기
+            </Button>
+          </Tooltip>
+          <Tooltip title="현재 탭/필터/페이지 상태 링크를 복사합니다.">
+            <Button
+              icon={<LinkOutlined />}
+              disabled={isDisabled}
+              onClick={() => onCopyShareLink?.()}
+            >
+              링크 복사
+            </Button>
+          </Tooltip>
           <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
             <Button icon={<EllipsisOutlined />} />
           </Dropdown>
         </Space>
+      </div>
+      <div className="validation-history-detail-summary-line">
+        {summaryItems.map((item) => (
+          <Tooltip key={item.key} title={item.valueTooltip || item.value}>
+            <div className="validation-history-detail-summary-item">
+              <Typography.Text type="secondary" className="validation-history-detail-summary-label">
+                {item.label}
+              </Typography.Text>
+              <Typography.Text className="validation-history-detail-summary-value">
+                {item.value}
+              </Typography.Text>
+            </div>
+          </Tooltip>
+        ))}
       </div>
     </div>
   );

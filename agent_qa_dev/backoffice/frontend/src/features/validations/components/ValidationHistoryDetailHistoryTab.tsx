@@ -34,6 +34,23 @@ import {
 } from '../utils/historyDetailDisplay';
 import type { ValidationRun } from '../../../api/types/validation';
 
+const compareText = (left?: string | null, right?: string | null) =>
+  String(left || '').localeCompare(String(right || ''), 'ko');
+
+const compareNullableNumber = (left?: number | null, right?: number | null) => {
+  if (left === null || left === undefined)
+    return right === null || right === undefined ? 0 : 1;
+  if (right === null || right === undefined) return -1;
+  return left - right;
+};
+
+const HISTORY_STATUS_ORDER: Record<HistoryRowView['status'], number> = {
+  success: 0,
+  failed: 1,
+  stopped: 2,
+  pending: 3,
+};
+
 export function ValidationHistoryDetailHistoryTab({
   currentRun,
   rows,
@@ -67,9 +84,19 @@ export function ValidationHistoryDetailHistoryTab({
   const columns = useMemo<ColumnsType<HistoryRowView>>(
     () => [
       {
+        key: 'ordinal',
+        title: '#',
+        width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.ordinal,
+        render: (_, row) => row.item.ordinal,
+        sorter: (left, right) => left.item.ordinal - right.item.ordinal,
+        defaultSortOrder: 'ascend',
+      },
+      {
         key: 'queryText',
         title: '질의',
         width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.queryText,
+        sorter: (left, right) =>
+          compareText(left.item.queryText, right.item.queryText),
         render: (_, row) => (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Typography.Text
@@ -91,6 +118,8 @@ export function ValidationHistoryDetailHistoryTab({
         title: '응답속도',
         dataIndex: 'responseTimeText',
         width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.responseTimeSec,
+        sorter: (left, right) =>
+          compareNullableNumber(left.responseTimeSec, right.responseTimeSec),
         render: (value: string) => value || NOT_AGGREGATED_LABEL,
       },
       {
@@ -98,11 +127,15 @@ export function ValidationHistoryDetailHistoryTab({
         title: '실행시각',
         dataIndex: 'executedAtText',
         width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.executedAt,
+        sorter: (left, right) => left.executedAtTs - right.executedAtTs,
       },
       {
         key: 'status',
         title: '상태',
         width: HISTORY_TAB_INITIAL_COLUMN_WIDTHS.status,
+        sorter: (left, right) =>
+          HISTORY_STATUS_ORDER[left.status] -
+          HISTORY_STATUS_ORDER[right.status],
         render: (_, row) => (
           <Tag color={getRunItemStatusColor(row.status)}>{row.statusLabel}</Tag>
         ),
@@ -113,7 +146,10 @@ export function ValidationHistoryDetailHistoryTab({
 
   return (
     <Space direction="vertical" size={12} style={{ width: '100%' }}>
-      <Row gutter={[12, 12]} className="validation-kpi-grid validation-history-summary-grid">
+      <Row
+        gutter={[12, 12]}
+        className="validation-kpi-grid validation-history-summary-grid"
+      >
         <Col xs={24} sm={12} md={8} lg={4}>
           <div className="validation-metric-tile">
             <Statistic title="실행 상태" value={summary.executionStatusText} />
@@ -149,7 +185,7 @@ export function ValidationHistoryDetailHistoryTab({
       <div className="validation-section-block">
         <div className="validation-section-header">
           <Typography.Title level={5} style={{ margin: 0 }}>
-            테스트 이력
+            결과 테이블
           </Typography.Title>
           <Space wrap>
             <Select
@@ -178,7 +214,7 @@ export function ValidationHistoryDetailHistoryTab({
                 })
               }
             >
-              오류 이력 확인
+              오류 이력
             </Button>
             <Button
               type={filters.onlySlow ? 'primary' : 'default'}
@@ -189,7 +225,7 @@ export function ValidationHistoryDetailHistoryTab({
                 })
               }
             >
-              느림({HISTORY_SLOW_THRESHOLD_SEC.toFixed(0)}s+)
+              응답 {HISTORY_SLOW_THRESHOLD_SEC.toFixed(0)}초 이상
             </Button>
             <DatePicker.RangePicker
               value={filters.dateRange as any}

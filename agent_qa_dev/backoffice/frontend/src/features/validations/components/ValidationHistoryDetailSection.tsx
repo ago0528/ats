@@ -16,7 +16,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadFile } from 'antd/es/upload/interface';
 import { DownloadOutlined } from '@ant-design/icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import { buildValidationRunExpectedResultsTemplateUrl } from '../../../api/validation';
 import type {
@@ -55,7 +56,16 @@ import {
   type ResultsRowView,
 } from '../utils/historyDetailRows';
 import { formatDateTime, toTimestamp } from '../../../shared/utils/dateTime';
-import { getAgentModeLabel, getLastUpdatedAt, getModelLabel, NOT_AGGREGATED_LABEL } from '../utils/historyDetailDisplay';
+import {
+  getAgentModeLabel,
+  getLastUpdatedAt,
+  getModelLabel,
+  NOT_AGGREGATED_LABEL,
+} from '../utils/historyDetailDisplay';
+import {
+  getEvaluationStateLabel,
+  getExecutionStateLabel,
+} from '../utils/runStatus';
 
 const formatRelativeUpdatedTime = (updatedAt?: string | null) => {
   const ts = toTimestamp(updatedAt || null);
@@ -69,7 +79,6 @@ const formatRelativeUpdatedTime = (updatedAt?: string | null) => {
   if (diffSec < 31536000) return `${Math.floor(diffSec / 2592000)}개월 전`;
   return `${Math.floor(diffSec / 31536000)}년 전`;
 };
-
 
 const EXPECTED_BULK_STATUS_LABEL: Record<string, string> = {
   'planned-update': '업데이트 예정',
@@ -112,6 +121,124 @@ const INITIAL_RESULTS_FILTERS: ResultsFilters = {
   focusMetric: null,
 };
 
+const HISTORY_FILTER_PARAM_KEYS = [
+  'h_status',
+  'h_err',
+  'h_slow',
+  'h_from',
+  'h_to',
+  'h_page',
+  'h_size',
+] as const;
+
+const RESULTS_FILTER_PARAM_KEYS = [
+  'r_preset',
+  'r_low',
+  'r_abnormal',
+  'r_slow',
+  'r_unclassified',
+  'r_focus',
+  'r_page',
+  'r_size',
+] as const;
+
+const HISTORY_STATUS_VALUES: HistoryTableFilters['status'][] = [
+  'all',
+  'success',
+  'failed',
+  'stopped',
+  'pending',
+];
+
+const RESULTS_PRESET_VALUES: ResultsFilters['tablePreset'][] = [
+  'default',
+  'low',
+  'abnormal',
+  'slow',
+];
+
+const RESULTS_FOCUS_VALUES: NonNullable<ResultsFilters['focusMetric']>[] = [
+  'intent',
+  'accuracy',
+  'consistency',
+  'speed',
+  'stability',
+];
+
+const getDateParam = (value: Date | null) => {
+  if (!value) return '';
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateParam = (value: string | null) => {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const parsed = new Date(`${text}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+};
+
+const parsePositiveInt = (value: string | null, fallback: number) => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  return parsed;
+};
+
+const parseBooleanFlag = (value: string | null) => String(value || '') === '1';
+
+const isOneOf = <T extends string>(
+  value: string,
+  candidates: readonly T[],
+): value is T => candidates.includes(value as T);
+
+const hasHistoryDetailViewParams = (search: string) => {
+  const params = new URLSearchParams(search);
+  return [...HISTORY_FILTER_PARAM_KEYS, ...RESULTS_FILTER_PARAM_KEYS].some(
+    (key) => params.has(key),
+  );
+};
+
+const parseHistoryDetailViewState = (search: string) => {
+  const params = new URLSearchParams(search);
+  const status = String(params.get('h_status') || '').trim();
+  const preset = String(params.get('r_preset') || '').trim();
+  const focusMetric = String(params.get('r_focus') || '').trim();
+
+  return {
+    historyFilters: {
+      onlyErrors: parseBooleanFlag(params.get('h_err')),
+      onlySlow: parseBooleanFlag(params.get('h_slow')),
+      status: isOneOf(status, HISTORY_STATUS_VALUES)
+        ? status
+        : INITIAL_HISTORY_FILTERS.status,
+      dateRange: [
+        parseDateParam(params.get('h_from')),
+        parseDateParam(params.get('h_to')),
+      ] as [Date | null, Date | null],
+    } satisfies HistoryTableFilters,
+    resultsFilters: {
+      tablePreset: isOneOf(preset, RESULTS_PRESET_VALUES)
+        ? preset
+        : INITIAL_RESULTS_FILTERS.tablePreset,
+      onlyLowScore: parseBooleanFlag(params.get('r_low')),
+      onlyAbnormal: parseBooleanFlag(params.get('r_abnormal')),
+      onlySlow: parseBooleanFlag(params.get('r_slow')),
+      onlyLatencyUnclassified: parseBooleanFlag(params.get('r_unclassified')),
+      scoreBucketFilter: null,
+      focusMetric: isOneOf(focusMetric, RESULTS_FOCUS_VALUES)
+        ? focusMetric
+        : null,
+    } satisfies ResultsFilters,
+    historyPage: parsePositiveInt(params.get('h_page'), 1),
+    historyPageSize: parsePositiveInt(params.get('h_size'), 50),
+    resultsPage: parsePositiveInt(params.get('r_page'), 1),
+    resultsPageSize: parsePositiveInt(params.get('r_size'), 50),
+  };
+};
+
 export function ValidationHistoryDetailSection({
   historyRunId,
   historyDetailTab,
@@ -140,9 +267,15 @@ export function ValidationHistoryDetailSection({
   runItemsPageSize: number;
   setRunItemsCurrentPage: (value: number) => void;
   setRunItemsPageSize: (value: number) => void;
-  onOpenInRunWorkspace?: (payload: { runId: string; testSetId?: string | null }) => void;
+  onOpenInRunWorkspace?: (payload: {
+    runId: string;
+    testSetId?: string | null;
+  }) => void;
   onChangeHistoryDetailTab?: (tab: HistoryDetailTab) => void;
-  onUpdateRun?: (runId: string, payload: ValidationRunUpdateRequest) => Promise<void>;
+  onUpdateRun?: (
+    runId: string,
+    payload: ValidationRunUpdateRequest,
+  ) => Promise<void>;
   onDeleteRun?: (runId: string) => Promise<void>;
   onUpdateRunItemSnapshot?: (
     runId: string,
@@ -167,12 +300,20 @@ export function ValidationHistoryDetailSection({
   const [expectedBulkModalOpen, setExpectedBulkModalOpen] = useState(false);
   const [expectedBulkUploading, setExpectedBulkUploading] = useState(false);
   const [expectedBulkFiles, setExpectedBulkFiles] = useState<UploadFile[]>([]);
-  const [expectedBulkPreviewRows, setExpectedBulkPreviewRows] = useState<ExpectedBulkPreviewRow[]>([]);
-  const [expectedBulkSummary, setExpectedBulkSummary] = useState<ValidationRunExpectedBulkPreviewResult | null>(null);
-  const [expectedBulkPreviewEmptyText, setExpectedBulkPreviewEmptyText] = useState('파일을 업로드하면 미리보기가 표시됩니다.');
+  const [expectedBulkPreviewRows, setExpectedBulkPreviewRows] = useState<
+    ExpectedBulkPreviewRow[]
+  >([]);
+  const [expectedBulkSummary, setExpectedBulkSummary] =
+    useState<ValidationRunExpectedBulkPreviewResult | null>(null);
+  const [expectedBulkPreviewEmptyText, setExpectedBulkPreviewEmptyText] =
+    useState('파일을 업로드하면 미리보기가 표시됩니다.');
   const [updateContextSnapshot, setUpdateContextSnapshot] = useState('');
-  const [historyFilters, setHistoryFilters] = useState<HistoryTableFilters>(INITIAL_HISTORY_FILTERS);
-  const [resultsFilters, setResultsFilters] = useState<ResultsFilters>(INITIAL_RESULTS_FILTERS);
+  const [historyFilters, setHistoryFilters] = useState<HistoryTableFilters>(
+    INITIAL_HISTORY_FILTERS,
+  );
+  const [resultsFilters, setResultsFilters] = useState<ResultsFilters>(
+    INITIAL_RESULTS_FILTERS,
+  );
   const [resultsCurrentPage, setResultsCurrentPage] = useState(1);
   const [resultsPageSize, setResultsPageSize] = useState(50);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -190,6 +331,14 @@ export function ValidationHistoryDetailSection({
     contextJson?: string;
   }>();
   const { modal, message } = App.useApp();
+  const location = useLocation();
+  const hydratedRunIdRef = useRef('');
+  const hydratedSearchRef = useRef('');
+  const isHydratingViewStateRef = useRef(false);
+  const parsedViewState = useMemo(
+    () => parseHistoryDetailViewState(location.search),
+    [location.search],
+  );
 
   const testSetName = useMemo(
     () =>
@@ -201,32 +350,64 @@ export function ValidationHistoryDetailSection({
   const historyRows = useMemo(() => buildHistoryRows(runItems), [runItems]);
   const resultsRows = useMemo(() => buildResultsRows(runItems), [runItems]);
   const historySelectedRow = useMemo(
-    () => historyRows.find((row) => row.item.id === historySelectedRowId) || null,
+    () =>
+      historyRows.find((row) => row.item.id === historySelectedRowId) || null,
     [historyRows, historySelectedRowId],
   );
   const resultsSelectedRow = useMemo(
-    () => resultsRows.find((row) => row.item.id === resultsSelectedRowId) || null,
+    () =>
+      resultsRows.find((row) => row.item.id === resultsSelectedRowId) || null,
     [resultsRows, resultsSelectedRowId],
   );
   const canEditCurrentRun = canUpdateRun(currentRun);
   const canDeleteCurrentRun = canDeleteRun(currentRun);
-  const canOpenExpectedBulkUpdate = Boolean(onPreviewExpectedResultsBulkUpdate && onApplyExpectedResultsBulkUpdate);
+  const canOpenExpectedBulkUpdate = Boolean(
+    onPreviewExpectedResultsBulkUpdate && onApplyExpectedResultsBulkUpdate,
+  );
 
   useEffect(() => {
-    setHistoryFilters(INITIAL_HISTORY_FILTERS);
-    setResultsFilters(INITIAL_RESULTS_FILTERS);
-    setResultsCurrentPage(1);
+    if (!currentRun?.id) return;
+
+    const shouldHydrateForRunChange =
+      hydratedRunIdRef.current !== currentRun.id;
+    const shouldHydrateForSearch =
+      hasHistoryDetailViewParams(location.search) &&
+      hydratedSearchRef.current !== location.search;
+
+    if (!shouldHydrateForRunChange && !shouldHydrateForSearch) return;
+
+    hydratedRunIdRef.current = currentRun.id;
+    hydratedSearchRef.current = location.search;
+    isHydratingViewStateRef.current = true;
+
+    setHistoryFilters(parsedViewState.historyFilters);
+    setResultsFilters(parsedViewState.resultsFilters);
+    setRunItemsCurrentPage(parsedViewState.historyPage);
+    setRunItemsPageSize(parsedViewState.historyPageSize);
+    setResultsCurrentPage(parsedViewState.resultsPage);
+    setResultsPageSize(parsedViewState.resultsPageSize);
     setDrawerOpen(false);
     setHistorySelectedRowId('');
     setResultsSelectedRowId('');
     setLatencyClassSavingItemId('');
-  }, [currentRun?.id]);
+    window.setTimeout(() => {
+      isHydratingViewStateRef.current = false;
+    }, 0);
+  }, [
+    currentRun?.id,
+    location.search,
+    parsedViewState,
+    setRunItemsCurrentPage,
+    setRunItemsPageSize,
+  ]);
 
   useEffect(() => {
+    if (isHydratingViewStateRef.current) return;
     setRunItemsCurrentPage(1);
   }, [historyFilters, setRunItemsCurrentPage]);
 
   useEffect(() => {
+    if (isHydratingViewStateRef.current) return;
     setResultsCurrentPage(1);
   }, [resultsFilters]);
 
@@ -237,7 +418,10 @@ export function ValidationHistoryDetailSection({
     form.resetFields();
     form.setFieldsValue({
       name: currentRun.name || '',
-      agentId: normalizeAgentModeValue(currentRun.agentId, DEFAULT_AGENT_MODE_VALUE),
+      agentId: normalizeAgentModeValue(
+        currentRun.agentId,
+        DEFAULT_AGENT_MODE_VALUE,
+      ),
       evalModel: currentRun.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: currentRun.repeatInConversation,
       conversationRoomCount: currentRun.conversationRoomCount,
@@ -290,7 +474,8 @@ export function ValidationHistoryDetailSection({
     if (!currentRun || !onDeleteRun) return;
     modal.confirm({
       title: 'Run 삭제',
-      content: '실행 기록이 없는 PENDING 상태의 Run만 삭제할 수 있습니다. 삭제하시겠습니까?',
+      content:
+        '실행 기록이 없는 PENDING 상태의 Run만 삭제할 수 있습니다. 삭제하시겠습니까?',
       okText: '삭제',
       cancelText: '취소',
       okType: 'danger',
@@ -333,15 +518,22 @@ export function ValidationHistoryDetailSection({
     if (!origin || !currentRun || !onPreviewExpectedResultsBulkUpdate) {
       setExpectedBulkPreviewRows([]);
       setExpectedBulkSummary(null);
-      setExpectedBulkPreviewEmptyText('파일을 업로드하면 미리보기가 표시됩니다.');
+      setExpectedBulkPreviewEmptyText(
+        '파일을 업로드하면 미리보기가 표시됩니다.',
+      );
       return;
     }
 
     try {
       setExpectedBulkUploading(true);
-      const preview = await onPreviewExpectedResultsBulkUpdate(currentRun.id, origin);
+      const preview = await onPreviewExpectedResultsBulkUpdate(
+        currentRun.id,
+        origin,
+      );
       setExpectedBulkSummary(preview);
-      setExpectedBulkPreviewRows(toExpectedBulkPreviewRows(preview.previewRows || []));
+      setExpectedBulkPreviewRows(
+        toExpectedBulkPreviewRows(preview.previewRows || []),
+      );
       setExpectedBulkPreviewEmptyText('미리보기 데이터가 없습니다.');
     } catch (error) {
       console.error(error);
@@ -371,10 +563,18 @@ export function ValidationHistoryDetailSection({
     }
   };
 
-  const expectedBulkPreviewColumns = useMemo<ColumnsType<ExpectedBulkPreviewRow>>(
+  const expectedBulkPreviewColumns = useMemo<
+    ColumnsType<ExpectedBulkPreviewRow>
+  >(
     () => [
       { key: 'rowNo', title: '행', dataIndex: 'rowNo', width: 80 },
-      { key: 'itemId', title: 'Item ID', dataIndex: 'itemId', width: 220, ellipsis: true },
+      {
+        key: 'itemId',
+        title: 'Item ID',
+        dataIndex: 'itemId',
+        width: 220,
+        ellipsis: true,
+      },
       {
         key: 'status',
         title: '상태',
@@ -392,7 +592,8 @@ export function ValidationHistoryDetailSection({
         dataIndex: 'changedFields',
         width: 240,
         ellipsis: true,
-        render: (value: string[]) => (value.length > 0 ? value.join(', ') : '-'),
+        render: (value: string[]) =>
+          value.length > 0 ? value.join(', ') : '-',
       },
     ],
     [],
@@ -430,6 +631,84 @@ export function ValidationHistoryDetailSection({
     }
   };
 
+  const handleCopyShareLink = useCallback(async () => {
+    if (!currentRun) return;
+
+    const params = new URLSearchParams();
+    params.set('tab', historyDetailTab);
+
+    if (historyFilters.status !== INITIAL_HISTORY_FILTERS.status) {
+      params.set('h_status', historyFilters.status);
+    }
+    if (historyFilters.onlyErrors) params.set('h_err', '1');
+    if (historyFilters.onlySlow) params.set('h_slow', '1');
+    if (historyFilters.dateRange[0])
+      params.set('h_from', getDateParam(historyFilters.dateRange[0]));
+    if (historyFilters.dateRange[1])
+      params.set('h_to', getDateParam(historyFilters.dateRange[1]));
+    if (runItemsCurrentPage > 1)
+      params.set('h_page', String(runItemsCurrentPage));
+    if (runItemsPageSize !== 50) params.set('h_size', String(runItemsPageSize));
+
+    if (resultsFilters.tablePreset !== INITIAL_RESULTS_FILTERS.tablePreset) {
+      params.set('r_preset', resultsFilters.tablePreset);
+    }
+    if (resultsFilters.onlyLowScore) params.set('r_low', '1');
+    if (resultsFilters.onlyAbnormal) params.set('r_abnormal', '1');
+    if (resultsFilters.onlySlow) params.set('r_slow', '1');
+    if (resultsFilters.onlyLatencyUnclassified)
+      params.set('r_unclassified', '1');
+    if (resultsFilters.focusMetric)
+      params.set('r_focus', resultsFilters.focusMetric);
+    if (resultsCurrentPage > 1)
+      params.set('r_page', String(resultsCurrentPage));
+    if (resultsPageSize !== 50) params.set('r_size', String(resultsPageSize));
+
+    const queryString = params.toString();
+    const sharePath = `/validation/history/${encodeURIComponent(currentRun.id)}${queryString ? `?${queryString}` : ''}`;
+    const shareUrl = `${window.location.origin}${sharePath}`;
+
+    const fallbackCopy = () => {
+      const textarea = document.createElement('textarea');
+      textarea.value = shareUrl;
+      textarea.setAttribute('readonly', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    };
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        fallbackCopy();
+      }
+      message.success('공유 링크를 복사했습니다.');
+    } catch (error) {
+      console.error(error);
+      try {
+        fallbackCopy();
+        message.success('공유 링크를 복사했습니다.');
+      } catch (fallbackError) {
+        console.error(fallbackError);
+        message.error('링크 복사에 실패했습니다.');
+      }
+    }
+  }, [
+    currentRun,
+    historyDetailTab,
+    historyFilters,
+    runItemsCurrentPage,
+    runItemsPageSize,
+    resultsFilters,
+    resultsCurrentPage,
+    resultsPageSize,
+    message,
+  ]);
+
   if (!historyRunId) {
     return <Empty description="선택된 Run ID가 없습니다." />;
   }
@@ -441,14 +720,30 @@ export function ValidationHistoryDetailSection({
   }
 
   const lastUpdatedAt = getLastUpdatedAt(currentRun);
-  const lastUpdatedAbsolute = lastUpdatedAt ? formatDateTime(lastUpdatedAt) : NOT_AGGREGATED_LABEL;
+  const lastUpdatedAbsolute = lastUpdatedAt
+    ? formatDateTime(lastUpdatedAt)
+    : NOT_AGGREGATED_LABEL;
   const lastUpdatedRelative = formatRelativeUpdatedTime(lastUpdatedAt);
+  const executionStateLabel = getExecutionStateLabel(currentRun);
+  const evaluationStateLabel = getEvaluationStateLabel(currentRun, runItems);
+  const summaryItems = [
+    { key: 'executionState', label: '실행 상태', value: executionStateLabel },
+    { key: 'evaluationState', label: '평가 상태', value: evaluationStateLabel },
+    {
+      key: 'updatedAt',
+      label: '마지막 업데이트',
+      value: lastUpdatedRelative,
+      valueTooltip: lastUpdatedAbsolute,
+    },
+  ];
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
       <ValidationHistoryDetailHeaderBar
         currentRun={currentRun}
+        summaryItems={summaryItems}
         onOpenInRunWorkspace={onOpenInRunWorkspace}
+        onCopyShareLink={handleCopyShareLink}
         onOpenUpdateRun={openUpdateRunModal}
         onOpenExpectedBulkUpdate={openExpectedBulkModal}
         onDeleteRun={handleDeleteCurrentRun}
@@ -460,10 +755,18 @@ export function ValidationHistoryDetailSection({
 
       <ValidationHistoryDetailContextMeta
         items={[
+          { key: 'runId', label: 'Run ID', value: currentRun.id },
           { key: 'testSet', label: '테스트 세트', value: testSetName },
-          { key: 'agent', label: '에이전트', value: getAgentModeLabel(currentRun.agentId) },
-          { key: 'evalModel', label: '평가 모델', value: getModelLabel(currentRun.evalModel) },
-          { key: 'updatedAt', label: '마지막 업데이트', value: lastUpdatedRelative, valueTooltip: lastUpdatedAbsolute },
+          {
+            key: 'agent',
+            label: '에이전트',
+            value: getAgentModeLabel(currentRun.agentId),
+          },
+          {
+            key: 'evalModel',
+            label: '평가 모델',
+            value: getModelLabel(currentRun.evalModel),
+          },
         ]}
       />
 
@@ -512,8 +815,8 @@ export function ValidationHistoryDetailSection({
         historyRow={historySelectedRow}
         resultsRow={resultsSelectedRow}
         resultsLatencyClassSaving={
-          Boolean(resultsSelectedRow)
-          && latencyClassSavingItemId === resultsSelectedRow?.item.id
+          Boolean(resultsSelectedRow) &&
+          latencyClassSavingItemId === resultsSelectedRow?.item.id
         }
         onChangeResultsLatencyClass={
           historyDetailTab === 'results' && onUpdateRunItemSnapshot
@@ -537,8 +840,16 @@ export function ValidationHistoryDetailSection({
         destroyOnHidden
       >
         <Space direction="vertical" style={{ width: '100%' }} size={8}>
-          <Form form={form} layout="vertical" className="standard-modal-field-stack">
-            <Form.Item label="Run 이름" name="name" rules={[{ required: false }]}>
+          <Form
+            form={form}
+            layout="vertical"
+            className="standard-modal-field-stack"
+          >
+            <Form.Item
+              label="Run 이름"
+              name="name"
+              rules={[{ required: false }]}
+            >
               <Input placeholder="빈 값일 경우 기본 이름이 자동으로 생성돼요." />
             </Form.Item>
             <Form.Item
@@ -587,7 +898,11 @@ export function ValidationHistoryDetailSection({
                 <InputNumber min={1000} />
               </Form.Item>
             </Space>
-            <Form.Item label="Context" name="contextJson" extra="API 호출 context에 전달할 JSON">
+            <Form.Item
+              label="Context"
+              name="contextJson"
+              extra="API 호출 context에 전달할 JSON"
+            >
               <Input.TextArea rows={5} placeholder={CONTEXT_SAMPLE} />
             </Form.Item>
           </Form>
@@ -617,7 +932,9 @@ export function ValidationHistoryDetailSection({
             <div style={{ marginTop: 8 }}>
               <Button
                 icon={<DownloadOutlined />}
-                href={buildValidationRunExpectedResultsTemplateUrl(currentRun.id)}
+                href={buildValidationRunExpectedResultsTemplateUrl(
+                  currentRun.id,
+                )}
               >
                 CSV 다운로드
               </Button>
@@ -625,7 +942,14 @@ export function ValidationHistoryDetailSection({
           </div>
           <div>
             <Typography.Text>파일 업로드 (CSV/XLSX)</Typography.Text>
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
               <Upload
                 beforeUpload={() => false}
                 fileList={expectedBulkFiles}
@@ -639,7 +963,9 @@ export function ValidationHistoryDetailSection({
                 <Button>파일 선택</Button>
               </Upload>
               {expectedBulkFiles[0]?.name ? (
-                <Typography.Text type="secondary">{expectedBulkFiles[0].name}</Typography.Text>
+                <Typography.Text type="secondary">
+                  {expectedBulkFiles[0].name}
+                </Typography.Text>
               ) : null}
             </div>
           </div>
@@ -659,13 +985,18 @@ export function ValidationHistoryDetailSection({
           {expectedBulkSummary ? (
             <Space direction="vertical" size={4}>
               <Typography.Text type="secondary">
-                총 {expectedBulkSummary.totalRows}건 중 업데이트 예정 {expectedBulkSummary.plannedUpdateCount}건, 변경 없음 {expectedBulkSummary.unchangedCount}건
+                총 {expectedBulkSummary.totalRows}건 중 업데이트 예정{' '}
+                {expectedBulkSummary.plannedUpdateCount}건, 변경 없음{' '}
+                {expectedBulkSummary.unchangedCount}건
               </Typography.Text>
               <Typography.Text type="secondary">
-                누락 ID {expectedBulkSummary.missingItemIdRows.length}건 / 중복 ID {expectedBulkSummary.duplicateItemIdRows.length}건 / 미매핑 {expectedBulkSummary.unmappedItemRows.length}건
+                누락 ID {expectedBulkSummary.missingItemIdRows.length}건 / 중복
+                ID {expectedBulkSummary.duplicateItemIdRows.length}건 / 미매핑{' '}
+                {expectedBulkSummary.unmappedItemRows.length}건
               </Typography.Text>
               <Typography.Text type="secondary">
-                적용 후 빈 기대결과 예상 {expectedBulkSummary.remainingMissingExpectedCountAfterApply}건
+                적용 후 빈 기대결과 예상{' '}
+                {expectedBulkSummary.remainingMissingExpectedCountAfterApply}건
               </Typography.Text>
             </Space>
           ) : null}

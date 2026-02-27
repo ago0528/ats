@@ -224,8 +224,16 @@ body {
   margin-bottom: 8px;
   border: 1px solid #eef1f6;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.validation-run-activity-list .ant-list-item:last-child {
+  margin-bottom: 0;
+}
+
+.validation-run-activity-list .ant-list-items {
+  padding-bottom: 2px;
 }
 
 .validation-run-activity-list .ant-list-item.is-unread {
@@ -636,7 +644,41 @@ body {
   top: var(--gnb-height);
   z-index: 20;
   background: #ffffff;
-  padding: 0;
+  padding: 4px 0;
+}
+
+.validation-history-detail-summary-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-top: 8px;
+}
+
+.validation-history-detail-summary-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--ant-colorBorderSecondary, #f0f0f0);
+  background: var(--ant-colorFillQuaternary, #fafafa);
+}
+
+.validation-history-detail-summary-label {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.validation-history-detail-summary-value {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.2;
 }
 
 .validation-history-detail-context-meta {

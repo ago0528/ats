@@ -123,17 +123,18 @@ export function getRunItemStatus(item: ValidationRunItem): DisplayRunItemStatus 
   const errorText = String(item.error || '').trim();
   if (errorText) return 'failed';
 
+  const hasExecutedAt = Boolean(item.executedAt);
+  const hasResponse = Boolean(String(item.rawResponse || '').trim());
+  if (hasExecutedAt || hasResponse) {
+    return 'success';
+  }
+
   const llmStatus = String(item.llmEvaluation?.status || '').trim().toUpperCase();
   const logicStatus = String(item.logicEvaluation?.result || '').trim().toUpperCase();
   if (llmStatus.startsWith('SKIPPED') || logicStatus.startsWith('SKIPPED')) {
     return 'stopped';
   }
 
-  const hasExecutedAt = Boolean(item.executedAt);
-  const hasResponse = Boolean(String(item.rawResponse || '').trim());
-  if (hasExecutedAt || hasResponse) {
-    return 'success';
-  }
   return 'pending';
 }
 

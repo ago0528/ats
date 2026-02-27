@@ -54,6 +54,20 @@ describe('history detail display labels', () => {
     expect(
       getRunItemStatus(
         baseItem({
+          rawResponse: 'ok',
+          executedAt: '2026-02-20T00:00:00Z',
+          llmEvaluation: {
+            status: 'SKIPPED_NO_CRITERIA',
+            evalModel: '',
+            metricScores: {},
+            comment: '',
+          },
+        }),
+      ),
+    ).toBe('success');
+    expect(
+      getRunItemStatus(
+        baseItem({
           llmEvaluation: {
             status: 'SKIPPED_NO_CRITERIA',
             evalModel: '',

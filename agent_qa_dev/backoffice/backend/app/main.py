@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import ipaddress
+import socket
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.api.routes.auth import router as auth_router
 from app.api.routes.generic_runs import router as generic_runs_router
 from app.api.routes.prompts import router as prompts_router
 from app.api.routes.queries import router as queries_router
@@ -91,10 +94,54 @@ from app.core.db import Base, _ENGINE, get_db_path
 app = FastAPI(title="AQB Backoffice API", version="0.1.0")
 APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.1.0")
 
+
+def _resolve_allowed_origins() -> list[str]:
+    defaults = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+
+    discovered_private_origins: set[str] = set()
+    discovered_hosts: set[str] = set()
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as outbound_socket:
+            outbound_socket.connect(("8.8.8.8", 80))
+            discovered_hosts.add(outbound_socket.getsockname()[0])
+    except OSError:
+        pass
+
+    try:
+        host_name = socket.gethostname()
+        for entry in socket.getaddrinfo(host_name, None, family=socket.AF_INET):
+            discovered_hosts.add(str(entry[4][0]))
+    except OSError:
+        pass
+
+    for host in discovered_hosts:
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            continue
+        if not (ip.is_private or ip.is_loopback):
+            continue
+        discovered_private_origins.add(f"http://{ip}:5173")
+        discovered_private_origins.add(f"http://{ip}:4173")
+
+    raw_value = str(os.getenv("BACKOFFICE_ALLOWED_ORIGINS", "")).strip()
+    if not raw_value:
+        return sorted(set(defaults) | discovered_private_origins)
+    values = [item.strip() for item in raw_value.split(",") if item.strip()]
+    filtered = [value for value in values if value != "*"]
+    return filtered or sorted(set(defaults) | discovered_private_origins)
+
+_ALLOWED_ORIGINS = _resolve_allowed_origins()
+logger.info("Resolved CORS allowed origins: %s", ", ".join(_ALLOWED_ORIGINS))
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -168,6 +215,7 @@ def version():
 
 
 app.include_router(utils_router, prefix="/api/v1")
+app.include_router(auth_router, prefix="/api/v1")
 app.include_router(generic_runs_router, prefix="/api/v1")
 app.include_router(prompts_router, prefix="/api/v1")
 app.include_router(query_groups_router, prefix="/api/v1")

@@ -19,7 +19,8 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 상단 GNB 공통 컨트롤:
 
 1. 환경 전환 (`dev`, `st2`, `st`, `pr`)
-2. 인증 토큰 입력/상태 점검(cURL 파싱 기반)
+2. 공식 로그인 세션 상태/수동 갱신 (`/login` + 자동 갱신 루프)
+3. 레거시 cURL 파싱 fallback (기본 비활성, `VITE_ENABLE_LEGACY_CURL_LOGIN=true`일 때만 노출)
 
 ## 2. 내비게이션 IA
 
@@ -36,6 +37,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 - `Validation Settings` (`/validation-settings`)
 - `Prompt` (`/prompt`)
 - `Generic Legacy` (`/generic-legacy`)
+- `Login` (`/login`, 인증 필요 경로 진입 전)
 
 레거시 URL 호환:
 

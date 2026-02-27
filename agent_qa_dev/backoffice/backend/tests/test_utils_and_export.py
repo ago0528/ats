@@ -5,7 +5,8 @@ from app.core.enums import Environment
 from app.main import app
 
 
-def test_parse_curl_api():
+def test_parse_curl_api(monkeypatch):
+    monkeypatch.setenv("BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN", "true")
     client = TestClient(app)
     payload = {'curlText': "curl -H 'authorization: Bearer x' -H 'cms-access-token: y' -H 'mrs-session: z'"}
     resp = client.post('/api/v1/utils/parse-curl', json=payload)
@@ -13,7 +14,15 @@ def test_parse_curl_api():
     assert resp.json()['authorization'] == 'Bearer x'
 
 
-def test_curl_status_api():
+def test_parse_curl_api_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN", raising=False)
+    client = TestClient(app)
+    resp = client.post('/api/v1/utils/parse-curl', json={'curlText': "curl -H 'authorization: Bearer x'"})
+    assert resp.status_code == 404
+
+
+def test_curl_status_api(monkeypatch):
+    monkeypatch.setenv("BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN", "true")
     client = TestClient(app)
     payload = {'bearer': 'Bearer abc', 'cms': 'cms-token', 'mrs': 'mrs-session'}
     mock_response = MagicMock()
@@ -29,7 +38,8 @@ def test_curl_status_api():
     assert body['checks'][2]['valid'] is True
 
 
-def test_curl_status_api_uses_selected_environment():
+def test_curl_status_api_uses_selected_environment(monkeypatch):
+    monkeypatch.setenv("BACKOFFICE_ENABLE_LEGACY_CURL_LOGIN", "true")
     client = TestClient(app)
     payload = {'environment': Environment.ST.value, 'bearer': 'Bearer abc', 'cms': 'cms-token', 'mrs': 'mrs-session'}
     mock_response = MagicMock()

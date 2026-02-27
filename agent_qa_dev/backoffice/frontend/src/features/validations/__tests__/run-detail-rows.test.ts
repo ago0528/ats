@@ -177,6 +177,36 @@ describe('history detail row helpers', () => {
     expect(bucketRows.map((row) => row.item.id)).toEqual(['b']);
   });
 
+  it('keeps deterministic order when score and speed are tied', () => {
+    const rows = buildResultsRows([
+      item('a', {
+        ordinal: 2,
+        responseTimeSec: 1.5,
+        llmEvaluation: {
+          status: 'DONE',
+          evalModel: 'gpt-5.2',
+          metricScores: { intent: 3, accuracy: 3, stability: 5 },
+          totalScore: 3,
+          comment: '',
+        },
+      }),
+      item('b', {
+        ordinal: 1,
+        responseTimeSec: 1.5,
+        llmEvaluation: {
+          status: 'DONE',
+          evalModel: 'gpt-5.2',
+          metricScores: { intent: 3, accuracy: 3, stability: 5 },
+          totalScore: 3,
+          comment: '',
+        },
+      }),
+    ]);
+
+    const sorted = sortResultsRows(rows);
+    expect(sorted.map((row) => row.item.id)).toEqual(['b', 'a']);
+  });
+
   it('builds KPI summary from run and items', () => {
     const items = [
       item('a'),

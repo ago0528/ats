@@ -14,7 +14,6 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
-  compareValidationRun,
   createRunFromValidationTestSet,
   deleteValidationRun,
   evaluateValidationRun,
@@ -25,6 +24,7 @@ import {
   listValidationRuns,
   listValidationTestSets,
   previewValidationRunExpectedResultsBulkUpdate,
+  updateValidationRunItemSnapshot,
   updateValidationRun,
   updateValidationRunExpectedResultsBulk,
 } from '../../api/validation';
@@ -71,7 +71,7 @@ export function AgentValidationManagementPage({
     testSetId?: string | null;
   }) => void;
 }) {
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const [testSets, setTestSets] = useState<ValidationTestSet[]>([]);
@@ -80,7 +80,6 @@ export function AgentValidationManagementPage({
   const [currentRun, setCurrentRun] = useState<ValidationRun | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string>('');
   const [selectedTestSetId, setSelectedTestSetId] = useState<string>('');
-  const [baseRunId, setBaseRunId] = useState<string>('');
   const [runItemsCurrentPage, setRunItemsCurrentPage] = useState(1);
   const [runItemsPageSize, setRunItemsPageSize] = useState<number>(50);
   const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
@@ -98,10 +97,7 @@ export function AgentValidationManagementPage({
     'createdAt_desc' | 'createdAt_asc'
   >('createdAt_desc');
   const [loading, setLoading] = useState(false);
-  const [compareResult, setCompareResult] = useState<Record<
-    string,
-    unknown
-  > | null>(null);
+  const [forceRunRefreshUntil, setForceRunRefreshUntil] = useState(0);
   const [dashboardTestSetId, setDashboardTestSetId] = useState<string>('');
   const [dashboardData, setDashboardData] = useState<Record<
     string,
@@ -154,20 +150,45 @@ export function AgentValidationManagementPage({
     evaluationStatus?: string;
   }) => {
     try {
-      const runData = await listValidationRuns({
+      const shouldLoadAll = Boolean(options?.forceAll);
+      const chunkSize = 300;
+      const params = {
         environment,
-        testSetId: options?.forceAll
+        testSetId: shouldLoadAll
           ? undefined
           : (options?.testSetId ?? selectedTestSetId) || undefined,
         status: options?.status || undefined,
         evaluationStatus: options?.evaluationStatus || undefined,
-        limit: 300,
-      });
-      setRuns(runData.items);
-      return runData.items;
+      };
+
+      if (!shouldLoadAll) {
+        const runData = await listValidationRuns({
+          ...params,
+          limit: chunkSize,
+        });
+        setRuns(runData.items);
+        return runData.items;
+      }
+
+      const loadedItems: ValidationRun[] = [];
+      let offset = 0;
+      while (true) {
+        const runData = await listValidationRuns({
+          ...params,
+          offset,
+          limit: chunkSize,
+        });
+        loadedItems.push(...runData.items);
+        if (loadedItems.length >= runData.total || runData.items.length === 0) {
+          break;
+        }
+        offset += chunkSize;
+      }
+      setRuns(loadedItems);
+      return loadedItems;
     } catch (error) {
       console.error(error);
-      message.error('검증 이력 조회에 실패했습니다.');
+      message.error('질문 결과 조회에 실패했습니다.');
       return [];
     }
   };
@@ -211,15 +232,8 @@ export function AgentValidationManagementPage({
       return;
     }
     if (section !== 'run') return;
-    if (!selectedTestSetId) {
-      setRuns([]);
-      setCurrentRun(null);
-      setSelectedRunId('');
-      setRunItems([]);
-      return;
-    }
     void (async () => {
-      const loadedRuns = await loadRuns({ testSetId: selectedTestSetId });
+      const loadedRuns = await loadRuns({ forceAll: true });
       const runIdFromUrl = runQueryParams.runId;
       if (runIdFromUrl) {
         await loadRunDetail(runIdFromUrl);
@@ -238,7 +252,6 @@ export function AgentValidationManagementPage({
     })();
   }, [
     section,
-    selectedTestSetId,
     environment,
     historyRunId,
     runQueryParams.runId,
@@ -258,28 +271,12 @@ export function AgentValidationManagementPage({
 
   useEffect(() => {
     if (section !== 'run') return;
-    if (!selectedRunId) {
-      setCompareResult(null);
-      return;
-    }
+    if (!selectedRunId) return;
     if (!runs.some((run) => run.id === selectedRunId)) {
-      setCompareResult(null);
       return;
     }
-    setCompareResult(null);
     void loadRunDetail(selectedRunId);
   }, [selectedRunId]);
-
-  useEffect(() => {
-    if (section !== 'run') return;
-    if (!baseRunId) return;
-    if (
-      baseRunId === selectedRunId ||
-      !runs.some((run) => run.id === baseRunId)
-    ) {
-      setBaseRunId('');
-    }
-  }, [baseRunId, runs, selectedRunId, section]);
 
   useEffect(() => {
     if (section !== 'run') return;
@@ -287,19 +284,36 @@ export function AgentValidationManagementPage({
     const isExecutionRunning = currentRun.status === 'RUNNING';
     const isEvaluationRunning =
       String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
-    if (!isExecutionRunning && !isEvaluationRunning) return;
+    const isInForcedRefreshWindow = forceRunRefreshUntil > Date.now();
+    if (!isExecutionRunning && !isEvaluationRunning && !isInForcedRefreshWindow) return;
+    const refreshIntervalMs = isExecutionRunning || isEvaluationRunning ? 2000 : 2500;
     const timer = window.setInterval(() => {
       void loadRunDetail(currentRun.id);
-      void loadRuns({ testSetId: selectedTestSetId });
-    }, 2000);
-    return () => window.clearInterval(timer);
+      void loadRuns({ forceAll: true });
+    }, refreshIntervalMs);
+    const timeout = isInForcedRefreshWindow
+      ? window.setTimeout(
+          () => setForceRunRefreshUntil(0),
+          Math.max(0, forceRunRefreshUntil - Date.now()),
+        )
+      : null;
+    return () => {
+      window.clearInterval(timer);
+      if (timeout) {
+        window.clearTimeout(timeout);
+      }
+    };
   }, [
     section,
     currentRun?.id,
     currentRun?.status,
     currentRun?.evalStatus,
-    selectedTestSetId,
+    forceRunRefreshUntil,
   ]);
+
+  const triggerForceRunRefresh = () => {
+    setForceRunRefreshUntil(Date.now() + 30_000);
+  };
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(runItems.length / runItemsPageSize));
@@ -332,9 +346,7 @@ export function AgentValidationManagementPage({
       setSelectedTestSetId(testSetId);
       setCurrentRun(created);
       setSelectedRunId(created.id);
-      setBaseRunId('');
-      setCompareResult(null);
-      await loadRuns({ testSetId });
+      await loadRuns({ forceAll: true });
       await loadRunDetail(created.id);
       message.success('Run을 생성했습니다.');
     } catch (error) {
@@ -345,27 +357,90 @@ export function AgentValidationManagementPage({
     }
   };
 
-  const handleExecute = async () => {
+  const handleExecute = async (itemIds?: string[]) => {
     if (!currentRun) return;
+    const runId = currentRun.id;
+    const scopedItemIds = (itemIds || [])
+      .map((itemId) => String(itemId || '').trim())
+      .filter(Boolean);
+    if (itemIds && scopedItemIds.length === 0) {
+      message.warning('재실행 대상 질의를 찾을 수 없습니다.');
+      return;
+    }
+    const readErrorMessage = (error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        const typed = error as {
+          response?: {
+            data?: {
+              detail?: string;
+              message?: string;
+            } | string;
+          };
+          message?: string;
+        };
+        const responseData = typed.response?.data;
+        if (responseData) {
+          if (typeof responseData === 'string' && responseData) {
+            return responseData;
+          }
+          if (responseData && typeof responseData === 'object') {
+            if (typeof responseData.detail === 'string' && responseData.detail) {
+              return responseData.detail;
+            }
+            if (typeof responseData.message === 'string' && responseData.message) {
+              return responseData.message;
+            }
+          }
+        }
+        if (typed.message) {
+          return typed.message;
+        }
+      }
+      return '';
+    };
     try {
       setLoading(true);
-      await executeValidationRun(currentRun.id, {
+      await executeValidationRun(runId, {
         bearer: tokens.bearer,
         cms: tokens.cms,
         mrs: tokens.mrs,
+        ...(scopedItemIds.length ? { itemIds: scopedItemIds } : {}),
       });
-      message.success('실행을 시작했습니다.');
-      await loadRunDetail(currentRun.id);
-      await loadRuns({ testSetId: selectedTestSetId });
+      triggerForceRunRefresh();
+      message.success(
+        scopedItemIds.length ? '선택한 질의를 재실행했습니다.' : '실행을 시작했습니다.',
+      );
+      await loadRunDetail(runId);
+      await loadRuns({ forceAll: true });
     } catch (error) {
       console.error(error);
-      message.error('실행 요청에 실패했습니다.');
+      const detail = readErrorMessage(error);
+      if (
+        scopedItemIds.length
+        && detail === 'Only PENDING runs can be executed'
+      ) {
+        message.error(
+          '질의별 재실행이 서버에 반영되지 않았습니다. 백엔드 배포 상태를 확인해 주세요. (Only PENDING runs can be executed)',
+        );
+      } else if (detail === 'Run is still executing') {
+        message.error('현재 Run 실행이 진행 중이라 재실행할 수 없습니다.');
+      } else if (detail === 'Evaluation is already running') {
+        message.error('현재 Run 평가가 진행 중이라 재실행할 수 없습니다.');
+      } else {
+        message.error(
+          detail
+            ? `실행 요청에 실패했습니다. (${detail})`
+            : '실행 요청에 실패했습니다.',
+        );
+      }
+      await loadRunDetail(runId);
+      await loadRuns({ forceAll: true });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEvaluate = async () => {
+  const handleEvaluate = async (itemIds?: string[]) => {
     if (!currentRun) return;
     const readErrorMessage = (error: unknown) => {
       if (typeof error === 'object' && error !== null) {
@@ -426,10 +501,16 @@ export function AgentValidationManagementPage({
     };
     try {
       setLoading(true);
-      await evaluateValidationRun(currentRun.id, { maxChars: 15000 });
-      message.success('평가를 시작했습니다.');
+      await evaluateValidationRun(currentRun.id, {
+        maxChars: 15000,
+        ...(itemIds?.length ? { itemIds } : {}),
+      });
+      triggerForceRunRefresh();
+      message.success(
+        itemIds?.length ? '선택한 질의 재평가를 시작했습니다.' : '평가를 시작했습니다.',
+      );
       await loadRunDetail(currentRun.id);
-      await loadRuns({ testSetId: selectedTestSetId });
+      await loadRuns({ forceAll: true });
     } catch (error) {
       console.error(error);
       const detail = readErrorMessage(error);
@@ -452,7 +533,7 @@ export function AgentValidationManagementPage({
       await updateValidationRun(runId, payload);
       message.success('Run 정보를 수정했습니다.');
       if (section === 'run') {
-        await loadRuns({ testSetId: selectedTestSetId });
+        await loadRuns({ forceAll: true });
       } else {
         await loadRuns({ forceAll: true });
       }
@@ -473,11 +554,9 @@ export function AgentValidationManagementPage({
 
       if (section === 'run') {
         const refreshedRuns = await loadRuns({
-          testSetId: selectedTestSetId || undefined,
+          forceAll: true,
         });
-        setCompareResult((prev) => (selectedRunId === runId ? null : prev));
         if (selectedRunId === runId) {
-          setBaseRunId('');
           if (refreshedRuns.length > 0) {
             setSelectedRunId(refreshedRuns[0].id);
             await loadRunDetail(refreshedRuns[0].id);
@@ -533,7 +612,7 @@ export function AgentValidationManagementPage({
       }
       await loadRunDetail(runId);
       if (section === 'run') {
-        await loadRuns({ testSetId: selectedTestSetId });
+        await loadRuns({ forceAll: true });
       } else {
         await loadRuns({ forceAll: true });
       }
@@ -547,20 +626,37 @@ export function AgentValidationManagementPage({
     }
   };
 
-  const handleCompare = async () => {
-    if (!currentRun || !baseRunId) {
-      message.warning('비교 기준 run을 선택해 주세요.');
-      return;
+  const handleUpdateRunItemSnapshot = async (
+    runId: string,
+    itemId: string,
+    payload: {
+      expectedResult?: string;
+      latencyClass?: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null;
+    },
+  ) => {
+    const updated = await updateValidationRunItemSnapshot(runId, itemId, payload);
+    if (payload.latencyClass !== undefined) {
+      const expectedLatencyClass = payload.latencyClass || null;
+      const returnedLatencyClass = updated.latencyClass || null;
+      if (expectedLatencyClass !== returnedLatencyClass) {
+        throw new Error('응답 속도 타입 저장이 반영되지 않았습니다. 백엔드 배포 상태를 확인해 주세요.');
+      }
     }
-    try {
-      setLoading(true);
-      const result = await compareValidationRun(currentRun.id, baseRunId);
-      setCompareResult(result as Record<string, unknown>);
-    } catch (error) {
-      console.error(error);
-      message.error('결과 비교에 실패했습니다.');
-    } finally {
-      setLoading(false);
+    if (currentRun?.id === runId) {
+      setRunItems((prev) =>
+        prev.map((item) => {
+          if (item.id !== itemId) return item;
+          return {
+            ...item,
+            ...(updated.expectedResult !== undefined
+              ? { expectedResult: updated.expectedResult }
+              : {}),
+            ...(updated.latencyClass !== undefined
+              ? { latencyClass: updated.latencyClass }
+              : {}),
+          };
+        }),
+      );
     }
   };
 
@@ -700,9 +796,107 @@ export function AgentValidationManagementPage({
     setHistorySortOrder('createdAt_desc');
   };
 
+  const hasExecutionResult = (item: ValidationRunItem) =>
+    Boolean(item.executedAt)
+    || Boolean(String(item.error || '').trim())
+    || Boolean(String(item.rawResponse || '').trim());
+  const hasEvaluationResult = (item: ValidationRunItem) =>
+    Boolean(item.logicEvaluation)
+    || Boolean(item.llmEvaluation);
+
+  const runItemIdsByQueryId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    runItems.forEach((item) => {
+      const queryId = String(item.queryId || '').trim();
+      if (!queryId) return;
+      const currentIds = map.get(queryId) || [];
+      currentIds.push(item.id);
+      map.set(queryId, currentIds);
+    });
+    return map;
+  }, [runItems]);
+
+  const resolveScopedItemIds = (item: ValidationRunItem) => {
+    const queryId = String(item.queryId || '').trim();
+    if (!queryId) return [item.id];
+    const ids = runItemIdsByQueryId.get(queryId) || [];
+    if (ids.length === 0) return [item.id];
+    return Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
+  };
+
+  const isRunBusy = useMemo(() => {
+    if (!currentRun) return false;
+    return currentRun.status === 'RUNNING'
+      || String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
+  }, [currentRun]);
+
+  const canReexecuteRunItem = (item: ValidationRunItem) => {
+    if (!currentRun) return false;
+    const scopedItemIds = resolveScopedItemIds(item);
+    return !isRunBusy && scopedItemIds.length > 0;
+  };
+
+  const canReevaluateRunItem = (item: ValidationRunItem) => {
+    if (!currentRun || isRunBusy) return false;
+    const scopedItemIds = new Set(resolveScopedItemIds(item));
+    return runItems.some((row) => scopedItemIds.has(row.id) && hasExecutionResult(row));
+  };
+
+  const handleReexecuteRunItem = (item: ValidationRunItem) => {
+    const scopedItemIds = resolveScopedItemIds(item);
+    const scopedItemSet = new Set(scopedItemIds);
+    const needsConfirm = runItems.some(
+      (row) =>
+        scopedItemSet.has(row.id)
+        && (hasExecutionResult(row) || hasEvaluationResult(row)),
+    );
+    const executeAction = async () => {
+      await handleExecute(scopedItemIds);
+    };
+    if (!needsConfirm) {
+      void executeAction();
+      return;
+    }
+    modal.confirm({
+      title: '해당 질의를 재실행 하시겠어요?',
+      content: '실행, 평가 결과가 있는 경우 모든 데이터가 초기화돼요.',
+      okText: '확인',
+      cancelText: '취소',
+      onOk: executeAction,
+    });
+  };
+
+  const handleReevaluateRunItem = (item: ValidationRunItem) => {
+    const scopedItemIds = resolveScopedItemIds(item);
+    const scopedItemSet = new Set(scopedItemIds);
+    const needsConfirm = runItems.some(
+      (row) =>
+        scopedItemSet.has(row.id)
+        && (hasExecutionResult(row) || hasEvaluationResult(row)),
+    );
+    const evaluateAction = async () => {
+      await handleEvaluate(scopedItemIds);
+    };
+    if (!needsConfirm) {
+      void evaluateAction();
+      return;
+    }
+    modal.confirm({
+      title: '해당 질의를 재평가 하시겠어요?',
+      content: '실행, 평가 결과가 있는 경우 모든 데이터가 초기화돼요.',
+      okText: '확인',
+      cancelText: '취소',
+      onOk: evaluateAction,
+    });
+  };
+
   const { runItemColumns, historyColumns } =
     useValidationColumns({
       testSetNameById,
+      canReexecuteRunItem,
+      canReevaluateRunItem,
+      onReexecuteRunItem: handleReexecuteRunItem,
+      onReevaluateRunItem: handleReevaluateRunItem,
     });
 
   const { isHistoryDetailMatched } = useValidationSectionMeta({
@@ -732,15 +926,11 @@ export function AgentValidationManagementPage({
           setSelectedRunId={setSelectedRunId}
           currentRun={currentRun}
           runItems={runItems}
-          baseRunId={baseRunId}
-          setBaseRunId={setBaseRunId}
           handleCreateRun={handleCreateRunFromTestSet}
           handleExecute={handleExecute}
           handleEvaluate={handleEvaluate}
-          handleCompare={handleCompare}
           handleUpdateRun={handleUpdateRun}
           handleDeleteRun={handleDeleteRun}
-          compareResult={compareResult}
           runItemsCurrentPage={runItemsCurrentPage}
           runItemsPageSize={runItemsPageSize}
           setRunItemsCurrentPage={setRunItemsCurrentPage}
@@ -879,6 +1069,7 @@ export function AgentValidationManagementPage({
           onDeleteRun={handleDeleteRun}
           testSetNameById={testSetNameById}
           onUpdateRun={handleUpdateRun}
+          onUpdateRunItemSnapshot={handleUpdateRunItemSnapshot}
           onPreviewExpectedResultsBulkUpdate={
             handlePreviewExpectedResultsBulkUpdate
           }

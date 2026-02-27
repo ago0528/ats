@@ -184,6 +184,7 @@ export type ValidationRunItem = {
   rawResponse: string;
   latencyMs?: number | null;
   responseTimeSec?: number | null;
+  latencyClass?: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null;
   error: string;
   rawJson: string;
   executedAt?: string | null;

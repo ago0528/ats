@@ -682,14 +682,14 @@ export function AppLayout() {
       if (validationSection === 'history-detail') {
         return [
           { title: '에이전트 검증 운영' },
-          { title: toBreadcrumbLink('검증 이력', '/validation/history') },
+          { title: toBreadcrumbLink('질문 결과', '/validation/history') },
           {
             title:
-              historyDetailTab === 'results' ? '평가 결과' : '검증 이력 상세',
+              historyDetailTab === 'results' ? '평가 결과' : '질문 결과 상세',
           },
         ];
       }
-      return [{ title: '에이전트 검증 운영' }, { title: '검증 이력' }];
+      return [{ title: '에이전트 검증 운영' }, { title: '질문 결과' }];
     }
     if (menu === 'validation-dashboard') {
       return [{ title: '에이전트 검증 운영' }, { title: '대시보드' }];
@@ -1053,7 +1053,7 @@ export function AppLayout() {
                     },
                     {
                       key: 'validation-history',
-                      label: '검증 이력',
+                      label: '질문 결과',
                     },
                     {
                       key: 'validation-dashboard',

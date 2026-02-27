@@ -32,6 +32,16 @@ const getResponseTimeSec = (item: ValidationRunItem) => {
   return fromMs / 1000;
 };
 
+const normalizeLatencyClass = (
+  value?: string | null,
+): 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null => {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (normalized === 'SINGLE' || normalized === 'MULTI' || normalized === 'UNCLASSIFIED') {
+    return normalized;
+  }
+  return null;
+};
+
 const parseJsonObject = (value: unknown) => {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
@@ -262,12 +272,14 @@ export function buildResultsRows(items: ValidationRunItem[]) {
     const abnormal = Boolean(normalizeText(item.error))
       || String(item.llmEvaluation?.status || '').toUpperCase().includes('ERROR')
       || String(item.llmEvaluation?.status || '').toUpperCase().includes('FAILED');
+    const explicitLatencyClass = normalizeLatencyClass(item.latencyClass);
     const normalizedLatencyClass: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' =
-      latencySingleScore !== null && latencyMultiScore === null
+      explicitLatencyClass
+      ?? (latencySingleScore !== null && latencyMultiScore === null
         ? 'SINGLE'
         : latencyMultiScore !== null && latencySingleScore === null
           ? 'MULTI'
-          : 'UNCLASSIFIED';
+          : 'UNCLASSIFIED');
     return {
       item,
       queryKey,
@@ -317,7 +329,13 @@ export function sortResultsRows(rows: ResultsRowView[]) {
     }
     const leftSpeed = left.speedSec ?? -1;
     const rightSpeed = right.speedSec ?? -1;
-    return rightSpeed - leftSpeed;
+    if (leftSpeed !== rightSpeed) {
+      return rightSpeed - leftSpeed;
+    }
+    if (left.item.ordinal !== right.item.ordinal) {
+      return left.item.ordinal - right.item.ordinal;
+    }
+    return left.item.id.localeCompare(right.item.id);
   });
 }
 

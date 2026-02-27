@@ -2,6 +2,7 @@ import {
   Collapse,
   Descriptions,
   Drawer,
+  Select,
   Space,
   Tag,
   Typography,
@@ -31,12 +32,18 @@ export function ValidationHistoryDetailRowDrawer({
   activeTab,
   historyRow,
   resultsRow,
+  resultsLatencyClassSaving,
+  onChangeResultsLatencyClass,
   onClose,
 }: {
   open: boolean;
   activeTab: HistoryDetailTab;
   historyRow: HistoryRowView | null;
   resultsRow: ResultsRowView | null;
+  resultsLatencyClassSaving?: boolean;
+  onChangeResultsLatencyClass?: (
+    nextLatencyClass: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED',
+  ) => void;
   onClose: () => void;
 }) {
   const row = activeTab === 'results' ? resultsRow : historyRow;
@@ -47,7 +54,7 @@ export function ValidationHistoryDetailRowDrawer({
       open={open}
       placement="right"
       width={680}
-      title={activeTab === 'results' ? '평가 결과 상세' : '검증 이력 상세'}
+      title={activeTab === 'results' ? '평가 결과 상세' : '질문 결과 상세'}
       onClose={onClose}
     >
       {item ? (
@@ -76,6 +83,25 @@ export function ValidationHistoryDetailRowDrawer({
                   </Descriptions.Item>
                   {activeTab === 'results' && resultsRow ? (
                     <>
+                      <Descriptions.Item label="응답 속도 타입">
+                        <Select
+                          size="small"
+                          style={{ minWidth: 160 }}
+                          value={resultsRow.latencyClass}
+                          options={[
+                            { label: '싱글', value: 'SINGLE' },
+                            { label: '멀티', value: 'MULTI' },
+                            { label: '미분류', value: 'UNCLASSIFIED' },
+                          ]}
+                          disabled={!onChangeResultsLatencyClass || resultsLatencyClassSaving}
+                          loading={resultsLatencyClassSaving}
+                          onChange={(value) =>
+                            onChangeResultsLatencyClass?.(
+                              value as 'SINGLE' | 'MULTI' | 'UNCLASSIFIED',
+                            )
+                          }
+                        />
+                      </Descriptions.Item>
                       <Descriptions.Item label="대표 점수">
                         {resultsRow.totalScoreText}
                       </Descriptions.Item>

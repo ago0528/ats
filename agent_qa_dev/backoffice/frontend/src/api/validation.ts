@@ -223,14 +223,17 @@ export async function listValidationRunItems(runId: string, params?: { offset?: 
   return data;
 }
 
-export async function executeValidationRun(runId: string, payload: { bearer: string; cms: string; mrs: string; idempotencyKey?: string }) {
+export async function executeValidationRun(
+  runId: string,
+  payload: { bearer: string; cms: string; mrs: string; idempotencyKey?: string; itemIds?: string[] },
+) {
   const { data } = await api.post<{ jobId: string; status: string }>(`/validation-runs/${runId}/execute`, payload);
   return data;
 }
 
 export async function evaluateValidationRun(
   runId: string,
-  payload: { openaiModel?: string; maxChars?: number; maxParallel?: number },
+  payload: { openaiModel?: string; maxChars?: number; maxParallel?: number; itemIds?: string[] },
 ) {
   const { data } = await api.post<{ jobId: string; status: string }>(`/validation-runs/${runId}/evaluate`, payload);
   return data;
@@ -291,10 +294,11 @@ export async function updateValidationRunItemSnapshot(
   runId: string,
   itemId: string,
   payload: {
-    expectedResult: string;
+    expectedResult?: string;
+    latencyClass?: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null;
   },
 ) {
-  const { data } = await api.patch<{ id: string; runId: string; expectedResult: string }>(
+  const { data } = await api.patch<{ id: string; runId: string; expectedResult: string; latencyClass?: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null }>(
     `/validation-runs/${runId}/items/${itemId}`,
     payload,
   );

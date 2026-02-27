@@ -129,6 +129,18 @@ def _to_json_payload(value: str | None) -> dict[str, float]:
     return out
 
 
+def _to_object_payload(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except Exception:
+        return {}
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
 class ValidationRunRepository:
     def __init__(self, db: Session):
         self.db = db
@@ -427,6 +439,34 @@ class ValidationRunRepository:
             .all()
         )
 
+    def reset_items_for_execution(self, run_id: str, item_ids: list[str]) -> int:
+        rows = self.list_items_by_ids(run_id, item_ids)
+        if not rows:
+            return 0
+
+        target_ids = [row.id for row in rows]
+        self.db.execute(
+            delete(ValidationLogicEvaluation).where(
+                ValidationLogicEvaluation.run_item_id.in_(target_ids),
+            ),
+        )
+        self.db.execute(
+            delete(ValidationLlmEvaluation).where(
+                ValidationLlmEvaluation.run_item_id.in_(target_ids),
+            ),
+        )
+
+        for row in rows:
+            row.conversation_id = ""
+            row.raw_response = ""
+            row.latency_ms = None
+            row.error = ""
+            row.raw_json = ""
+            row.executed_at = None
+
+        self.db.flush()
+        return len(rows)
+
     def get_item(self, item_id: str) -> Optional[ValidationRunItem]:
         return self.db.get(ValidationRunItem, item_id)
 
@@ -435,12 +475,31 @@ class ValidationRunRepository:
         item_id: str,
         *,
         expected_result_snapshot: Optional[str] = None,
+        latency_class: Optional[str] = None,
+        update_latency_class: bool = False,
     ) -> Optional[ValidationRunItem]:
         item = self.get_item(item_id)
         if item is None:
             return None
         if expected_result_snapshot is not None:
             item.expected_result_snapshot = str(expected_result_snapshot)
+        if update_latency_class:
+            criteria_payload = _to_object_payload(item.applied_criteria_json)
+            next_payload: dict[str, Any] = dict(criteria_payload)
+            meta_payload = next_payload.get("meta")
+            if isinstance(meta_payload, dict):
+                next_meta = dict(meta_payload)
+            else:
+                next_meta = {}
+            if latency_class is None:
+                next_meta.pop("latencyClass", None)
+            else:
+                next_meta["latencyClass"] = str(latency_class).strip().upper()
+            if next_meta:
+                next_payload["meta"] = next_meta
+            else:
+                next_payload.pop("meta", None)
+            item.applied_criteria_json = _to_json_text(next_payload if next_payload else None)
         self.db.flush()
         return item
 
@@ -592,6 +651,13 @@ class ValidationRunRepository:
             .filter(ValidationRunItem.run_id == run_id, ValidationLlmEvaluation.status.like("DONE%"))
             .scalar()
             or 0
+        )
+
+    def latest_item_executed_at(self, run_id: str) -> Optional[dt.datetime]:
+        return (
+            self.db.query(func.max(ValidationRunItem.executed_at))
+            .filter(ValidationRunItem.run_id == run_id)
+            .scalar()
         )
 
     def get_run_score_snapshot(self, run_id: str) -> Optional[ValidationScoreSnapshot]:

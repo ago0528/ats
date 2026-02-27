@@ -257,39 +257,44 @@ export function ValidationRunActivityPopover({
           className="validation-run-activity-list"
           renderItem={(item) => (
             <List.Item className={item.isRead ? '' : 'is-unread'}>
-              <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                <Space
-                  size={8}
-                  style={{ width: '100%', justifyContent: 'space-between' }}
-                >
-                  <Button
-                    type="link"
-                    className="validation-run-activity-run-link"
-                    onClick={() => {
-                      void handleOpenRun(item);
-                    }}
+              <button
+                type="button"
+                className="validation-run-activity-item-button"
+                onClick={() => {
+                  void handleOpenRun(item);
+                }}
+              >
+                <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                  <Space
+                    size={8}
+                    style={{ width: '100%', justifyContent: 'space-between' }}
                   >
-                    {item.runName || item.runId}
-                  </Button>
-                  {getStatusTag(item)}
+                    <Typography.Text
+                      strong
+                      className="validation-run-activity-item-title"
+                    >
+                      {item.runName || item.runId}
+                    </Typography.Text>
+                    {getStatusTag(item)}
+                  </Space>
+                  {(() => {
+                    const progress = getProgressMeta(item);
+                    return (
+                      <div>
+                        <Typography.Text type="secondary">
+                          {progress.label} {progress.done} / {progress.total}
+                        </Typography.Text>
+                        <Progress
+                          percent={progress.percent}
+                          size="small"
+                          showInfo={false}
+                          strokeColor={progress.strokeColor}
+                        />
+                      </div>
+                    );
+                  })()}
                 </Space>
-                {(() => {
-                  const progress = getProgressMeta(item);
-                  return (
-                    <div>
-                      <Typography.Text type="secondary">
-                        {progress.label} {progress.done} / {progress.total}
-                      </Typography.Text>
-                      <Progress
-                        percent={progress.percent}
-                        size="small"
-                        showInfo={false}
-                        strokeColor={progress.strokeColor}
-                      />
-                    </div>
-                  );
-                })()}
-              </Space>
+              </button>
             </List.Item>
           )}
         />

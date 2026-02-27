@@ -21,6 +21,13 @@ body,
   height: 100%;
 }
 
+html,
+body {
+  width: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
+
 .backoffice-shell {
   min-height: 100vh;
   height: 100vh;
@@ -30,10 +37,13 @@ body,
 
 .auth-login-page {
   min-height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: clamp(16px, 4vw, 40px);
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 10% 12%, #ffffff 0%, rgba(255, 255, 255, 0) 38%),
     radial-gradient(circle at 84% 18%, #f1ecff 0%, rgba(241, 236, 255, 0) 34%),
@@ -43,6 +53,8 @@ body,
 .auth-login-card {
   --auth-login-control-height: 44px;
   width: min(500px, 100%);
+  max-width: 100%;
+  box-sizing: border-box;
   border-radius: 20px;
   border: 1px solid #ebedf7;
   box-shadow:
@@ -208,16 +220,44 @@ body,
 }
 
 .validation-run-activity-list .ant-list-item {
-  padding: 8px !important;
+  padding: 0 !important;
+  margin-bottom: 8px;
+  border: 1px solid #eef1f6;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .validation-run-activity-list .ant-list-item.is-unread {
   background: #faf8ff;
+  border-color: #e3d9ff;
 }
 
-.validation-run-activity-run-link {
+.validation-run-activity-list .ant-list-item:hover {
+  border-color: #d6dcf0;
+  box-shadow: 0 2px 8px rgba(21, 35, 71, 0.08);
+}
+
+.validation-run-activity-item-button {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.validation-run-activity-item-button:hover {
+  background: #f7f9fc;
+}
+
+.validation-run-activity-list .ant-list-item.is-unread .validation-run-activity-item-button:hover {
+  background: #f4efff;
+}
+
+.validation-run-activity-item-title {
   max-width: 280px;
-  padding-inline: 0 !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

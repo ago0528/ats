@@ -91,8 +91,8 @@ from app.api.routes.validation_settings import router as validation_settings_rou
 from app.api.routes.validation_test_sets import router as validation_test_sets_router
 from app.core.db import Base, _ENGINE, get_db_path
 
-app = FastAPI(title="AQB Backoffice API", version="0.1.0")
-APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.1.0")
+app = FastAPI(title="AQB Backoffice API", version="0.2.0")
+APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.2.0")
 
 
 def _resolve_allowed_origins() -> list[str]:

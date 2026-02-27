@@ -29,7 +29,7 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 
 - `에이전트 검증 운영`
 - `검증 실행` (`/validation/run`)
-- `검증 이력` (`/validation/history`)
+- `질문 결과` (`/validation/history`)
 - `대시보드` (`/validation/dashboard`)
 - `검증 데이터 관리`
 - `질의 관리` (`/validation-data/queries`)
@@ -49,9 +49,9 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 
 | 메뉴 | URL | 화면 컴포넌트 | 제품 목적 |
 |---|---|---|---|
-| 검증 실행 | `/validation/run` | `AgentValidationManagementPage` (run 섹션) | 테스트 세트 선택/Run 생성/Run 실행/평가/비교 워크벤치 |
-| 검증 이력 | `/validation/history` | `AgentValidationManagementPage` (history 섹션) | Run 목록 조회 |
-| 검증 이력 상세 | `/validation/history/:runId?tab=history|results` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세를 `검증 이력`/`평가 결과` 탭으로 조회하고 실행 워크벤치 연결 |
+| 검증 실행 | `/validation/run` | `AgentValidationManagementPage` (run 섹션) | 테스트 세트 선택/Run 생성/Run 실행/평가 워크벤치 |
+| 질문 결과 | `/validation/history` | `AgentValidationManagementPage` (history 섹션) | Run 목록 조회 |
+| 질문 결과 상세 | `/validation/history/:runId?tab=history|results` | `AgentValidationManagementPage` (history-detail 섹션) | Run 상세를 `질문 결과`/`평가 결과` 탭으로 조회하고 실행 워크벤치 연결 |
 | 대시보드 | `/validation/dashboard` | `AgentValidationManagementPage` (dashboard 섹션) | 테스트 세트 기준 성과/실패 패턴 조회 |
 | 질의 관리 | `/validation-data/queries` | `QueryManagementPage` | 단일 질의 CRUD, 검색/필터, 벌크 업로드/업데이트, 테스트 세트 사용 추적 |
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD(질의 묶기) |
@@ -115,30 +115,29 @@ flowchart LR
 2. 상단에서 현재 Run을 선택해 실행/평가 대상을 확인
 3. `Run 생성` 버튼 클릭 → 모달에서 테스트 세트 선택, 기본값 미리보기, 오버라이드 입력, Run 이름 입력 후 생성
 4. `워크벤치` 탭에서 실행/평가 수행 및 Run item 테이블 조회
-5. `결과 비교` 탭에서 base run 선택 후 비교 실행
+5. run item 테이블에서 질의별 `재실행`/`재평가` 수행
 
 운영 원칙:
 
 1. 실행은 `PENDING` Run에서만 시작 가능
 2. 평가는 실행 결과가 있는 Run에서만 시작 가능
-3. 비교는 현재 Run + 수동 baseRun 선택이 모두 필요
-4. 비교 후보는 동일 테스트 세트의 Run 목록에서 선택
+3. 질의별 재실행/재평가는 같은 `queryId` 번들(반복/방 포함)을 함께 처리한다
 
-### 4.3 검증 이력 조회 흐름
+### 4.3 질문 결과 조회 흐름
 
-1. `검증 이력`에서 목록/상세 조회
-2. 상세에서 `검증 실행에서 이 run 열기` 클릭
+1. `질문 결과`에서 목록/상세 조회
+2. 상세에서 `검증 실행에서 이 Run 열기` 클릭
 3. `/validation/run?runId=...&testSetId=...`로 이동
-4. 실행 워크벤치에서 해당 Run 재분석/평가/비교
+4. 실행 워크벤치에서 해당 Run 재분석/평가
 
-`검증 이력`은 조회/다운로드 중심(read-only)이며 실행 액션은 제공하지 않는다.
+`질문 결과`는 조회/다운로드 중심(read-only)이며 실행 액션은 제공하지 않는다.
 
-검증 이력 상세의 정보 위계:
+질문 결과 상세의 정보 위계:
 
 1. 페이지 헤더(전역): 브레드크럼(1회)
 2. 상세 헤더(로컬): Run 이름/상태/액션
 3. 컨텍스트: `테스트 세트/에이전트/평가 모델/마지막 업데이트` 라벨-값 메타
-4. 탭 콘텐츠: `검증 이력`/`평가 결과`는 섹션 타이틀 + 툴바 + 테이블 구조로 렌더링
+4. 탭 콘텐츠: `질문 결과`/`평가 결과`는 섹션 타이틀 + 툴바 + 테이블 구조로 렌더링
 
 평가 결과 탭:
 
@@ -151,13 +150,13 @@ flowchart LR
 
 1. `testSetId`
 2. `runId`
-3. `tab` (`history` | `results`, 검증 이력 상세 전용)
+3. `tab` (`history` | `results`, 질문 결과 상세 전용)
 
 예시:
 
 1. `테스트 세트` -> `검증 실행`: `/validation/run?testSetId=ts1`
-2. `검증 이력 상세` -> `검증 실행`: `/validation/run?runId=r1&testSetId=ts1`
-3. `검증 이력 상세` 내부 탭 상태: `/validation/history/r1?tab=history`, `/validation/history/r1?tab=results`
+2. `질문 결과 상세` -> `검증 실행`: `/validation/run?runId=r1&testSetId=ts1`
+3. `질문 결과 상세` 내부 탭 상태: `/validation/history/r1?tab=history`, `/validation/history/r1?tab=results`
 
 ## 6. 도메인 용어 정리 (Mermaid)
 
@@ -170,7 +169,7 @@ flowchart LR
   D -->|"질의 순서 관리"| C
   D -->|"Run 생성"| E["검증 실행"]
   E --> F["실행 결과 (Run/RunItem)"]
-  F --> G["검증 이력 (조회/다운로드)"]
+  F --> G["질문 결과 (조회/다운로드)"]
 ```
 
 ## 7. 테스트 방법(사용 시나리오) (Mermaid)
@@ -183,8 +182,8 @@ flowchart LR
   D --> E["실행 시작"]
   D --> F["기존 Run 선택 후 평가만 수행"]
   E --> G["평가 시작"]
-  G --> H["결과 비교 탭에서 baseRun 수동 선택 후 비교"]
-  H --> I["검증 이력에서 조회/다운로드"]
+  G --> H["질의별 재실행/재평가 수행"]
+  H --> I["질문 결과에서 조회/다운로드"]
 ```
 
 ## 8. 운영 체크리스트
@@ -201,10 +200,10 @@ flowchart LR
 1. 테스트 세트 미선택 시 Run 생성 비활성
 2. `PENDING` 외 Run에서 실행 버튼 비활성
 3. 실행 결과 없는 Run에서 평가 버튼 비활성
-4. baseRun 미선택 시 비교 버튼 비활성
+4. 질의별 `재실행`/`재평가`가 같은 `queryId` 항목을 함께 처리하는지
 
 ### 8.3 데이터 정합성
 
 1. 테스트 세트 수정 후 과거 Run 결과가 변하지 않는지(snapshot 고정)
 2. Run payload에 `testSetId`가 일관되게 노출되는지
-3. 동일 테스트 세트 기준으로 run 목록/비교 후보가 일관되게 필터되는지
+3. 환경 기준 run 목록이 누락 없이 노출되는지

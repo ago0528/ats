@@ -170,6 +170,7 @@ export function ValidationHistoryDetailSection({
   onChangeHistoryDetailTab,
   onUpdateRun,
   onDeleteRun,
+  onUpdateRunItemSnapshot,
   onPreviewExpectedResultsBulkUpdate,
   onApplyExpectedResultsBulkUpdate,
   testSetNameById = {},
@@ -187,6 +188,14 @@ export function ValidationHistoryDetailSection({
   onChangeHistoryDetailTab?: (tab: HistoryDetailTab) => void;
   onUpdateRun?: (runId: string, payload: ValidationRunUpdateRequest) => Promise<void>;
   onDeleteRun?: (runId: string) => Promise<void>;
+  onUpdateRunItemSnapshot?: (
+    runId: string,
+    itemId: string,
+    payload: {
+      expectedResult?: string;
+      latencyClass?: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED' | null;
+    },
+  ) => Promise<void>;
   onPreviewExpectedResultsBulkUpdate?: (
     runId: string,
     file: File,
@@ -211,8 +220,9 @@ export function ValidationHistoryDetailSection({
   const [resultsCurrentPage, setResultsCurrentPage] = useState(1);
   const [resultsPageSize, setResultsPageSize] = useState(50);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [historySelectedRow, setHistorySelectedRow] = useState<HistoryRowView | null>(null);
-  const [resultsSelectedRow, setResultsSelectedRow] = useState<ResultsRowView | null>(null);
+  const [historySelectedRowId, setHistorySelectedRowId] = useState('');
+  const [resultsSelectedRowId, setResultsSelectedRowId] = useState('');
+  const [latencyClassSavingItemId, setLatencyClassSavingItemId] = useState('');
   const [form] = Form.useForm<{
     name?: string;
     agentId?: string;
@@ -234,6 +244,14 @@ export function ValidationHistoryDetailSection({
   );
   const historyRows = useMemo(() => buildHistoryRows(runItems), [runItems]);
   const resultsRows = useMemo(() => buildResultsRows(runItems), [runItems]);
+  const historySelectedRow = useMemo(
+    () => historyRows.find((row) => row.item.id === historySelectedRowId) || null,
+    [historyRows, historySelectedRowId],
+  );
+  const resultsSelectedRow = useMemo(
+    () => resultsRows.find((row) => row.item.id === resultsSelectedRowId) || null,
+    [resultsRows, resultsSelectedRowId],
+  );
   const canEditCurrentRun = canUpdateRun(currentRun);
   const canDeleteCurrentRun = canDeleteRun(currentRun);
   const canOpenExpectedBulkUpdate = Boolean(onPreviewExpectedResultsBulkUpdate && onApplyExpectedResultsBulkUpdate);
@@ -243,8 +261,9 @@ export function ValidationHistoryDetailSection({
     setResultsFilters(INITIAL_RESULTS_FILTERS);
     setResultsCurrentPage(1);
     setDrawerOpen(false);
-    setHistorySelectedRow(null);
-    setResultsSelectedRow(null);
+    setHistorySelectedRowId('');
+    setResultsSelectedRowId('');
+    setLatencyClassSavingItemId('');
   }, [currentRun?.id]);
 
   useEffect(() => {
@@ -424,15 +443,35 @@ export function ValidationHistoryDetailSection({
   );
 
   const openHistoryRow = (row: HistoryRowView) => {
-    setHistorySelectedRow(row);
-    setResultsSelectedRow(null);
+    setHistorySelectedRowId(row.item.id);
+    setResultsSelectedRowId('');
     setDrawerOpen(true);
   };
 
   const openResultsRow = (row: ResultsRowView) => {
-    setResultsSelectedRow(row);
-    setHistorySelectedRow(null);
+    setResultsSelectedRowId(row.item.id);
+    setHistorySelectedRowId('');
     setDrawerOpen(true);
+  };
+
+  const handleChangeResultsLatencyClass = async (
+    nextLatencyClass: 'SINGLE' | 'MULTI' | 'UNCLASSIFIED',
+  ) => {
+    const selected = resultsSelectedRow;
+    if (!selected || !currentRun || !onUpdateRunItemSnapshot) return;
+    try {
+      setLatencyClassSavingItemId(selected.item.id);
+      await onUpdateRunItemSnapshot(currentRun.id, selected.item.id, {
+        latencyClass: nextLatencyClass,
+      });
+      message.success('응답 속도 타입을 수정했습니다.');
+    } catch (error) {
+      console.error(error);
+      const detail = error instanceof Error ? error.message : '';
+      message.error(detail || '응답 속도 타입 수정에 실패했습니다.');
+    } finally {
+      setLatencyClassSavingItemId('');
+    }
   };
 
   if (!historyRunId) {
@@ -475,7 +514,7 @@ export function ValidationHistoryDetailSection({
       <Tabs
         activeKey={historyDetailTab}
         items={[
-          { key: 'history', label: '검증 이력' },
+          { key: 'history', label: '질문 결과' },
           { key: 'results', label: '평가 결과' },
         ]}
         onChange={(nextTab) => {
@@ -516,6 +555,15 @@ export function ValidationHistoryDetailSection({
         activeTab={historyDetailTab}
         historyRow={historySelectedRow}
         resultsRow={resultsSelectedRow}
+        resultsLatencyClassSaving={
+          Boolean(resultsSelectedRow)
+          && latencyClassSavingItemId === resultsSelectedRow?.item.id
+        }
+        onChangeResultsLatencyClass={
+          historyDetailTab === 'results' && onUpdateRunItemSnapshot
+            ? handleChangeResultsLatencyClass
+            : undefined
+        }
         onClose={() => setDrawerOpen(false)}
       />
 

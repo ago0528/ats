@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   App,
   Button,
-  Card,
+  Dropdown,
   Descriptions,
   Empty,
   Form,
@@ -11,11 +11,18 @@ import {
   Select,
   Collapse,
   Space,
-  Tabs,
+  Tag,
   Tooltip,
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import type { MenuProps } from 'antd';
+import {
+  CheckCircleOutlined,
+  EllipsisOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+} from '@ant-design/icons';
 
 import type {
   ValidationRun,
@@ -38,7 +45,6 @@ import {
   getExecutionStateLabel,
 } from '../utils/runProgress';
 import {
-  canCompareRun,
   canEvaluateRun,
   canExecuteRun,
   canDeleteRun,
@@ -48,6 +54,16 @@ import {
   getRunDisplayName,
   getRunExecutionConfigText,
 } from '../utils/runDisplay';
+import {
+  getAgentModeLabel,
+  getRunStatusColor,
+  getRunStatusLabel,
+} from '../utils/historyDetailDisplay';
+import {
+  buildHistoryRows,
+  type HistoryRowView,
+} from '../utils/historyDetailRows';
+import { ValidationHistoryDetailRowDrawer } from './ValidationHistoryDetailRowDrawer';
 
 export type RunCreateOverrides = {
   name?: string;
@@ -120,9 +136,6 @@ type OverrideFormValues = RunCreateOverrides & {
   contextJson?: string;
 };
 
-const WORKBENCH_TAB_KEY = 'workbench';
-const COMPARE_TAB_KEY = 'compare';
-
 const getRunSelectLabel = (run: ValidationRun) => {
   const displayName = getRunDisplayName(run);
   const executionState = getExecutionStateLabel(run);
@@ -140,15 +153,11 @@ export function ValidationRunSection({
   setSelectedRunId,
   currentRun,
   runItems,
-  baseRunId,
-  setBaseRunId,
   handleCreateRun,
   handleExecute,
   handleEvaluate,
-  handleCompare,
   handleUpdateRun,
   handleDeleteRun,
-  compareResult,
   runItemsCurrentPage,
   runItemsPageSize,
   setRunItemsCurrentPage,
@@ -164,8 +173,6 @@ export function ValidationRunSection({
   setSelectedRunId: (value: string) => void;
   currentRun: ValidationRun | null;
   runItems: ValidationRunItem[];
-  baseRunId: string;
-  setBaseRunId: (value: string) => void;
   handleCreateRun: (
     testSetId: string,
     overrides: RunCreateOverrides,
@@ -174,18 +181,15 @@ export function ValidationRunSection({
     runId: string,
     payload: ValidationRunUpdateRequest,
   ) => Promise<void>;
-  handleExecute: () => Promise<void>;
-  handleEvaluate: () => Promise<void>;
-  handleCompare: () => Promise<void>;
+  handleExecute: (itemIds?: string[]) => Promise<void>;
+  handleEvaluate: (itemIds?: string[]) => Promise<void>;
   handleDeleteRun: (runId: string) => Promise<void>;
-  compareResult: Record<string, unknown> | null;
   runItemsCurrentPage: number;
   runItemsPageSize: number;
   setRunItemsCurrentPage: (value: number) => void;
   setRunItemsPageSize: (value: number) => void;
   runItemColumns: ColumnsType<ValidationRunItem>;
 }) {
-  const [activeTab, setActiveTab] = useState<string>(WORKBENCH_TAB_KEY);
   const [overrideModalOpen, setOverrideModalOpen] = useState(false);
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [overrideModalMode, setOverrideModalMode] = useState<'create' | 'edit'>(
@@ -193,6 +197,8 @@ export function ValidationRunSection({
   );
   const [overrideRunId, setOverrideRunId] = useState('');
   const [overrideContextSnapshot, setOverrideContextSnapshot] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedHistoryRowId, setSelectedHistoryRowId] = useState('');
   const [form] = Form.useForm<OverrideFormValues>();
 
   const executionStateLabel = useMemo(
@@ -212,28 +218,26 @@ export function ValidationRunSection({
   const runCreateEnabled = testSets.length > 0;
   const runExecuteEnabled = canExecuteRun(currentRun);
   const runEvaluateEnabled = canEvaluateRun(currentRun);
-  const runCompareEnabled = canCompareRun(currentRun, baseRunId);
   const runUpdateEnabled = canUpdateRun(currentRun);
   const runDeleteEnabled = canDeleteRun(currentRun);
 
   const runOptions = runs.map((run) => ({
-    label: (
-      <Tooltip title={run.id}>
-        <span>{getRunSelectLabel(run)}</span>
-      </Tooltip>
-    ),
+    label: getRunSelectLabel(run),
     value: run.id,
   }));
-  const baseRunOptions = runs
-    .filter((run) => run.id !== selectedRunId)
-    .map((run) => ({
-      label: (
-        <Tooltip title={run.id}>
-          <span>{getRunSelectLabel(run)}</span>
-        </Tooltip>
-      ),
-      value: run.id,
-    }));
+  const historyRows = useMemo(() => buildHistoryRows(runItems), [runItems]);
+  const selectedHistoryRow = useMemo(
+    () => historyRows.find((entry) => entry.item.id === selectedHistoryRowId) || null,
+    [historyRows, selectedHistoryRowId],
+  );
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    if (!selectedHistoryRowId) return;
+    if (selectedHistoryRow) return;
+    setDrawerOpen(false);
+    setSelectedHistoryRowId('');
+  }, [drawerOpen, selectedHistoryRowId, selectedHistoryRow]);
 
   const currentRunTestSet = currentRun?.testSetId
     ? testSets.find((testSet) => testSet.id === currentRun.testSetId)
@@ -376,204 +380,189 @@ export function ValidationRunSection({
     });
   };
 
+  const runStatusLabel = getRunStatusLabel(currentRun?.status);
+  const runStatusColor = getRunStatusColor(currentRun?.status);
+  const menuItems: MenuProps['items'] = [
+    {
+      key: 'update-run',
+      label: 'Run 수정',
+      disabled: !runUpdateEnabled,
+    },
+    {
+      key: 'delete-run',
+      label: 'Run 삭제',
+      disabled: !runDeleteEnabled,
+      danger: true,
+    },
+  ];
+
+  const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'update-run') {
+      void openEditRunModal();
+      return;
+    }
+    if (key === 'delete-run') {
+      void handleDeleteCurrentRun();
+    }
+  };
+
+  const openHistoryRow = (row: ValidationRunItem) => {
+    setSelectedHistoryRowId(row.id);
+    setDrawerOpen(true);
+  };
+
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
+      <div className="validation-history-detail-header-bar">
+        <div className="validation-history-detail-header-row">
+          <div className="validation-history-detail-run-meta">
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              {currentRun ? getRunDisplayName(currentRun) : 'Run 미선택'}
+            </Typography.Title>
+            <Tag color={runStatusColor}>{runStatusLabel}</Tag>
+          </div>
+          <Space wrap>
+            <Button
+              icon={<PlayCircleOutlined />}
+              loading={loading}
+              onClick={() => {
+                void handleExecute();
+              }}
+              disabled={!runExecuteEnabled}
+            >
+              실행 시작
+            </Button>
+            <Button
+              icon={<CheckCircleOutlined />}
+              loading={loading}
+              onClick={() => {
+                void handleEvaluate();
+              }}
+              disabled={!runEvaluateEnabled}
+            >
+              평가 시작
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => {
+                void openCreateRunModal();
+              }}
+              disabled={!runCreateEnabled}
+            >
+              Run 생성
+            </Button>
+            <Select
+              showSearch
+              style={{ minWidth: 360, width: 360 }}
+              placeholder="현재 Run 선택"
+              value={selectedRunId || undefined}
+              options={runOptions}
+              onChange={(value) => setSelectedRunId(value)}
+              filterOption={(input, option) =>
+                String(option?.label || '').toLowerCase().includes(input.toLowerCase())
+              }
+            />
+            <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
+              <Button icon={<EllipsisOutlined />} disabled={!currentRun} />
+            </Dropdown>
+          </Space>
+        </div>
+      </div>
+
+      <Collapse
+        size="small"
+        defaultActiveKey={[]}
+        ghost
         items={[
           {
-            key: WORKBENCH_TAB_KEY,
-            label: '워크벤치',
-            children: (
-              <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                <Space wrap size={8} style={{ width: '100%' }}>
-                  <Space wrap size={8} style={{ flex: 1, minWidth: 360 }}>
-                    <Select
-                      style={{ minWidth: 360, width: 360 }}
-                      placeholder="현재 Run 선택"
-                      value={selectedRunId || undefined}
-                      options={runOptions}
-                      onChange={(value) => setSelectedRunId(value)}
-                    />
-                  </Space>
-                  <Space wrap size={8}>
-                    <Button
-                      type="primary"
-                      onClick={() => {
-                        void openCreateRunModal();
-                      }}
-                      disabled={!runCreateEnabled}
-                    >
-                      Run 생성
-                    </Button>
-                    <Button
-                      onClick={() => {
-                        void openEditRunModal();
-                      }}
-                      disabled={!runUpdateEnabled}
-                    >
-                      Run 수정
-                    </Button>
-                    <Button
-                      danger
-                      onClick={() => {
-                        void handleDeleteCurrentRun();
-                      }}
-                      disabled={!runDeleteEnabled}
-                    >
-                      Run 삭제
-                    </Button>
-                    <Button
-                      loading={loading}
-                      onClick={() => {
-                        void handleExecute();
-                      }}
-                      disabled={!runExecuteEnabled}
-                    >
-                      실행 시작
-                    </Button>
-                    <Button
-                      loading={loading}
-                      onClick={() => {
-                        void handleEvaluate();
-                      }}
-                      disabled={!runEvaluateEnabled}
-                    >
-                      평가 시작
-                    </Button>
-                  </Space>
-                </Space>
-
-                <Collapse
-                  size="small"
-                  defaultActiveKey={[]}
-                  ghost
-                  items={[
-                    {
-                      key: 'current-run',
-                      label: '현재 Run',
-                      children: currentRun ? (
-                        <Descriptions size="small" bordered column={3}>
-                          <Descriptions.Item label="Run 이름">
-                            <Tooltip title={currentRun.id}>
-                              <span>{getRunDisplayName(currentRun)}</span>
-                            </Tooltip>
-                          </Descriptions.Item>
-                          <Descriptions.Item label="테스트 세트">
-                            {currentRun.testSetId
-                              ? currentRunTestSet?.name || currentRun.testSetId
-                              : '-'}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="실행 상태">
-                            {executionStateLabel}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="평가 상태">
-                            {evaluationStateLabel}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="실행 구성">
-                            {getRunExecutionConfigText(currentRun)}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="에이전트 모드">
-                            {currentRun.agentId}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="총/완료/오류">
-                            {currentRun.totalItems} / {currentRun.doneItems} /{' '}
-                            {currentRun.errorItems}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="LLM 평가 진행">
-                            {evaluationProgressText}
-                          </Descriptions.Item>
-                          <Descriptions.Item label="평가 모델">
-                            {currentRun.evalModel}
-                          </Descriptions.Item>
-                        </Descriptions>
-                      ) : (
-                        <Empty description="현재 Run이 선택되지 않았습니다. 먼저 Run을 생성하고 선택해 주세요." />
-                      ),
-                    },
-                  ]}
-                />
-
-                <StandardDataTable
-                  tableId="validation-run-items"
-                  initialColumnWidths={RUN_ITEM_INITIAL_COLUMN_WIDTHS}
-                  minColumnWidth={84}
-                  wrapperStyle={{ width: '100%', maxWidth: '100%' }}
-                  wrapperClassName="validation-results-table-wrap"
-                  className="query-management-table validation-results-table"
-                  rowKey="id"
-                  size="small"
-                  tableLayout="fixed"
-                  dataSource={runItems}
-                  locale={{
-                    emptyText: <Empty description="Run 결과가 없습니다." />,
-                  }}
-                  pagination={{
-                    current: runItemsCurrentPage,
-                    pageSize: runItemsPageSize,
-                    total: runItems.length,
-                    onChange: (page, nextPageSize) => {
-                      if (nextPageSize !== runItemsPageSize) {
-                        setRunItemsPageSize(nextPageSize);
-                        setRunItemsCurrentPage(1);
-                        return;
-                      }
-                      setRunItemsCurrentPage(page);
-                    },
-                  }}
-                  columns={runItemColumns}
-                />
-              </Space>
-            ),
-          },
-          {
-            key: COMPARE_TAB_KEY,
-            label: '결과 비교',
-            children: (
-              <Card size="small" title="결과 비교">
-                <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  <Space wrap size={8} style={{ width: '100%' }}>
-                    <Select
-                      placeholder="현재 Run 선택"
-                      style={{ width: 360 }}
-                      value={selectedRunId || undefined}
-                      options={runOptions}
-                      onChange={(value) => setSelectedRunId(value)}
-                    />
-                    <Select
-                      placeholder="base Run 선택"
-                      style={{ width: 420 }}
-                      value={baseRunId || undefined}
-                      options={baseRunOptions}
-                      onChange={(value) => setBaseRunId(value)}
-                    />
-                    <Button
-                      loading={loading}
-                      onClick={() => {
-                        void handleCompare();
-                      }}
-                      disabled={!runCompareEnabled}
-                    >
-                      비교 실행
-                    </Button>
-                  </Space>
-                  {compareResult ? (
-                    <Typography.Paragraph
-                      style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}
-                    >
-                      {JSON.stringify(compareResult, null, 2)}
-                    </Typography.Paragraph>
-                  ) : (
-                    <Typography.Text type="secondary">
-                      base Run을 선택한 뒤 비교를 실행하면 결과가 표시됩니다.
-                    </Typography.Text>
-                  )}
-                </Space>
-              </Card>
+            key: 'current-run',
+            label: 'Run 요약 정보',
+            children: currentRun ? (
+              <Descriptions size="small" bordered column={3}>
+                <Descriptions.Item label="Run 이름">
+                  <Tooltip title={currentRun.id}>
+                    <span>{getRunDisplayName(currentRun)}</span>
+                  </Tooltip>
+                </Descriptions.Item>
+                <Descriptions.Item label="테스트 세트">
+                  {currentRun.testSetId
+                    ? currentRunTestSet?.name || currentRun.testSetId
+                    : '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="실행 상태">
+                  {executionStateLabel}
+                </Descriptions.Item>
+                <Descriptions.Item label="평가 상태">
+                  {evaluationStateLabel}
+                </Descriptions.Item>
+                <Descriptions.Item label="실행 구성">
+                  {getRunExecutionConfigText(currentRun)}
+                </Descriptions.Item>
+                <Descriptions.Item label="에이전트 모드">
+                  {getAgentModeLabel(currentRun.agentId)}
+                </Descriptions.Item>
+                <Descriptions.Item label="총/완료/오류">
+                  {currentRun.totalItems} / {currentRun.doneItems} /{' '}
+                  {currentRun.errorItems}
+                </Descriptions.Item>
+                <Descriptions.Item label="LLM 평가 진행">
+                  {evaluationProgressText}
+                </Descriptions.Item>
+                <Descriptions.Item label="평가 모델">
+                  {currentRun.evalModel}
+                </Descriptions.Item>
+              </Descriptions>
+            ) : (
+              <Empty description="현재 Run이 선택되지 않았습니다. 먼저 Run을 생성하고 선택해 주세요." />
             ),
           },
         ]}
+      />
+
+      <StandardDataTable
+        tableId="validation-run-items"
+        initialColumnWidths={RUN_ITEM_INITIAL_COLUMN_WIDTHS}
+        minColumnWidth={84}
+        wrapperStyle={{ width: '100%', maxWidth: '100%' }}
+        wrapperClassName="validation-results-table-wrap"
+        className="query-management-table validation-results-table"
+        rowKey="id"
+        size="small"
+        tableLayout="fixed"
+        dataSource={runItems}
+        locale={{
+          emptyText: <Empty description="Run 결과가 없습니다." />,
+        }}
+        onRow={(row) => ({
+          onClick: () => openHistoryRow(row),
+          style: { cursor: 'pointer' },
+        })}
+        pagination={{
+          current: runItemsCurrentPage,
+          pageSize: runItemsPageSize,
+          total: runItems.length,
+          onChange: (page, nextPageSize) => {
+            if (nextPageSize !== runItemsPageSize) {
+              setRunItemsPageSize(nextPageSize);
+              setRunItemsCurrentPage(1);
+              return;
+            }
+            setRunItemsCurrentPage(page);
+          },
+        }}
+        columns={runItemColumns}
+      />
+
+      <ValidationHistoryDetailRowDrawer
+        open={drawerOpen}
+        activeTab="history"
+        historyRow={selectedHistoryRow}
+        resultsRow={null}
+        onClose={() => {
+          setDrawerOpen(false);
+          setSelectedHistoryRowId('');
+        }}
       />
 
       <StandardModal

@@ -15,12 +15,12 @@ export function useValidationSectionMeta({
   currentRun: ValidationRun | null;
 }) {
   const sectionTitle = useMemo(() => {
-    if (section === 'history') return '검증 이력';
+    if (section === 'history') return '질문 결과';
     if (section === 'history-detail') {
       if (historyDetailTab === 'results') {
         return '평가 결과';
       }
-      return '검증 이력 상세';
+      return '질문 결과 상세';
     }
     if (section === 'dashboard') return '대시보드';
     return '검증 실행';

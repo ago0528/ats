@@ -69,6 +69,7 @@ function createPromptTableColumns(
   onView: (workerType: string) => void,
   onEdit: (workerType: string) => void,
   onReset: (workerType: string) => void,
+  isFetchingWorker: (workerType: string) => boolean,
 ) {
   return [
     { key: 'workerType', title: '워커', dataIndex: 'workerType', width: 260, ellipsis: true },
@@ -78,19 +79,34 @@ function createPromptTableColumns(
       title: '작업',
       dataIndex: 'actions',
       width: 280,
-      render: (_: unknown, row: Worker) => (
-        <Space size="small">
-          <Button onClick={() => onView(row.workerType)}>
-            조회
-          </Button>
-          <Button type="primary" onClick={() => onEdit(row.workerType)}>
-            수정
-          </Button>
-          <Button onClick={() => onReset(row.workerType)}>
-            초기화
-          </Button>
-        </Space>
-      ),
+      render: (_: unknown, row: Worker) => {
+        const isFetching = isFetchingWorker(row.workerType);
+        return (
+          <Space size="small">
+            <Button
+              onClick={() => onView(row.workerType)}
+              loading={isFetching}
+              disabled={isFetching}
+            >
+              조회
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => onEdit(row.workerType)}
+              loading={isFetching}
+              disabled={isFetching}
+            >
+              수정
+            </Button>
+            <Button
+              onClick={() => onReset(row.workerType)}
+              disabled={isFetching}
+            >
+              초기화
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 }
@@ -111,8 +127,10 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const [isFetchingList, setIsFetchingList] = useState(false);
   const [isPromptSaving, setIsPromptSaving] = useState(false);
   const [editorSessionKey, setEditorSessionKey] = useState(0);
+  const [fetchingWorkerTypes, setFetchingWorkerTypes] = useState<string[]>([]);
   const closeModeRef = useRef<ModalMode | null>(null);
   const activeModalRef = useRef<ModalMode | null>(null);
+  const promptFetchLocksRef = useRef<Set<string>>(new Set());
   const diffModifiedChangeRef = useRef<{ dispose: () => void } | null>(null);
   const viewDiffEditorRef = useRef<{ layout: () => void } | null>(null);
   const viewDiffWrapperRef = useRef<HTMLDivElement | null>(null);
@@ -178,11 +196,32 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     return normalizePromptSnapshot(response.data);
   };
 
+  const setWorkerFetchingState = useCallback((workerType: string, isFetching: boolean) => {
+    setFetchingWorkerTypes((prev) => {
+      if (isFetching) {
+        if (prev.includes(workerType)) return prev;
+        return [...prev, workerType];
+      }
+      return prev.filter((item) => item !== workerType);
+    });
+  }, []);
+
+  const isWorkerFetching = useCallback(
+    (workerType: string) => fetchingWorkerTypes.includes(workerType),
+    [fetchingWorkerTypes],
+  );
+
   const openPromptModal = async (workerType: string, nextMode: ModalMode = 'view') => {
     if (!hasTokens) {
       message.warning('토큰이 없어 프롬프트 조회가 불가합니다.');
       return;
     }
+    if (promptFetchLocksRef.current.has(workerType)) {
+      return;
+    }
+
+    promptFetchLocksRef.current.add(workerType);
+    setWorkerFetchingState(workerType, true);
     setSelectedWorker(workerType);
     try {
       const nextData = await fetchPromptSnapshot(workerType);
@@ -194,6 +233,9 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     } catch (e) {
       message.error('프롬프트 조회에 실패했습니다.');
       console.error(e);
+    } finally {
+      promptFetchLocksRef.current.delete(workerType);
+      setWorkerFetchingState(workerType, false);
     }
   };
 
@@ -477,6 +519,7 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
           (workerType) => void openPromptModal(workerType, 'view'),
           (workerType) => void openPromptModal(workerType, 'edit'),
           (workerType) => void resetPrompt(workerType),
+          isWorkerFetching,
         )}
         bordered
         rowClassName="prompt-table-row"

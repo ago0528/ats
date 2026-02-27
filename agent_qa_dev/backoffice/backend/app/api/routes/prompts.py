@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -14,6 +15,7 @@ from app.models.prompt_audit_log import PromptAuditLog
 from app.models.prompt_snapshot import PromptSnapshot
 
 router = APIRouter(tags=["prompts"])
+logger = logging.getLogger(__name__)
 
 
 class PromptUpdateRequest(BaseModel):
@@ -129,24 +131,75 @@ def get_prompt(
     actor = x_actor or "unknown"
     try:
         result = adapter.get_prompt(worker_type)
-    except Exception as e:
-        raise HTTPException(500, str(e)) from e
+    except Exception:
+        logger.exception(
+            "Failed to fetch prompt from ATS. environment=%s worker_type=%s",
+            environment.value,
+            worker_type,
+        )
+        try:
+            fallback_snapshot = _find_snapshot(db, environment, worker_type)
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to load fallback prompt snapshot. environment=%s worker_type=%s",
+                environment.value,
+                worker_type,
+            )
+            fallback_snapshot = None
+
+        if fallback_snapshot is None:
+            return {
+                "before": "",
+                "after": "",
+                "currentPrompt": "",
+                "previousPrompt": "",
+            }
+
+        return {
+            "before": fallback_snapshot.previous_prompt or "",
+            "after": fallback_snapshot.current_prompt or "",
+            "currentPrompt": fallback_snapshot.current_prompt or "",
+            "previousPrompt": fallback_snapshot.previous_prompt or "",
+        }
 
     ats_current = _resolve_ats_current(result.before, result.after)
-    snapshot = _upsert_snapshot_for_get(
-        db=db,
-        environment=environment,
-        worker_type=worker_type,
-        ats_current=ats_current,
-        actor=actor,
-    )
-    _add_audit_log(db, environment, worker_type, "GET", result.before, result.after, actor)
-    db.commit()
+    previous_prompt = ""
+    try:
+        snapshot = _upsert_snapshot_for_get(
+            db=db,
+            environment=environment,
+            worker_type=worker_type,
+            ats_current=ats_current,
+            actor=actor,
+        )
+        _add_audit_log(db, environment, worker_type, "GET", result.before, result.after, actor)
+        db.commit()
+        previous_prompt = snapshot.previous_prompt or ""
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to persist prompt snapshot/audit log. environment=%s worker_type=%s",
+            environment.value,
+            worker_type,
+        )
+        try:
+            fallback_snapshot = _find_snapshot(db, environment, worker_type)
+            if fallback_snapshot is not None:
+                previous_prompt = fallback_snapshot.previous_prompt or ""
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "Failed to load fallback snapshot after persistence error. environment=%s worker_type=%s",
+                environment.value,
+                worker_type,
+            )
+
     return {
         "before": result.before,
         "after": result.after,
         "currentPrompt": ats_current,
-        "previousPrompt": snapshot.previous_prompt or "",
+        "previousPrompt": previous_prompt,
     }
 
 

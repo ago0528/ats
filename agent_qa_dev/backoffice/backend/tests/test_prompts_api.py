@@ -168,7 +168,7 @@ def test_reset_prompt_returns_current_from_ats_and_previous_from_snapshot(monkey
         db.close()
 
 
-def test_get_prompt_returns_error_when_ats_call_fails(monkeypatch):
+def test_get_prompt_returns_empty_snapshot_when_ats_call_fails_without_cache(monkeypatch):
     _mock_workers(monkeypatch)
 
     def _raise_error(self, worker_type):
@@ -179,7 +179,74 @@ def test_get_prompt_returns_error_when_ats_call_fails(monkeypatch):
 
     response = client.get("/api/v1/prompts/dev/W1")
 
-    assert response.status_code == 500
+    assert response.status_code == 200
+    assert response.json()["before"] == ""
+    assert response.json()["after"] == ""
+    assert response.json()["currentPrompt"] == ""
+    assert response.json()["previousPrompt"] == ""
+
+    db = SessionLocal()
+    try:
+        assert db.query(PromptSnapshot).count() == 0
+        assert db.query(PromptAuditLog).count() == 0
+    finally:
+        db.close()
+
+
+def test_get_prompt_returns_cached_snapshot_when_ats_call_fails(monkeypatch):
+    _mock_workers(monkeypatch)
+
+    db = SessionLocal()
+    try:
+        db.add(
+            PromptSnapshot(
+                environment=Environment.DEV,
+                worker_type="W1",
+                current_prompt="cached-current",
+                previous_prompt="cached-previous",
+                actor="seed",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    def _raise_error(self, worker_type):
+        raise RuntimeError("ATS unavailable")
+
+    monkeypatch.setattr(prompts_route.PromptApiAdapter, "get_prompt", _raise_error)
+    client = _new_client()
+
+    response = client.get("/api/v1/prompts/dev/W1")
+
+    assert response.status_code == 200
+    assert response.json()["before"] == "cached-previous"
+    assert response.json()["after"] == "cached-current"
+    assert response.json()["currentPrompt"] == "cached-current"
+    assert response.json()["previousPrompt"] == "cached-previous"
+
+
+def test_get_prompt_returns_200_when_snapshot_persistence_fails(monkeypatch):
+    _mock_workers(monkeypatch)
+    monkeypatch.setattr(
+        prompts_route.PromptApiAdapter,
+        "get_prompt",
+        lambda self, worker_type: SimpleNamespace(before="legacy-before", after="ats-current"),
+    )
+
+    def _raise_db_error(*args, **kwargs):
+        raise RuntimeError("db fail")
+
+    monkeypatch.setattr(prompts_route, "_add_audit_log", _raise_db_error)
+    client = _new_client()
+
+    response = client.get("/api/v1/prompts/dev/W1")
+
+    assert response.status_code == 200
+    assert response.json()["before"] == "legacy-before"
+    assert response.json()["after"] == "ats-current"
+    assert response.json()["currentPrompt"] == "ats-current"
+    assert response.json()["previousPrompt"] == ""
 
     db = SessionLocal()
     try:

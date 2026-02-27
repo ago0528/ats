@@ -35,9 +35,13 @@ agent_qa_dev/
 - 엔트리 및 앱 공통: `backoffice/frontend/src/app`
 - 앱 내비게이션/경로 해석: `backoffice/frontend/src/app/navigation`
 - 기능 페이지: `backoffice/frontend/src/features`
+- 검증 운영 상태/액션 훅: `backoffice/frontend/src/features/validations/hooks`
 - 테스트 세트(실제 CRUD 페이지): `backoffice/frontend/src/features/test-sets`
+- 테스트 세트 전용 분리 구조: `backoffice/frontend/src/features/test-sets/{hooks,components,utils}`
+- 프롬프트 관리 분리 구조: `backoffice/frontend/src/features/prompts/{hooks,components,utils}`
 - 공통 컴포넌트: `backoffice/frontend/src/components/common`
 - 공통 유틸: `backoffice/frontend/src/shared/utils`
+- 검증 설정 공통 유틸: `backoffice/frontend/src/shared/utils/validationConfig.ts`
 - API 클라이언트: `backoffice/frontend/src/api`
 
 ### Backend

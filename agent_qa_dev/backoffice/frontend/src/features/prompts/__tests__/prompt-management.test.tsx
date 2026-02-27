@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWorkerLabel } from '../PromptManagementPage';
+import { buildWorkerLabel } from '../utils/promptViewModel';
 
 describe('prompt management', () => {
   it('formats worker label', () => {

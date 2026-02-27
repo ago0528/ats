@@ -59,12 +59,14 @@ class RunSecretPayload(BaseModel):
     cms: str
     mrs: str
     idempotencyKey: Optional[str] = None
+    itemIds: list[str] = Field(default_factory=list)
 
 
 class EvaluatePayload(BaseModel):
     openaiModel: Optional[str] = None
     maxChars: int = 15000
     maxParallel: Optional[int] = None
+    itemIds: list[str] = Field(default_factory=list)
 
 
 class SaveQueryPayload(BaseModel):
@@ -78,7 +80,8 @@ class SaveQueryPayload(BaseModel):
 
 
 class UpdateRunItemSnapshotPayload(BaseModel):
-    expectedResult: str = ""
+    expectedResult: Optional[str] = None
+    latencyClass: Optional[str] = None
 
 
 class ValidationRunUpdateRequest(BaseModel):
@@ -127,6 +130,43 @@ def _serialize_json(value: str) -> Any:
         return json.loads(text)
     except Exception:
         return text
+
+
+def _extract_item_latency_class(criteria_text: Optional[str]) -> Optional[str]:
+    payload = _serialize_json(criteria_text or "")
+    if not isinstance(payload, dict):
+        return None
+    meta_payload = payload.get("meta")
+    if not isinstance(meta_payload, dict):
+        return None
+    raw_value = str(meta_payload.get("latencyClass") or "").strip().upper()
+    if raw_value in {"SINGLE", "MULTI", "UNCLASSIFIED"}:
+        return raw_value
+    return None
+
+
+def _execution_stale_threshold_sec(timeout_ms: Optional[int]) -> int:
+    timeout_sec = max(1, int((timeout_ms or 0) / 1000))
+    return max(300, timeout_sec * 3)
+
+
+def _reconcile_stuck_execution_run(repo: ValidationRunRepository, run) -> bool:
+    if run.status != RunStatus.RUNNING:
+        return False
+
+    now = dt.datetime.utcnow()
+    threshold_sec = _execution_stale_threshold_sec(run.timeout_ms)
+    latest_executed_at = repo.latest_item_executed_at(run.id)
+    reference_time = latest_executed_at or run.started_at or run.created_at
+    if reference_time is None:
+        return False
+
+    elapsed_sec = (now - reference_time).total_seconds()
+    if elapsed_sec <= threshold_sec:
+        return False
+
+    repo.set_status(run.id, RunStatus.FAILED)
+    return True
 
 
 def _metric_scores(value: str) -> dict[str, float]:
@@ -456,8 +496,10 @@ def list_validation_runs(
         limit=limit,
     )
     settings_by_env: dict[Environment, object] = {}
-    defaults_changed = False
+    rows_changed = False
     for row in rows:
+        if _reconcile_stuck_execution_run(repo, row):
+            rows_changed = True
         cached_setting = settings_by_env.get(row.environment)
         if cached_setting is None:
             cached_setting = setting_repo.get_or_create(row.environment)
@@ -471,8 +513,8 @@ def list_validation_runs(
             agent_parallel_calls_default=cached_setting.agent_parallel_calls_default,
             timeout_ms_default=cached_setting.timeout_ms_default,
         ):
-            defaults_changed = True
-    if defaults_changed:
+            rows_changed = True
+    if rows_changed:
         db.commit()
     return {
         "items": [repo.build_run_payload(row) for row in rows],
@@ -593,6 +635,7 @@ def get_validation_run(run_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Run not found")
 
     setting = setting_repo.get_or_create(run.environment)
+    run_changed = _reconcile_stuck_execution_run(repo, run)
     if _normalize_run_defaults(
         run,
         test_model_default=setting.test_model_default,
@@ -602,6 +645,8 @@ def get_validation_run(run_id: str, db: Session = Depends(get_db)):
         agent_parallel_calls_default=setting.agent_parallel_calls_default,
         timeout_ms_default=setting.timeout_ms_default,
     ):
+        run_changed = True
+    if run_changed:
         db.commit()
     return repo.build_run_payload(run)
 
@@ -679,6 +724,7 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                 "rawJson": row.raw_json,
                 "executedAt": row.executed_at,
                 "responseTimeSec": row.latency_ms / 1000 if row.latency_ms is not None else None,
+                "latencyClass": _extract_item_latency_class(row.applied_criteria_json),
                 "logicEvaluation": (
                     {
                         "result": logic_map[row.id].result,
@@ -714,8 +760,25 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
     run = repo.get_run(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
-    if run.status != RunStatus.PENDING:
-        raise HTTPException(status_code=409, detail="Only PENDING runs can be executed")
+
+    target_item_ids = list(dict.fromkeys([str(item_id).strip() for item_id in (body.itemIds or []) if str(item_id).strip()]))
+    if target_item_ids:
+        if run.status == RunStatus.RUNNING and _reconcile_stuck_execution_run(repo, run):
+            db.commit()
+            run = repo.get_run(run_id) or run
+        if run.status == RunStatus.RUNNING:
+            raise HTTPException(status_code=409, detail="Run is still executing")
+        if run.eval_status == EvalStatus.RUNNING:
+            raise HTTPException(status_code=409, detail="Evaluation is already running")
+        target_items = repo.list_items_by_ids(run.id, target_item_ids)
+        if len(target_items) != len(target_item_ids):
+            raise HTTPException(status_code=400, detail="Some itemIds were not found in this run")
+        repo.reset_items_for_execution(run.id, target_item_ids)
+        repo.clear_score_snapshots_for_run(run.id)
+        repo.reset_eval_state_to_pending(run.id)
+    else:
+        if run.status != RunStatus.PENDING:
+            raise HTTPException(status_code=409, detail="Only PENDING runs can be executed")
 
     options = json.loads(run.options_json or "{}")
     cfg = get_env_config(run.environment)
@@ -738,6 +801,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
             # Query-level parallelism (not room count).
             run.agent_parallel_calls,
             run.timeout_ms,
+            target_item_ids or None,
         )
 
     repo.set_status(run.id, RunStatus.RUNNING)
@@ -759,9 +823,24 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
         raise HTTPException(status_code=409, detail="Run is still executing")
     if run.eval_status == EvalStatus.RUNNING:
         raise HTTPException(status_code=409, detail="Evaluation is already running")
-    if repo.count_done_items(run.id) == 0 and repo.count_error_items(run.id) == 0:
+
+    target_item_ids = list(dict.fromkeys([str(item_id).strip() for item_id in (body.itemIds or []) if str(item_id).strip()]))
+    if target_item_ids:
+        run_items = repo.list_items_by_ids(run.id, target_item_ids)
+        if len(run_items) != len(target_item_ids):
+            raise HTTPException(status_code=400, detail="Some itemIds were not found in this run")
+    else:
+        run_items = repo.list_items(run.id, limit=100000)
+
+    has_execution_result = any(
+        bool(item.executed_at)
+        or bool(str(item.error or "").strip())
+        or bool(str(item.raw_response or "").strip())
+        for item in run_items
+    )
+    if not has_execution_result:
         raise HTTPException(status_code=409, detail="No execution results found for evaluation")
-    run_items = repo.list_items(run.id, limit=100000)
+
     missing_expected_items = [
         item for item in run_items if not str(item.expected_result_snapshot or "").strip()
     ]
@@ -795,6 +874,7 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
             eval_model,
             body.maxChars,
             int(eval_parallel),
+            target_item_ids or None,
         )
 
     repo.set_eval_status(run.id, EvalStatus.RUNNING)
@@ -1057,9 +1137,27 @@ def update_run_item_snapshot(run_id: str, item_id: str, body: UpdateRunItemSnaps
     if item is None or item.run_id != run.id:
         raise HTTPException(status_code=404, detail="Run item not found")
 
+    payload = body.model_dump(exclude_unset=True)
+    has_latency_class = "latencyClass" in payload
+    next_latency_class: Optional[str] = None
+    if has_latency_class:
+        raw_latency_class = str(payload.get("latencyClass") or "").strip().upper()
+        if not raw_latency_class:
+            next_latency_class = None
+        elif raw_latency_class in {"SINGLE", "MULTI", "UNCLASSIFIED"}:
+            next_latency_class = raw_latency_class
+        else:
+            raise HTTPException(status_code=400, detail="latencyClass must be SINGLE, MULTI, or UNCLASSIFIED")
+
     updated = repo.update_item_snapshots(
         item.id,
-        expected_result_snapshot=body.expectedResult,
+        expected_result_snapshot=(
+            str(payload.get("expectedResult") or "")
+            if "expectedResult" in payload
+            else None
+        ),
+        latency_class=next_latency_class,
+        update_latency_class=has_latency_class,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="Run item not found")
@@ -1069,6 +1167,7 @@ def update_run_item_snapshot(run_id: str, item_id: str, body: UpdateRunItemSnaps
         "id": updated.id,
         "runId": updated.run_id,
         "expectedResult": updated.expected_result_snapshot,
+        "latencyClass": _extract_item_latency_class(updated.applied_criteria_json),
     }
 
 

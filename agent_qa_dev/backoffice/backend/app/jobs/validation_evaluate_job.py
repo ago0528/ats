@@ -243,6 +243,7 @@ async def evaluate_validation_run(
     openai_model: str,
     max_chars: int,
     max_parallel: int,
+    item_ids: Optional[list[str]] = None,
 ):
     db = SessionLocal()
     repo = ValidationRunRepository(db)
@@ -250,7 +251,18 @@ async def evaluate_validation_run(
     db.commit()
 
     try:
-        run_items = repo.list_items(run_id, limit=100000)
+        all_run_items = repo.list_items(run_id, limit=100000)
+        if not all_run_items:
+            repo.set_eval_status(run_id, EvalStatus.DONE)
+            db.commit()
+            return
+
+        target_item_ids = list(dict.fromkeys([str(item_id).strip() for item_id in (item_ids or []) if str(item_id).strip()]))
+        run_items = (
+            repo.list_items_by_ids(run_id, target_item_ids)
+            if target_item_ids
+            else all_run_items
+        )
         if not run_items:
             repo.set_eval_status(run_id, EvalStatus.DONE)
             db.commit()
@@ -458,7 +470,7 @@ async def evaluate_validation_run(
             )
         db.commit()
 
-        _build_score_snapshots(repo, run_id, run_items)
+        _build_score_snapshots(repo, run_id, all_run_items)
         db.commit()
 
         repo.set_eval_status(run_id, EvalStatus.DONE)

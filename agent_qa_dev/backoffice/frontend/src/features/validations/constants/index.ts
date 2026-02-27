@@ -30,11 +30,11 @@ export const RUN_ITEM_INITIAL_COLUMN_WIDTHS = {
   ordinal: 72,
   queryText: 320,
   roomRepeat: 96,
-  rawResponse: 260,
-  error: 220,
-  logic: 90,
-  llm: 110,
-  actions: 140,
+  responseTimeSec: 140,
+  status: 120,
+  executedAt: 180,
+  evaluatedAt: 180,
+  actions: 180,
 };
 
 export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {

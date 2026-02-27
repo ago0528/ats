@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Tag, Tooltip, Typography } from 'antd';
+import { Button, Space, Tag, Tooltip, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 
 import type { ValidationRun, ValidationRunItem } from '../../../api/types/validation';
@@ -16,6 +16,12 @@ import {
   getRunExecutionConfigText,
 } from '../utils/runDisplay';
 import { getEvaluationStateLabel, getExecutionStateLabel } from '../utils/runStatus';
+import {
+  getAgentModeLabel,
+  getRunItemStatus,
+  getRunItemStatusColor,
+  getRunItemStatusLabel,
+} from '../utils/historyDetailDisplay';
 
 function renderEllipsisCell(value?: string, type?: 'danger') {
   const text = String(value ?? '').trim();
@@ -101,10 +107,18 @@ const getLlmEvaluationTag = (value?: string) => {
 
 type UseValidationColumnsOptions = {
   testSetNameById?: Record<string, string>;
+  canReexecuteRunItem?: (row: ValidationRunItem) => boolean;
+  canReevaluateRunItem?: (row: ValidationRunItem) => boolean;
+  onReexecuteRunItem?: (row: ValidationRunItem) => void;
+  onReevaluateRunItem?: (row: ValidationRunItem) => void;
 };
 
 export function useValidationColumns(options: UseValidationColumnsOptions = {}) {
   const testSetNameById = options.testSetNameById ?? {};
+  const canReexecuteRunItem = options.canReexecuteRunItem;
+  const canReevaluateRunItem = options.canReevaluateRunItem;
+  const onReexecuteRunItem = options.onReexecuteRunItem;
+  const onReevaluateRunItem = options.onReevaluateRunItem;
 
   const runItemColumns = useMemo<ColumnsType<ValidationRunItem>>(
     () => [
@@ -129,35 +143,71 @@ export function useValidationColumns(options: UseValidationColumnsOptions = {}) 
         render: (_, row: ValidationRunItem) => `${row.conversationRoomIndex}/${row.repeatIndex}`,
       },
       {
-        key: 'rawResponse',
-        title: '응답',
-        dataIndex: 'rawResponse',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.rawResponse,
-        ellipsis: true,
-        render: (value: string) => renderEllipsisCell(value),
+        key: 'responseTimeSec',
+        title: '응답속도',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.responseTimeSec,
+        render: (_, row: ValidationRunItem) =>
+          getResponseTimeText(row.responseTimeSec, row.latencyMs),
       },
       {
-        key: 'error',
-        title: '오류',
-        dataIndex: 'error',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.error,
-        ellipsis: true,
-        render: (value: string) => renderEllipsisCell(value, 'danger'),
+        key: 'status',
+        title: '상태',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.status,
+        render: (_, row: ValidationRunItem) => {
+          const status = getRunItemStatus(row);
+          return (
+            <Tag color={getRunItemStatusColor(status)} style={{ marginInlineEnd: 0 }}>
+              {getRunItemStatusLabel(status)}
+            </Tag>
+          );
+        },
       },
       {
-        key: 'logic',
-        title: 'Logic',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.logic,
-        render: (_, row: ValidationRunItem) => getLogicResultTag(row.logicEvaluation?.result),
+        key: 'executedAt',
+        title: '실행일시',
+        dataIndex: 'executedAt',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.executedAt,
+        render: (value?: string | null) => formatDateTime(value || undefined),
       },
       {
-        key: 'llm',
-        title: 'LLM',
-        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.llm,
-        render: (_, row: ValidationRunItem) => getLlmEvaluationTag(row.llmEvaluation?.status),
+        key: 'evaluatedAt',
+        title: '평가일시',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.evaluatedAt,
+        render: (_, row: ValidationRunItem) => formatDateTime(row.llmEvaluation?.evaluatedAt),
+      },
+      {
+        key: 'actions',
+        title: '작업',
+        width: RUN_ITEM_INITIAL_COLUMN_WIDTHS.actions,
+        render: (_, row: ValidationRunItem) => (
+          <Space size={4}>
+            <Button
+              size="small"
+              type="link"
+              disabled={canReexecuteRunItem ? !canReexecuteRunItem(row) : false}
+              onClick={(event) => {
+                event.stopPropagation();
+                onReexecuteRunItem?.(row);
+              }}
+            >
+              재실행
+            </Button>
+            <Button
+              size="small"
+              type="link"
+              disabled={canReevaluateRunItem ? !canReevaluateRunItem(row) : false}
+              onClick={(event) => {
+                event.stopPropagation();
+                onReevaluateRunItem?.(row);
+              }}
+            >
+              재평가
+            </Button>
+          </Space>
+        ),
       },
     ],
-    [],
+    [canReevaluateRunItem, canReexecuteRunItem, onReevaluateRunItem, onReexecuteRunItem],
   );
 
   const historyDetailItemColumns = useMemo<ColumnsType<ValidationRunItem>>(
@@ -293,7 +343,7 @@ export function useValidationColumns(options: UseValidationColumnsOptions = {}) 
         dataIndex: 'agentId',
         width: HISTORY_INITIAL_COLUMN_WIDTHS.agentMode,
         ellipsis: true,
-        render: (value: string) => renderEllipsisCell(value),
+        render: (value: string) => renderEllipsisCell(getAgentModeLabel(value)),
       },
       {
         key: 'items',

@@ -1,6 +1,6 @@
 # Validation Runs API 계약 (run 목록 조회)
 
-본 문서는 `검증 이력` 화면에서 사용하는 `GET /validation-runs` 조회 API의 파라미터/응답 계약을 정리한다.
+본 문서는 `질문 결과` 화면에서 사용하는 `GET /validation-runs` 조회 API의 파라미터/응답 계약을 정리한다.
 
 ## 1) Endpoint
 
@@ -101,11 +101,51 @@
 
 ---
 
-## 5) 기대결과 일괄 업데이트 API
+## 5) 부분 실행/부분 평가 API (`itemIds`)
 
-검증 이력 상세에서 Run Item 스냅샷(`expected_result_snapshot`)을 대량 수정하기 위한 계약이다.
+워크벤치의 질의별 `재실행`/`재평가` 동작을 위한 계약이다. `itemIds`는 같은 run 안의 `validation_run_items.id` 목록을 의미한다.
 
-### 5-1) 템플릿 다운로드
+### 5-1) 부분 실행
+
+- Method: `POST`
+- Path: `/api/v1/validation-runs/{run_id}/execute`
+- Body:
+  - 공통: `bearer`, `cms`, `mrs`
+  - 선택: `itemIds?: string[]`
+
+동작:
+- `itemIds` 미지정: 기존과 동일하게 전체 실행 (`run.status == PENDING` 필요)
+- `itemIds` 지정:
+  - 대상 item 유효성 검증 (모두 해당 run 소속이어야 함)
+  - 대상 item 실행 결과/평가 결과 스냅샷 초기화 후 부분 실행
+  - `run.status == RUNNING` 또는 `run.eval_status == RUNNING`이면 `409`
+  - 단, `run.status == RUNNING` 이지만 고착(stale)으로 판단되면 자동 복구 후 부분 실행을 허용
+    - stale 기준: `max(300초, timeoutMs*3)` 동안 실행 시각 진행이 없음
+    - 복구 시 run status는 `FAILED`로 정리된 뒤 요청된 `itemIds` 부분 실행을 시작
+
+### 5-2) 부분 평가
+
+- Method: `POST`
+- Path: `/api/v1/validation-runs/{run_id}/evaluate`
+- Body:
+  - 선택: `openaiModel`, `maxChars`, `maxParallel`
+  - 선택: `itemIds?: string[]`
+
+동작:
+- `itemIds` 미지정: 기존과 동일한 전체 평가
+- `itemIds` 지정:
+  - 대상 item 유효성 검증 (모두 해당 run 소속이어야 함)
+  - 대상 item에 실행 결과가 있어야 함 (`executedAt`/`error`/`rawResponse` 중 하나)
+  - 대상 item의 `expected_result_snapshot` 누락 시 `409 expected_result_missing`
+  - 평가 완료 후 run 전체 스냅샷을 재집계
+
+---
+
+## 6) 기대결과 일괄 업데이트 API
+
+질문 결과 상세에서 Run Item 스냅샷(`expected_result_snapshot`)을 대량 수정하기 위한 계약이다.
+
+### 6-1) 템플릿 다운로드
 
 - Method: `GET`
 - Path: `/api/v1/validation-runs/{run_id}/expected-results/template.csv`
@@ -118,7 +158,7 @@
   - `기존 기대결과`
   - `기대결과`
 
-### 5-2) Preview
+### 6-2) Preview
 
 - Method: `POST`
 - Path: `/api/v1/validation-runs/{run_id}/expected-results/bulk-update/preview`
@@ -156,7 +196,7 @@
 - `duplicate-item-id`
 - `unmapped-item-id`
 
-### 5-3) Apply
+### 6-3) Apply
 
 - Method: `POST`
 - Path: `/api/v1/validation-runs/{run_id}/expected-results/bulk-update`
@@ -193,11 +233,11 @@
 
 ---
 
-## 6) GNB 진행 알림 API
+## 7) GNB 진행 알림 API
 
 검증 화면을 벗어나 있어도 현재 실행/평가 중인 Run을 GNB에서 확인하기 위한 계약이다.
 
-### 6-1) 진행 중 Run 조회
+### 7-1) 진행 중 Run 조회
 
 - Method: `GET`
 - Path: `/api/v1/validation-run-activity`
@@ -237,7 +277,7 @@
 오류:
 - `actorKey` 누락/공백: `400`
 
-### 6-2) 읽음 처리
+### 7-2) 읽음 처리
 
 - Method: `POST`
 - Path: `/api/v1/validation-run-activity/read`

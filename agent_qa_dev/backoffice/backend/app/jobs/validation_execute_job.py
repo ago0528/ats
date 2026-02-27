@@ -39,6 +39,7 @@ async def execute_validation_run(
     run_default_target_assistant: Optional[str],
     max_parallel: int,
     timeout_ms: int,
+    item_ids: Optional[list[str]] = None,
 ):
     db = SessionLocal()
     repo = ValidationRunRepository(db)
@@ -47,7 +48,12 @@ async def execute_validation_run(
     db.commit()
 
     try:
-        run_items = repo.list_items(run_id, limit=100000)
+        target_item_ids = list(dict.fromkeys([str(item_id).strip() for item_id in (item_ids or []) if str(item_id).strip()]))
+        run_items = (
+            repo.list_items_by_ids(run_id, target_item_ids)
+            if target_item_ids
+            else repo.list_items(run_id, limit=100000)
+        )
         if not run_items:
             repo.set_status(run_id, RunStatus.DONE)
             db.commit()

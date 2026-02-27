@@ -1,6 +1,6 @@
 import { Button, Dropdown, Space, Tag, Typography } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownloadOutlined, EllipsisOutlined } from '@ant-design/icons';
+import { EllipsisOutlined } from '@ant-design/icons';
 
 import { buildValidationRunExportUrl } from '../../../api/validation';
 import type { ValidationRun } from '../../../api/types/validation';
@@ -39,14 +39,19 @@ export function ValidationHistoryDetailHeaderBar({
 
   const menuItems: MenuProps['items'] = [
     {
-      key: 'open-run-workspace',
-      label: '검증 실행에서 이 run 열기',
-      disabled: isDisabled,
+      key: 'download-excel',
+      label: '엑셀 다운로드',
+      disabled: isDownloadDisabled,
     },
     {
       key: 'download-debug',
       label: '디버그 다운로드',
       disabled: isDownloadDisabled,
+    },
+    {
+      key: 'expected-bulk-update',
+      label: '기대결과 일괄 업데이트',
+      disabled: isDisabled || !canOpenExpectedBulkUpdate,
     },
     {
       type: 'divider',
@@ -55,11 +60,6 @@ export function ValidationHistoryDetailHeaderBar({
       key: 'update-run',
       label: 'Run 수정',
       disabled: isDisabled || !canEditCurrentRun,
-    },
-    {
-      key: 'expected-bulk-update',
-      label: '기대결과 일괄 업데이트',
-      disabled: isDisabled || !canOpenExpectedBulkUpdate,
     },
     {
       key: 'delete-run',
@@ -71,11 +71,8 @@ export function ValidationHistoryDetailHeaderBar({
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
     if (!currentRun) return;
-    if (key === 'open-run-workspace') {
-      onOpenInRunWorkspace?.({
-        runId: currentRun.id,
-        testSetId: currentRun.testSetId ?? undefined,
-      });
+    if (key === 'download-excel') {
+      window.location.href = buildValidationRunExportUrl(currentRun.id);
       return;
     }
     if (key === 'download-debug') {
@@ -109,11 +106,16 @@ export function ValidationHistoryDetailHeaderBar({
         <Space>
           <Button
             type="primary"
-            icon={<DownloadOutlined />}
-            href={currentRun ? buildValidationRunExportUrl(currentRun.id) : undefined}
-            disabled={isDownloadDisabled}
+            disabled={isDisabled}
+            onClick={() => {
+              if (!currentRun) return;
+              onOpenInRunWorkspace?.({
+                runId: currentRun.id,
+                testSetId: currentRun.testSetId ?? undefined,
+              });
+            }}
           >
-            엑셀 다운로드
+            검증 실행에서 이 Run 열기
           </Button>
           <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
             <Button icon={<EllipsisOutlined />} />

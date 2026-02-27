@@ -40,6 +40,12 @@ import {
   RUN_ITEM_INITIAL_COLUMN_WIDTHS,
 } from '../constants';
 import {
+  CONTEXT_SAMPLE,
+  normalizeAgentModeValue,
+  parseContextJson,
+  stringifyContext,
+} from '../../../shared/utils/validationConfig';
+import {
   getEvaluationProgressText,
   getEvaluationStateLabel,
   getExecutionStateLabel,
@@ -74,61 +80,6 @@ export type RunCreateOverrides = {
   conversationRoomCount?: number;
   agentParallelCalls?: number;
   timeoutMs?: number;
-};
-
-const normalizeAgentModeValue = (value?: string) => {
-  const trimmed = (value || '').trim();
-  if (!trimmed) {
-    return DEFAULT_AGENT_MODE_VALUE;
-  }
-  if (trimmed === 'ORCHESTRATOR_WORKER_V3') {
-    return DEFAULT_AGENT_MODE_VALUE;
-  }
-  return trimmed;
-};
-
-const CONTEXT_SAMPLE =
-  '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
-
-const parseContextJson = (raw?: string) => {
-  const text = (raw || '').trim();
-  if (!text) {
-    return { parsedContext: undefined as Record<string, unknown> | undefined };
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (
-      parsed === null ||
-      typeof parsed !== 'object' ||
-      Array.isArray(parsed)
-    ) {
-      return {
-        parsedContext: undefined,
-        parseError: 'context는 JSON 객체 형태여야 합니다.',
-      };
-    }
-    return { parsedContext: parsed as Record<string, unknown> };
-  } catch (error) {
-    return {
-      parsedContext: undefined,
-      parseError:
-        `context JSON 형식이 올바르지 않습니다. ${error instanceof Error ? error.message : ''}`.trim(),
-    };
-  }
-};
-
-const stringifyContext = (value?: unknown) => {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  if (typeof value === 'string') {
-    return value.trim();
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return '';
-  }
 };
 
 type OverrideFormValues = RunCreateOverrides & {
@@ -259,7 +210,7 @@ export function ValidationRunSection({
       return parsed;
     };
     form.setFieldsValue({
-      agentId: normalizeAgentModeValue(config?.agentId),
+      agentId: normalizeAgentModeValue(config?.agentId, DEFAULT_AGENT_MODE_VALUE),
       contextJson: stringifyContext(config?.context),
       evalModel: config?.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: toNumber(config?.repeatInConversation),
@@ -293,7 +244,7 @@ export function ValidationRunSection({
     form.resetFields();
     form.setFieldsValue({
       name: currentRun.name || '',
-      agentId: normalizeAgentModeValue(currentRun.agentId),
+      agentId: normalizeAgentModeValue(currentRun.agentId, DEFAULT_AGENT_MODE_VALUE),
       evalModel: currentRun.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: currentRun.repeatInConversation,
       conversationRoomCount: currentRun.conversationRoomCount,

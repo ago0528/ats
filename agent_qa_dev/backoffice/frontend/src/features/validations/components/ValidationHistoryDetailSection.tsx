@@ -33,6 +33,12 @@ import {
   DEFAULT_EVAL_MODEL_VALUE,
   EVAL_MODEL_OPTIONS,
 } from '../constants';
+import {
+  CONTEXT_SAMPLE,
+  normalizeAgentModeValue,
+  parseContextJson,
+  stringifyContext,
+} from '../../../shared/utils/validationConfig';
 import type { HistoryDetailTab } from '../types';
 import { canDeleteRun, canUpdateRun } from '../utils/runWorkbench';
 import { ValidationHistoryDetailHeaderBar } from './ValidationHistoryDetailHeaderBar';
@@ -51,46 +57,6 @@ import {
 import { formatDateTime, toTimestamp } from '../../../shared/utils/dateTime';
 import { getAgentModeLabel, getLastUpdatedAt, getModelLabel, NOT_AGGREGATED_LABEL } from '../utils/historyDetailDisplay';
 
-const CONTEXT_SAMPLE =
-  '{\n  "recruitPlanId": 1234,\n  "채용명": "2026년 상반기 채용"\n}';
-
-const parseContextJson = (raw?: string) => {
-  const text = (raw || '').trim();
-  if (!text) {
-    return { parsedContext: undefined as Record<string, unknown> | undefined };
-  }
-  try {
-    const parsed = JSON.parse(text);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return {
-        parsedContext: undefined,
-        parseError: 'context는 JSON 객체 형태여야 합니다.',
-      };
-    }
-    return { parsedContext: parsed as Record<string, unknown> };
-  } catch (error) {
-    return {
-      parsedContext: undefined,
-      parseError:
-        `context JSON 형식이 올바르지 않습니다. ${error instanceof Error ? error.message : ''}`.trim(),
-    };
-  }
-};
-
-const stringifyContext = (value?: unknown) => {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  if (typeof value === 'string') {
-    return value.trim();
-  }
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return '';
-  }
-};
-
 const formatRelativeUpdatedTime = (updatedAt?: string | null) => {
   const ts = toTimestamp(updatedAt || null);
   if (!ts) return NOT_AGGREGATED_LABEL;
@@ -104,16 +70,6 @@ const formatRelativeUpdatedTime = (updatedAt?: string | null) => {
   return `${Math.floor(diffSec / 31536000)}년 전`;
 };
 
-const normalizeAgentModeValue = (value?: string) => {
-  const trimmed = (value || '').trim();
-  if (!trimmed) {
-    return DEFAULT_AGENT_MODE_VALUE;
-  }
-  if (trimmed === 'ORCHESTRATOR_WORKER_V3') {
-    return DEFAULT_AGENT_MODE_VALUE;
-  }
-  return trimmed;
-};
 
 const EXPECTED_BULK_STATUS_LABEL: Record<string, string> = {
   'planned-update': '업데이트 예정',
@@ -281,7 +237,7 @@ export function ValidationHistoryDetailSection({
     form.resetFields();
     form.setFieldsValue({
       name: currentRun.name || '',
-      agentId: normalizeAgentModeValue(currentRun.agentId),
+      agentId: normalizeAgentModeValue(currentRun.agentId, DEFAULT_AGENT_MODE_VALUE),
       evalModel: currentRun.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: currentRun.repeatInConversation,
       conversationRoomCount: currentRun.conversationRoomCount,

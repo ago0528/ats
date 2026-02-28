@@ -44,13 +44,6 @@ const toFixedSeconds = (value?: number | null) => {
   return `${normalized.toFixed(3)}초`;
 };
 
-const toFixedRate = (value?: number | null) => {
-  if (!value && value !== 0) return null;
-  const normalized = Number(value);
-  if (!Number.isFinite(normalized)) return null;
-  return `${normalized.toFixed(3)}%`;
-};
-
 const toFixedScore = (value?: number | null) => {
   if (!value && value !== 0) return null;
   const normalized = Number(value);
@@ -83,7 +76,6 @@ type ValidationRunAggregateSummary = {
   totalResponseTimeSecText: string;
   responseTimeP50SecText: string;
   responseTimeP95SecText: string;
-  logicPassRateText: string;
   llmDoneRateText: string;
   llmTotalScoreAvgText: string;
   llmPassRateText: string;
@@ -243,16 +235,6 @@ export const getValidationRunAggregateSummary = (
   const responseTimeP50SecText = responseTimes.length ? toFixedSeconds(quantile(responseTimes, 0.5)) : null;
   const responseTimeP95SecText = responseTimes.length ? toFixedSeconds(quantile(responseTimes, 0.95)) : null;
 
-  const logicPassRateText =
-    toFixedRate(currentRun?.scoreSummary?.logicPassRate) || (() => {
-      const total = totalItems;
-      if (!total) return null;
-      const passCount = runItems.filter(
-        (item) => (item.logicEvaluation?.result || '').toUpperCase() === 'PASS',
-      ).length;
-      return toRatePercent(passCount, total);
-    })() || '-';
-
   const llmDoneCount = Math.max(currentRun?.llmDoneItems ?? countLlmDone(runItems), 0);
   const llmDoneRateText = toRatePercent(llmDoneCount, totalItems) || '-';
 
@@ -289,7 +271,6 @@ export const getValidationRunAggregateSummary = (
     totalResponseTimeSecText: totalResponseTimeSec || '-',
     responseTimeP50SecText: responseTimeP50SecText || '-',
     responseTimeP95SecText: responseTimeP95SecText || '-',
-    logicPassRateText: logicPassRateText || '-',
     llmDoneRateText: llmDoneRateText || '-',
     llmTotalScoreAvgText: llmTotalScoreAvgText || '-',
     llmPassRateText: llmPassRateText || '-',

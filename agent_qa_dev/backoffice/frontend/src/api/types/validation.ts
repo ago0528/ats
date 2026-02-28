@@ -18,16 +18,11 @@ export type ValidationQuery = {
   category: QueryCategory;
   groupId?: string | null;
   groupName?: string;
-  logicFieldPath: string;
-  logicExpectedValue: string;
-  contextJson: string;
-  targetAssistant: string;
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
   latestRunSummary?: {
     executedAt?: string;
-    logicResult?: string;
     llmStatus?: string;
   };
   testSetUsage?: {
@@ -141,8 +136,6 @@ export type ValidationRun = {
     totalItems: number;
     executedItems: number;
     errorItems: number;
-    logicPassItems: number;
-    logicPassRate: number;
     llmDoneItems: number;
     llmMetricAverages: Record<string, number>;
     llmTotalScoreAvg: number | null;
@@ -173,10 +166,6 @@ export type ValidationRunItem = {
   queryText: string;
   expectedResult: string;
   category: QueryCategory;
-  logicFieldPath: string;
-  logicExpectedValue: string;
-  contextJson?: string;
-  targetAssistant?: string;
   conversationRoomIndex: number;
   repeatIndex: number;
   // Conversation ID from each executed item. Same room does not guarantee a shared ID.
@@ -188,12 +177,6 @@ export type ValidationRunItem = {
   error: string;
   rawJson: string;
   executedAt?: string | null;
-  logicEvaluation?: {
-    result: string;
-    evalItems: Record<string, unknown> | string;
-    failReason: string;
-    evaluatedAt?: string;
-  } | null;
   llmEvaluation?: {
     status: string;
     evalModel: string;
@@ -277,8 +260,6 @@ export type ValidationRunCreateRequest = {
     queryText: string;
     expectedResult?: string;
     category?: QueryCategory;
-    logicFieldPath?: string;
-    logicExpectedValue?: string;
   };
 };
 
@@ -314,7 +295,6 @@ export type ValidationTestSetItem = {
   category?: QueryCategory;
   groupId?: string | null;
   groupName?: string;
-  targetAssistant?: string;
 };
 
 export type ValidationTestSet = {

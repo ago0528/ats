@@ -1,6 +1,6 @@
 # Backoffice 데이터 테이블 정의서 (PM Friendly)
 
-- 최신 갱신일: 2026-02-25
+- 최신 갱신일: 2026-02-28
 - 대상: PM, PO, QA, 운영 담당자
 - 스키마 기준: `backoffice/backend/app/models/*.py` + `backoffice/backend/app/main.py` startup 보정 + `backoffice/backend/backoffice.db`
 
@@ -24,7 +24,7 @@
 11. `validation_run_activity_reads`
 12. `validation_run_items`
 13. `validation_llm_evaluations`
-14. `validation_logic_evaluations`
+14. `validation_logic_evaluations` (DB 잔존, 미사용)
 15. `validation_score_snapshots`
 16. `automation_jobs`
 
@@ -207,7 +207,7 @@
 ### 테이블 개요
 
 - Table name: `validation_queries`
-- Business purpose: 검증에 사용하는 질의 원본 정의(질의문/기대결과/로직검증 기준/실행 메타)를 저장
+- Business purpose: 검증에 사용하는 질의 원본 정의(질의문/기대결과/카테고리/그룹)를 저장
 - Primary key: `id`
 - Important relationships:
   - `group_id -> validation_query_groups.id` (N:1)
@@ -228,10 +228,10 @@
 | `category`               | `varchar(40)`  | No       | `Happy path` (app)     | 시나리오 분류                     | `Edge case`                            | index             |
 | `group_id`               | `varchar(36)`  | No       | 없음                   | 소속 질의 그룹 ID                 | `af247d45-2821-4879-8f2b-c6dd63ae88c6` | FK, index         |
 | `llm_eval_criteria_json` | `text`         | No       | `""` (app)             | 내부 실행 메타(JSON 문자열, 공개 API 비노출) | `{"meta":{"latencyClass":"MULTI"}}`   | legacy column (v2) |
-| `logic_field_path`       | `text`         | No       | `""` (app)             | 로직 검증 필드 경로               | `items[0].dealType`                    |                   |
-| `logic_expected_value`   | `text`         | No       | `""` (app)             | 로직 기대값                       | `SALE`                                 |                   |
-| `context_json`           | `text`         | No       | `""` (app)             | 질의별 실행 컨텍스트(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
-| `target_assistant`       | `text`         | No       | `""` (app)             | 질의별 대상 어시스턴트            | `apt_sales_bot`                        | startup 보정 컬럼 |
+| `logic_field_path`       | `text`         | No       | `""` (app)             | (레거시) 질의 로직 검증 필드 경로 | `items[0].dealType`                    | DB 잔존(미사용)   |
+| `logic_expected_value`   | `text`         | No       | `""` (app)             | (레거시) 질의 로직 기대값         | `SALE`                                 | DB 잔존(미사용)   |
+| `context_json`           | `text`         | No       | `""` (app)             | (레거시) 질의별 실행 컨텍스트     | `{"region":"seoul"}`                   | DB 잔존(미사용)   |
+| `target_assistant`       | `text`         | No       | `""` (app)             | (레거시) 질의별 대상 어시스턴트   | `apt_sales_bot`                        | DB 잔존(미사용)   |
 | `created_by`             | `varchar(120)` | No       | `unknown` (app)        | 작성자                            | `pm_lee`                               |                   |
 | `created_at`             | `datetime`     | No       | UTC now (app)          | 생성 시각                         | `2026-02-12 15:01:41`                  |                   |
 | `updated_at`             | `datetime`     | No       | UTC now/onupdate (app) | 수정 시각                         | `2026-02-18 11:10:20`                  |                   |
@@ -457,7 +457,7 @@
   - `run_id -> validation_runs.id` (N:1)
   - `query_id -> validation_queries.id` (N:1, nullable)
   - `validation_llm_evaluations.run_item_id -> validation_run_items.id` (1:1)
-  - `validation_logic_evaluations.run_item_id -> validation_run_items.id` (1:1)
+  - `validation_logic_evaluations.run_item_id -> validation_run_items.id` (1:1, 레거시/미사용)
 - Data lifecycle:
   - 생성: run 실행 시 질의/반복/방 조합별로 생성
   - 수정: 실행 결과 및 평가 결과 연결 정보 갱신
@@ -475,10 +475,10 @@
 | `expected_result_snapshot`      | `text`         | No       | `""` (app)         | 실행 시점 기대결과 스냅샷         | `잠실/매매/30평대`                     | snapshot          |
 | `category_snapshot`             | `varchar(40)`  | No       | `Happy path` (app) | 실행 시점 카테고리 스냅샷         | `Edge case`                            | snapshot          |
 | `applied_criteria_json`         | `text`         | No       | `""` (app)         | 레거시 스냅샷 컬럼(신규 평가 파이프라인 미사용)   | `""`                | legacy column     |
-| `logic_field_path_snapshot`     | `text`         | No       | `""` (app)         | 실행 적용 로직 경로 스냅샷        | `items[0].dealType`                    | snapshot          |
-| `logic_expected_value_snapshot` | `text`         | No       | `""` (app)         | 실행 적용 로직 기대값 스냅샷      | `SALE`                                 | snapshot          |
-| `context_json_snapshot`         | `text`         | No       | `""` (app)         | 실행 컨텍스트 스냅샷(JSON 문자열) | `{"region":"seoul"}`                   | startup 보정 컬럼 |
-| `target_assistant_snapshot`     | `text`         | No       | `""` (app)         | 실행 대상 어시스턴트 스냅샷       | `apt_sales_bot`                        | startup 보정 컬럼 |
+| `logic_field_path_snapshot`     | `text`         | No       | `""` (app)         | (레거시) 로직 경로 스냅샷         | `items[0].dealType`                    | DB 잔존(미사용)   |
+| `logic_expected_value_snapshot` | `text`         | No       | `""` (app)         | (레거시) 로직 기대값 스냅샷       | `SALE`                                 | DB 잔존(미사용)   |
+| `context_json_snapshot`         | `text`         | No       | `""` (app)         | (레거시) 컨텍스트 스냅샷          | `{"region":"seoul"}`                   | DB 잔존(미사용)   |
+| `target_assistant_snapshot`     | `text`         | No       | `""` (app)         | (레거시) 대상 어시스턴트 스냅샷   | `apt_sales_bot`                        | DB 잔존(미사용)   |
 | `conversation_room_index`       | `integer`      | No       | `1` (app)          | 실행 room 배치 번호                  | `2`                                    |                   |
 | `repeat_index`                  | `integer`      | No       | `1` (app)          | 해당 room 배치 내 반복 실행 번호      | `1`                                    |                   |
 | `conversation_id`               | `varchar(120)` | No       | `""` (app)         | 항목 단위 대화 식별자                | `conv_20260218_001`                    | room 공유 보장 없음 |
@@ -543,14 +543,14 @@
 ### 테이블 개요
 
 - Table name: `validation_logic_evaluations`
-- Business purpose: run item에 대한 규칙/필드 기반 로직 평가 결과 저장
+- Business purpose: (레거시) run item에 대한 규칙/필드 기반 로직 평가 결과 저장
 - Primary key: `id`
 - Important relationships:
   - `run_item_id -> validation_run_items.id` (1:1)
 - Data lifecycle:
-  - 생성: 로직 평가 잡 수행 시 run item 단위 생성
-  - 수정: 재평가 시 결과 변경 가능
-  - 보존: 자동 규칙 평가 이력으로 보존
+  - 생성: 신규 파이프라인에서 생성하지 않음
+  - 수정: 신규 파이프라인에서 갱신하지 않음
+  - 보존: DB 물리 구조만 유지하는 미사용 테이블
 
 ### 컬럼 정의
 
@@ -599,8 +599,8 @@
 | `total_items`              | `integer`     | No       | `0` (app)     | 집계 대상 item 수            | `120`                                  |             |
 | `executed_items`           | `integer`     | No       | `0` (app)     | 실행 완료 item 수            | `117`                                  |             |
 | `error_items`              | `integer`     | No       | `0` (app)     | 오류 item 수                 | `3`                                    |             |
-| `logic_pass_items`         | `integer`     | No       | `0` (app)     | 로직 PASS item 수            | `98`                                   |             |
-| `logic_pass_rate`          | `float`       | No       | `0` (app)     | 로직 PASS 비율(%)            | `81.6667`                              |             |
+| `logic_pass_items`         | `integer`     | No       | `0` (app)     | (레거시) 로직 PASS item 수   | `0`                                    | DB 잔존(미사용) |
+| `logic_pass_rate`          | `float`       | No       | `0` (app)     | (레거시) 로직 PASS 비율(%)   | `0.0`                                  | DB 잔존(미사용) |
 | `llm_done_items`           | `integer`     | No       | `0` (app)     | LLM 평가 완료 item 수        | `110`                                  |             |
 | `llm_metric_averages_json` | `text`        | No       | `{}` (app)    | LLM 메트릭 평균(JSON 문자열) | `{"정확성":4.12}`                      | JSON string |
 | `llm_total_score_avg`      | `float`       | Yes      | `NULL`        | LLM 총점 평균                | `4.03`                                 |             |
@@ -661,7 +661,7 @@
 - Test Set 1:N Run
 - Run 1:N Run Item
 - Run Item 1:1 LLM Evaluation
-- Run Item 1:1 Logic Evaluation
+- Run Item 1:1 Logic Evaluation (DB 잔존, 미사용)
 - Run 1:N Score Snapshot
 - Generic Run 1:N Generic Run Row
 

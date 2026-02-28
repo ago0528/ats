@@ -29,8 +29,6 @@ def _seed_test_set_with_run(client: TestClient) -> tuple[str, str]:
             "expectedResult": "에이전트 결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -96,4 +94,3 @@ def test_validation_agents_query_generator_and_report(monkeypatch):
     assert report_job_detail.json()["status"] == "DONE"
     assert report_job_detail.json()["result"]["testSetId"] == test_set_id
     assert "summary" in report_job_detail.json()["result"]
-

@@ -41,10 +41,6 @@ type QueryFormValues = {
   expectedResult: string;
   category: QueryCategory;
   groupId?: string;
-  logicFieldPath: string;
-  logicExpectedValue: string;
-  contextJson: string;
-  targetAssistant: string;
 };
 
 type CreateTestSetFromSelectionValues = {
@@ -298,10 +294,6 @@ export function useQueryManagement({
       expectedResult: '',
       category: 'Happy path',
       groupId: undefined,
-      logicFieldPath: '',
-      logicExpectedValue: '',
-      contextJson: '',
-      targetAssistant: '',
     });
     setModalOpen(true);
   };
@@ -313,10 +305,6 @@ export function useQueryManagement({
       expectedResult: row.expectedResult,
       category: row.category as QueryCategory,
       groupId: row.groupId || undefined,
-      logicFieldPath: row.logicFieldPath,
-      logicExpectedValue: row.logicExpectedValue,
-      contextJson: row.contextJson || '',
-      targetAssistant: row.targetAssistant || '',
     });
     setModalOpen(true);
   };
@@ -332,10 +320,6 @@ export function useQueryManagement({
           expectedResult: values.expectedResult,
           category: values.category,
           groupId: values.groupId ?? null,
-          logicFieldPath: values.logicFieldPath,
-          logicExpectedValue: values.logicExpectedValue,
-          contextJson: values.contextJson,
-          targetAssistant: values.targetAssistant,
         });
         message.success('질의를 수정했습니다.');
       } else {
@@ -344,10 +328,6 @@ export function useQueryManagement({
           expectedResult: values.expectedResult,
           category: values.category,
           groupId: values.groupId,
-          logicFieldPath: values.logicFieldPath,
-          logicExpectedValue: values.logicExpectedValue,
-          contextJson: values.contextJson,
-          targetAssistant: values.targetAssistant,
           createdBy: 'unknown',
         });
         message.success('질의를 등록했습니다.');
@@ -356,7 +336,14 @@ export function useQueryManagement({
       await loadQueries();
     } catch (error) {
       console.error(error);
-      message.error('질의 저장에 실패했습니다.');
+      const detail = error instanceof AxiosError
+        ? String(error.response?.data?.detail || '').trim()
+        : '';
+      if (detail.includes('Extra inputs are not permitted') || detail.includes('extra_forbidden')) {
+        message.error('더 이상 지원하지 않는 구필드가 포함되어 저장에 실패했습니다. 최신 화면/템플릿으로 다시 시도해 주세요.');
+      } else {
+        message.error('질의 저장에 실패했습니다.');
+      }
     } finally {
       setSaving(false);
     }

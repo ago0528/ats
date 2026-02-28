@@ -148,12 +148,7 @@ export function ValidationHistoryDetailRowDrawer({
                     <Descriptions.Item label="대화 ID">
                       {item.conversationId || '-'}
                     </Descriptions.Item>
-                    <Descriptions.Item label="대상 어시스턴트">
-                      {item.targetAssistant || '-'}
-                    </Descriptions.Item>
                   </Descriptions>
-                  <Typography.Text type="secondary">컨텍스트(JSON)</Typography.Text>
-                  {renderTextBlock(tryPrettyJson(item.contextJson, String(item.contextJson || '-')))}
                 </Space>
               ),
             },

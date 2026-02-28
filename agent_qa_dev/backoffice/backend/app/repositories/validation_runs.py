@@ -399,18 +399,6 @@ class ValidationRunRepository:
                 expected_result_snapshot=str(payload.get("expected_result_snapshot", "")),
                 category_snapshot=str(payload.get("category_snapshot", "Happy path")),
                 applied_criteria_json=_to_json_text(payload.get("applied_criteria_json")),
-                logic_field_path_snapshot=str(payload.get("logic_field_path_snapshot", "")),
-                logic_expected_value_snapshot=str(payload.get("logic_expected_value_snapshot", "")),
-                context_json_snapshot=(
-                    str(payload.get("context_json_snapshot")).strip()
-                    if payload.get("context_json_snapshot") is not None
-                    else ""
-                ),
-                target_assistant_snapshot=(
-                    str(payload.get("target_assistant_snapshot")).strip()
-                    if payload.get("target_assistant_snapshot") is not None
-                    else ""
-                ),
                 conversation_room_index=int(payload.get("conversation_room_index", 1) or 1),
                 repeat_index=int(payload.get("repeat_index", 1) or 1),
             )
@@ -724,10 +712,6 @@ class ValidationRunRepository:
                     "query_text_snapshot": item.query_text_snapshot,
                     "expected_result_snapshot": item.expected_result_snapshot,
                     "category_snapshot": item.category_snapshot,
-                    "logic_field_path_snapshot": item.logic_field_path_snapshot,
-                    "logic_expected_value_snapshot": item.logic_expected_value_snapshot,
-                    "context_json_snapshot": item.context_json_snapshot,
-                    "target_assistant_snapshot": item.target_assistant_snapshot,
                     "conversation_room_index": item.conversation_room_index,
                     "repeat_index": item.repeat_index,
                 }
@@ -795,7 +779,6 @@ class ValidationRunRepository:
         total_items: int,
         executed_items: int,
         error_items: int,
-        logic_pass_items: int,
         llm_done_items: int,
         llm_metric_averages: Any,
         llm_total_score_avg: Optional[float],
@@ -814,8 +797,8 @@ class ValidationRunRepository:
         entity.total_items = max(0, int(total_items))
         entity.executed_items = max(0, int(executed_items))
         entity.error_items = max(0, int(error_items))
-        entity.logic_pass_items = max(0, int(logic_pass_items))
-        entity.logic_pass_rate = round((entity.logic_pass_items / entity.total_items) * 100, 4) if entity.total_items else 0.0
+        entity.logic_pass_items = 0
+        entity.logic_pass_rate = 0.0
         entity.llm_done_items = max(0, int(llm_done_items))
         entity.llm_metric_averages_json = _to_json_text(llm_metric_averages if llm_metric_averages is not None else {})
         entity.llm_total_score_avg = llm_total_score_avg
@@ -957,8 +940,6 @@ class ValidationRunRepository:
                 "totalItems": score_snapshot.total_items,
                 "executedItems": score_snapshot.executed_items,
                 "errorItems": score_snapshot.error_items,
-                "logicPassItems": score_snapshot.logic_pass_items,
-                "logicPassRate": round(score_snapshot.logic_pass_rate, 3),
                 "llmDoneItems": score_snapshot.llm_done_items,
                 "llmMetricAverages": _to_json_payload(score_snapshot.llm_metric_averages_json),
                 "llmTotalScoreAvg": score_snapshot.llm_total_score_avg,

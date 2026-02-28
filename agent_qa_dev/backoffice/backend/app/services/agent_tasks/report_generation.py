@@ -12,12 +12,11 @@ def build_validation_report(db: Session, test_set_id: str, *, run_id: Optional[s
     run_count = int(dashboard.get("runCount") or 0)
     total_items = int(dashboard.get("totalItems") or 0)
     error_items = int(dashboard.get("errorItems") or 0)
-    logic_pass_rate = float(dashboard.get("logicPassRate") or 0.0)
     score_avg = dashboard.get("llmTotalScoreAverage")
 
     summary = (
         f"테스트세트 {test_set_id}: run {run_count}건, item {total_items}건, "
-        f"오류 {error_items}건, logic pass {logic_pass_rate:.2f}%"
+        f"오류 {error_items}건"
     )
     if isinstance(score_avg, (int, float)):
         summary += f", LLM 총점 평균 {float(score_avg):.2f}"
@@ -28,4 +27,3 @@ def build_validation_report(db: Session, test_set_id: str, *, run_id: Optional[s
         "summary": summary,
         "dashboard": dashboard,
     }
-

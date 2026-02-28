@@ -130,8 +130,7 @@ export function getRunItemStatus(item: ValidationRunItem): DisplayRunItemStatus 
   }
 
   const llmStatus = String(item.llmEvaluation?.status || '').trim().toUpperCase();
-  const logicStatus = String(item.logicEvaluation?.result || '').trim().toUpperCase();
-  if (llmStatus.startsWith('SKIPPED') || logicStatus.startsWith('SKIPPED')) {
+  if (llmStatus.startsWith('SKIPPED')) {
     return 'stopped';
   }
 

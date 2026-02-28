@@ -20,8 +20,6 @@ def test_validation_group_dashboard():
             "expectedResult": "결과 A",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -44,7 +42,6 @@ def test_validation_group_dashboard():
         raw_json='{"assistantMessage":"결과 A"}',
         executed_at=dt.datetime.utcnow(),
     )
-    repo.upsert_logic_eval(item.id, eval_items={"k": "v"}, result="PASS", fail_reason="")
     repo.upsert_llm_eval(
         item.id,
         eval_model="gpt-5.2",
@@ -61,7 +58,6 @@ def test_validation_group_dashboard():
     body = dashboard_resp.json()
     assert body["groupId"] == group_id
     assert body["totalItems"] == 1
-    assert body["logicPassRate"] == 100.0
 
 
 def test_validation_test_set_dashboard():
@@ -77,8 +73,6 @@ def test_validation_test_set_dashboard():
             "expectedResult": "결과 TS",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -107,7 +101,6 @@ def test_validation_test_set_dashboard():
         raw_json='{"assistantMessage":"결과 TS"}',
         executed_at=dt.datetime.utcnow(),
     )
-    repo.upsert_logic_eval(item.id, eval_items={"k": "v"}, result="PASS", fail_reason="")
     repo.upsert_llm_eval(
         item.id,
         eval_model="gpt-5.2",
@@ -125,4 +118,3 @@ def test_validation_test_set_dashboard():
     assert body["testSetId"] == test_set_id
     assert body["runCount"] == 1
     assert body["totalItems"] == 1
-    assert body["logicPassRate"] == 100.0

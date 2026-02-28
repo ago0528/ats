@@ -13,11 +13,7 @@ export type UploadPreviewRow = {
   queryText: string;
   category: string;
   groupName: string;
-  targetAssistant: string;
-  contextJson: string;
   expectedResult: string;
-  logicFieldPath: string;
-  logicExpectedValue: string;
   latencyClass: string;
 };
 

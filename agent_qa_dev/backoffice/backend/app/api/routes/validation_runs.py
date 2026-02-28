@@ -10,7 +10,7 @@ from typing import Any, Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -31,14 +31,16 @@ router = APIRouter(tags=["validation-runs"])
 
 
 class AdHocQueryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     queryText: str = Field(min_length=1)
     expectedResult: str = ""
     category: str = "Happy path"
-    logicFieldPath: str = ""
-    logicExpectedValue: str = ""
 
 
 class ValidationRunCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     environment: Environment
     name: Optional[str] = None
     testSetId: Optional[str] = None
@@ -55,6 +57,8 @@ class ValidationRunCreateRequest(BaseModel):
 
 
 class RunSecretPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     bearer: str
     cms: str
     mrs: str
@@ -63,6 +67,8 @@ class RunSecretPayload(BaseModel):
 
 
 class EvaluatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     openaiModel: Optional[str] = None
     maxChars: int = 15000
     maxParallel: Optional[int] = None
@@ -70,21 +76,25 @@ class EvaluatePayload(BaseModel):
 
 
 class SaveQueryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     groupId: str
     category: str = "Happy path"
     createdBy: str = "unknown"
     queryText: Optional[str] = None
     expectedResult: Optional[str] = None
-    logicFieldPath: Optional[str] = None
-    logicExpectedValue: Optional[str] = None
 
 
 class UpdateRunItemSnapshotPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     expectedResult: Optional[str] = None
     latencyClass: Optional[str] = None
 
 
 class ValidationRunUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
     agentId: Optional[str] = None
     evalModel: Optional[str] = None
@@ -584,7 +594,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
         for room_index in range(1, int(conversation_room_count) + 1):
             for repeat_index in range(1, int(repeat_in_conversation) + 1):
                 for query in selected_queries:
-                    target_assistant = (query.target_assistant or "").strip() or agent_id
                     items_payload.append(
                         {
                             "ordinal": ordinal,
@@ -592,10 +601,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                             "query_text_snapshot": query.query_text,
                             "expected_result_snapshot": query.expected_result,
                             "category_snapshot": query.category,
-                            "logic_field_path_snapshot": query.logic_field_path,
-                            "logic_expected_value_snapshot": query.logic_expected_value,
-                            "context_json_snapshot": query.context_json,
-                            "target_assistant_snapshot": target_assistant,
                             "conversation_room_index": room_index,
                             "repeat_index": repeat_index,
                         },
@@ -611,10 +616,6 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                         "query_text_snapshot": body.adHocQuery.queryText,
                         "expected_result_snapshot": body.adHocQuery.expectedResult,
                         "category_snapshot": body.adHocQuery.category or "Happy path",
-                        "logic_field_path_snapshot": body.adHocQuery.logicFieldPath or "",
-                        "logic_expected_value_snapshot": body.adHocQuery.logicExpectedValue or "",
-                        "context_json_snapshot": "",
-                        "target_assistant_snapshot": "",
                         "conversation_room_index": room_index,
                         "repeat_index": repeat_index,
                     }
@@ -699,7 +700,6 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
     items = repo.list_items(run_id, offset=offset, limit=limit)
-    logic_map = repo.get_logic_eval_map([row.id for row in items])
     llm_map = repo.get_llm_eval_map([row.id for row in items])
     return {
         "items": [
@@ -711,10 +711,6 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                 "queryText": row.query_text_snapshot,
                 "expectedResult": row.expected_result_snapshot,
                 "category": row.category_snapshot,
-                "logicFieldPath": row.logic_field_path_snapshot,
-                "logicExpectedValue": row.logic_expected_value_snapshot,
-                "contextJson": row.context_json_snapshot,
-                "targetAssistant": row.target_assistant_snapshot,
                 "conversationRoomIndex": row.conversation_room_index,
                 "repeatIndex": row.repeat_index,
                 "conversationId": row.conversation_id,
@@ -725,16 +721,6 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                 "executedAt": row.executed_at,
                 "responseTimeSec": row.latency_ms / 1000 if row.latency_ms is not None else None,
                 "latencyClass": _extract_item_latency_class(row.applied_criteria_json),
-                "logicEvaluation": (
-                    {
-                        "result": logic_map[row.id].result,
-                        "evalItems": _serialize_json(logic_map[row.id].eval_items_json),
-                        "failReason": logic_map[row.id].fail_reason,
-                        "evaluatedAt": logic_map[row.id].evaluated_at,
-                    }
-                    if row.id in logic_map
-                    else None
-                ),
                 "llmEvaluation": (
                     {
                         "status": llm_map[row.id].status,
@@ -782,7 +768,7 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
 
     options = json.loads(run.options_json or "{}")
     cfg = get_env_config(run.environment)
-    default_context = _parse_context_json(options.get("context") or options.get("contextJson"))
+    default_context = _parse_context_json(options.get("context"))
     run_default_target_assistant = options.get("targetAssistant")
 
     job_id = str(uuid.uuid4())
@@ -905,7 +891,6 @@ def export_run(run_id: str, includeDebug: bool = Query(default=False), db: Sessi
     if not items:
         raise HTTPException(status_code=404, detail="No items")
 
-    logic_map = repo.get_logic_eval_map([row.id for row in items])
     llm_map = repo.get_llm_eval_map([row.id for row in items])
     rows: list[dict[str, Any]] = []
     for row in items:
@@ -924,8 +909,6 @@ def export_run(run_id: str, includeDebug: bool = Query(default=False), db: Sessi
             "실행시각": row.executed_at.isoformat() if row.executed_at else "",
             "응답": row.raw_response or "",
             "오류": row.error or "",
-            "Logic 결과": logic_map[row.id].result if row.id in logic_map else "",
-            "Logic 사유": logic_map[row.id].fail_reason if row.id in logic_map else "",
             "LLM 상태": llm.status if llm is not None else "",
             "LLM 모델": llm.eval_model if llm is not None else "",
             "의도충족 점수": llm_metrics.get("intent", ""),
@@ -1117,10 +1100,6 @@ def save_run_item_as_query(run_id: str, item_id: str, body: SaveQueryPayload, db
         expected_result=body.expectedResult or item.expected_result_snapshot,
         category=body.category or item.category_snapshot,
         group_id=body.groupId,
-        logic_field_path=body.logicFieldPath if body.logicFieldPath is not None else item.logic_field_path_snapshot,
-        logic_expected_value=body.logicExpectedValue if body.logicExpectedValue is not None else item.logic_expected_value_snapshot,
-        context_json=item.context_json_snapshot,
-        target_assistant=item.target_assistant_snapshot,
         created_by=body.createdBy or "unknown",
     )
     db.commit()

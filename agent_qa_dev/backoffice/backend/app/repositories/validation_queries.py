@@ -8,7 +8,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.validation_llm_evaluation import ValidationLlmEvaluation
-from app.models.validation_logic_evaluation import ValidationLogicEvaluation
 from app.models.validation_query import ValidationQuery
 from app.models.validation_run_item import ValidationRunItem
 from app.models.validation_test_set import ValidationTestSet
@@ -141,10 +140,6 @@ class ValidationQueryRepository:
         category: str,
         group_id: Optional[str] = None,
         llm_eval_meta: Any = None,
-        logic_field_path: str = "",
-        logic_expected_value: str = "",
-        context_json: str = "",
-        target_assistant: str = "",
         created_by: str = "unknown",
     ) -> ValidationQuery:
         query = ValidationQuery(
@@ -153,10 +148,6 @@ class ValidationQueryRepository:
             category=category or "Happy path",
             group_id=group_id or "",
             llm_eval_criteria_json=_to_json_text(llm_eval_meta),
-            logic_field_path=logic_field_path or "",
-            logic_expected_value=logic_expected_value or "",
-            context_json=context_json or "",
-            target_assistant=target_assistant or "",
             created_by=created_by or "unknown",
         )
         self.db.add(query)
@@ -172,10 +163,6 @@ class ValidationQueryRepository:
                 category=str(row.get("category", "Happy path")),
                 group_id=(str(row.get("group_id")).strip() if row.get("group_id") is not None else None),
                 llm_eval_meta=row.get("llm_eval_meta"),
-                logic_field_path=str(row.get("logic_field_path", "")),
-                logic_expected_value=str(row.get("logic_expected_value", "")),
-                context_json=(str(row.get("context_json")).strip() if row.get("context_json") is not None else ""),
-                target_assistant=(str(row.get("target_assistant")).strip() if row.get("target_assistant") is not None else ""),
                 created_by=created_by,
             )
             created_ids.append(created.id)
@@ -190,10 +177,6 @@ class ValidationQueryRepository:
         category: Optional[str] = None,
         group_id: Optional[str] = None,
         update_group_id: bool = False,
-        logic_field_path: Optional[str] = None,
-        logic_expected_value: Optional[str] = None,
-        context_json: Optional[str] = None,
-        target_assistant: Optional[str] = None,
     ) -> Optional[ValidationQuery]:
         query = self.get(query_id)
         if query is None:
@@ -207,14 +190,6 @@ class ValidationQueryRepository:
             query.category = category
         if update_group_id:
             query.group_id = group_id or ""
-        if logic_field_path is not None:
-            query.logic_field_path = logic_field_path
-        if logic_expected_value is not None:
-            query.logic_expected_value = logic_expected_value
-        if context_json is not None:
-            query.context_json = context_json
-        if target_assistant is not None:
-            query.target_assistant = target_assistant
         query.updated_at = dt.datetime.utcnow()
         self.db.flush()
         return query
@@ -247,10 +222,6 @@ class ValidationQueryRepository:
             row_by_query[row.query_id] = row
 
         item_ids = [row.id for row in row_by_query.values()]
-        logic_map = {
-            item.run_item_id: item
-            for item in self.db.query(ValidationLogicEvaluation).filter(ValidationLogicEvaluation.run_item_id.in_(item_ids)).all()
-        }
         llm_map = {
             item.run_item_id: item
             for item in self.db.query(ValidationLlmEvaluation).filter(ValidationLlmEvaluation.run_item_id.in_(item_ids)).all()
@@ -258,11 +229,9 @@ class ValidationQueryRepository:
 
         summary: dict[str, dict[str, Any]] = {}
         for query_id, row in row_by_query.items():
-            logic = logic_map.get(row.id)
             llm = llm_map.get(row.id)
             summary[query_id] = {
                 "executedAt": row.executed_at,
-                "logicResult": logic.result if logic else "",
                 "llmStatus": llm.status if llm else "",
             }
         return summary

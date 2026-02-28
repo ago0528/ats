@@ -50,38 +50,10 @@ export const BULK_UPLOAD_PREVIEW_COLUMNS: ColumnsType<UploadPreviewRow> = [
     ellipsis: true,
   },
   {
-    key: 'targetAssistant',
-    title: 'targetAssistant',
-    dataIndex: 'targetAssistant',
-    width: 190,
-    ellipsis: true,
-  },
-  {
-    key: 'contextJson',
-    title: 'contextJson',
-    dataIndex: 'contextJson',
-    width: 220,
-    ellipsis: true,
-  },
-  {
     key: 'expectedResult',
     title: '기대 결과',
     dataIndex: 'expectedResult',
     width: 220,
-    ellipsis: true,
-  },
-  {
-    key: 'logicFieldPath',
-    title: 'Logic 검증 필드',
-    dataIndex: 'logicFieldPath',
-    width: 180,
-    ellipsis: true,
-  },
-  {
-    key: 'logicExpectedValue',
-    title: 'Logic 기대값',
-    dataIndex: 'logicExpectedValue',
-    width: 180,
     ellipsis: true,
   },
   {

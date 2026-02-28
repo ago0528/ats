@@ -76,10 +76,10 @@ Table validation_queries {
   category varchar(40) [not null]
   group_id varchar(36) [not null]
   llm_eval_criteria_json text [not null, note: "Stored as JSON string"]
-  logic_field_path text [not null]
-  logic_expected_value text [not null]
-  context_json text [not null, note: "Stored as JSON string"]
-  target_assistant text [not null]
+  logic_field_path text [not null, note: "Legacy column: DB-resident but unused"]
+  logic_expected_value text [not null, note: "Legacy column: DB-resident but unused"]
+  context_json text [not null, note: "Legacy column: DB-resident but unused JSON string"]
+  target_assistant text [not null, note: "Legacy column: DB-resident but unused"]
   created_by varchar(120) [not null]
   created_at datetime [not null]
   updated_at datetime [not null]
@@ -170,10 +170,10 @@ Table validation_run_items {
   expected_result_snapshot text [not null]
   category_snapshot varchar(40) [not null]
   applied_criteria_json text [not null, note: "Stored as JSON string"]
-  logic_field_path_snapshot text [not null]
-  logic_expected_value_snapshot text [not null]
-  context_json_snapshot text [not null, note: "Stored as JSON string"]
-  target_assistant_snapshot text [not null]
+  logic_field_path_snapshot text [not null, note: "Legacy column: DB-resident but unused"]
+  logic_expected_value_snapshot text [not null, note: "Legacy column: DB-resident but unused"]
+  context_json_snapshot text [not null, note: "Legacy column: DB-resident but unused JSON string"]
+  target_assistant_snapshot text [not null, note: "Legacy column: DB-resident but unused"]
   conversation_room_index integer [not null]
   repeat_index integer [not null]
   conversation_id varchar(120) [not null]
@@ -209,7 +209,7 @@ Table validation_llm_evaluations {
   }
 }
 
-Table validation_logic_evaluations {
+Table validation_logic_evaluations [note: "Legacy table: DB-resident but unused in current LLM-only pipeline"] {
   id varchar(36) [pk, not null]
   run_item_id varchar(36) [not null]
   eval_items_json text [not null, note: "Stored as JSON string"]
@@ -220,6 +220,29 @@ Table validation_logic_evaluations {
   Indexes {
     run_item_id [unique, name: "ix_validation_logic_evaluations_run_item_id"]
     result [name: "ix_validation_logic_evaluations_result"]
+  }
+}
+
+Table validation_score_snapshots {
+  id varchar(36) [pk, not null]
+  run_id varchar(36) [not null]
+  test_set_id varchar(36)
+  query_group_id varchar(36)
+  total_items integer [not null]
+  executed_items integer [not null]
+  error_items integer [not null]
+  logic_pass_items integer [not null, note: "Legacy column: DB-resident but unused"]
+  logic_pass_rate float [not null, note: "Legacy column: DB-resident but unused"]
+  llm_done_items integer [not null]
+  llm_metric_averages_json text [not null, note: "Stored as JSON string"]
+  llm_total_score_avg float
+  evaluated_at datetime [not null]
+
+  Indexes {
+    run_id [name: "ix_validation_score_snapshots_run_id"]
+    test_set_id [name: "ix_validation_score_snapshots_test_set_id"]
+    query_group_id [name: "ix_validation_score_snapshots_query_group_id"]
+    evaluated_at [name: "ix_validation_score_snapshots_evaluated_at"]
   }
 }
 
@@ -239,3 +262,6 @@ Ref: validation_test_set_items.query_id > validation_queries.id
 
 Ref: validation_llm_evaluations.run_item_id - validation_run_items.id
 Ref: validation_logic_evaluations.run_item_id - validation_run_items.id
+Ref: validation_score_snapshots.run_id > validation_runs.id
+Ref: validation_score_snapshots.test_set_id > validation_test_sets.id
+Ref: validation_score_snapshots.query_group_id > validation_query_groups.id

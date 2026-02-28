@@ -42,8 +42,6 @@ const item = (id: string, partial?: Partial<ValidationRunItem>): ValidationRunIt
     queryText: `query-${id}`,
     expectedResult: '',
     category: 'Happy path',
-    logicFieldPath: '',
-    logicExpectedValue: '',
     conversationRoomIndex: 1,
     repeatIndex: 1,
     conversationId: `conv-${id}`,

@@ -14,7 +14,6 @@ from app.adapters.openai_judge_adapter import OpenAIJudgeAdapter
 from app.core.db import SessionLocal
 from app.core.enums import EvalStatus
 from app.repositories.validation_runs import ValidationRunRepository
-from app.services.logic_check import run_logic_check
 from app.services.validation_scoring import average, extract_response_time_sec, parse_raw_payload, score_stability
 
 PROMPT_VERSION = "single-prompt-v2.0.0"
@@ -163,7 +162,6 @@ def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items
         return
 
     item_ids = [item.id for item in run_items]
-    logic_map = repo.get_logic_eval_map(item_ids)
     llm_map = repo.get_llm_eval_map(item_ids)
     query_ids = [item.query_id for item in run_items if item.query_id]
     query_to_group = repo.list_query_group_ids_by_query_ids(query_ids)
@@ -173,7 +171,6 @@ def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items
             "totalItems": 0,
             "executedItems": 0,
             "errorItems": 0,
-            "logicPassItems": 0,
             "llmDoneItems": 0,
             "metricSums": defaultdict(float),
             "metricCounts": defaultdict(int),
@@ -196,10 +193,6 @@ def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items
                 agg["executedItems"] += 1
             if (item.error or "").strip():
                 agg["errorItems"] += 1
-
-            logic = logic_map.get(item.id)
-            if logic and logic.result == "PASS":
-                agg["logicPassItems"] += 1
 
             llm = llm_map.get(item.id)
             if llm and str(llm.status or "").upper().startswith("DONE"):
@@ -230,7 +223,6 @@ def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items
             total_items=agg["totalItems"],
             executed_items=agg["executedItems"],
             error_items=agg["errorItems"],
-            logic_pass_items=agg["logicPassItems"],
             llm_done_items=agg["llmDoneItems"],
             llm_metric_averages=metric_avg,
             llm_total_score_avg=score_avg,
@@ -279,38 +271,6 @@ async def evaluate_validation_run(
             raise ValueError(
                 f"expected_result_missing|missingCount={len(missing_expected)}|sampleQueryIds={sample_text}"
             )
-
-        for item in run_items:
-            if item.logic_field_path_snapshot and item.logic_expected_value_snapshot:
-                logic_raw_result = run_logic_check(
-                    item.raw_json or "",
-                    item.logic_field_path_snapshot,
-                    item.logic_expected_value_snapshot,
-                )
-            else:
-                logic_raw_result = "SKIPPED_NO_CRITERIA"
-
-            logic_upper = str(logic_raw_result).upper()
-            if logic_upper.startswith("PASS"):
-                logic_result = "PASS"
-                fail_reason = ""
-            elif logic_upper.startswith("FAIL"):
-                logic_result = "FAIL"
-                fail_reason = str(logic_raw_result)
-            else:
-                logic_result = "SKIPPED"
-                fail_reason = ""
-
-            repo.upsert_logic_eval(
-                item.id,
-                eval_items={
-                    "fieldPath": item.logic_field_path_snapshot,
-                    "expectedValue": item.logic_expected_value_snapshot,
-                },
-                result=logic_result,
-                fail_reason=fail_reason,
-            )
-        db.commit()
 
         prompt_template, response_schema, schema_name, strict_schema = _load_prompt_and_schema()
 

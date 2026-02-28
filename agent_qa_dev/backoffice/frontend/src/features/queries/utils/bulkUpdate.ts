@@ -10,11 +10,7 @@ export const BULK_UPDATE_CSV_HEADERS = [
   '그룹',
   '테스트 세트 수',
   '테스트 세트',
-  'targetAssistant',
-  'contextJson',
   '기대 결과',
-  'Logic 검증 필드',
-  'Logic 기대값',
   '등록일자',
   '최근 수정일자',
 ] as const;
@@ -24,10 +20,6 @@ const CHANGED_FIELD_LABELS: Record<string, string> = {
   group: '그룹',
   queryText: '질의',
   expectedResult: '기대 결과',
-  logicFieldPath: 'Logic 검증 필드',
-  logicExpectedValue: 'Logic 기대값',
-  targetAssistant: 'targetAssistant',
-  contextJson: 'contextJson',
 };
 
 function toCsvCell(value: string) {
@@ -50,11 +42,7 @@ export function buildBulkUpdateCsvContent(items: ValidationQuery[]) {
       item.groupName || '',
       String(item.testSetUsage?.count || 0),
       (item.testSetUsage?.testSetNames || []).join(', '),
-      item.targetAssistant || '',
-      item.contextJson || '',
       item.expectedResult || '',
-      item.logicFieldPath || '',
-      item.logicExpectedValue || '',
       formatDateYYYYMMDD(item.createdAt, ''),
       formatDateYYYYMMDD(item.updatedAt, ''),
     ].map((cell) => toCsvCell(toStringValue(cell))).join(',')),

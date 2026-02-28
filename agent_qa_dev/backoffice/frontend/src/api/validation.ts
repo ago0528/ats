@@ -75,10 +75,6 @@ export async function createQuery(payload: {
   expectedResult?: string;
   category?: string;
   groupId?: string;
-  logicFieldPath?: string;
-  logicExpectedValue?: string;
-  contextJson?: string;
-  targetAssistant?: string;
   createdBy?: string;
 }) {
   const { data } = await api.post<ValidationQuery>('/queries', payload);
@@ -92,10 +88,6 @@ export async function updateQuery(
     expectedResult: string;
     category: string;
     groupId: string | null;
-    logicFieldPath: string;
-    logicExpectedValue: string;
-    contextJson: string;
-    targetAssistant: string;
   }>,
 ) {
   const { data } = await api.patch<ValidationQuery>(`/queries/${queryId}`, payload);
@@ -282,8 +274,6 @@ export async function saveValidationRunItemAsQuery(
     createdBy?: string;
     queryText?: string;
     expectedResult?: string;
-    logicFieldPath?: string;
-    logicExpectedValue?: string;
   },
 ) {
   const { data } = await api.post<{ queryId: string }>(`/validation-runs/${runId}/items/${itemId}/save-query`, payload);
@@ -395,7 +385,6 @@ export async function getValidationGroupDashboard(groupId: string) {
   const { data } = await api.get<{
     groupId: string;
     totalItems: number;
-    logicPassRate: number;
     llmMetricAverages: Record<string, number>;
     failurePatterns: Array<{ category: string; count: number }>;
   }>(`/validation-dashboard/groups/${groupId}`);
@@ -412,7 +401,6 @@ export async function getValidationTestSetDashboard(
     totalItems: number;
     executedItems: number;
     errorItems: number;
-    logicPassRate: number;
     llmMetricAverages: Record<string, number>;
     llmTotalScoreAverage: number | null;
     failurePatterns: Array<{ category: string; count: number }>;
@@ -425,7 +413,6 @@ export async function getValidationTestSetDashboard(
       totalItems: number;
       executedItems: number;
       errorItems: number;
-      logicPassItems: number;
       llmDoneItems: number;
     }>;
     scoring?: ValidationDashboardScoring;

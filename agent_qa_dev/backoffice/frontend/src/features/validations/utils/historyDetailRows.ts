@@ -464,7 +464,6 @@ export function buildResultsKpi(run: ValidationRun | null, items: ValidationRunI
       averageResponseTimeText: aggregate.averageResponseTimeSecText,
       responseTimeP50Text: aggregate.responseTimeP50SecText,
       responseTimeP95Text: aggregate.responseTimeP95SecText,
-      logicPassRateText: aggregate.logicPassRateText,
       llmDoneRateText: aggregate.llmDoneRateText,
       llmPassRateText: aggregate.llmPassRateText,
       llmTotalScoreAvgText: aggregate.llmTotalScoreAvgText,

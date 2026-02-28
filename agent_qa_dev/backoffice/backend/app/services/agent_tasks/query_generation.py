@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.models.validation_run import ValidationRun
 from app.models.validation_run_item import ValidationRunItem
-from app.repositories.validation_runs import ValidationRunRepository
 
 
 def build_query_suggestions(db: Session, test_set_id: str, *, limit: int = 5) -> dict[str, Any]:
@@ -34,15 +33,10 @@ def build_query_suggestions(db: Session, test_set_id: str, *, limit: int = 5) ->
             "reason": "No run items found for this test set.",
         }
 
-    repo = ValidationRunRepository(db)
-    logic_map = repo.get_logic_eval_map([item.id for item in items])
-
     failure_counts: dict[str, int] = defaultdict(int)
     for item in items:
-        logic = logic_map.get(item.id)
-        failed_by_logic = logic is not None and logic.result == "FAIL"
         failed_by_error = bool((item.error or "").strip())
-        if not (failed_by_logic or failed_by_error):
+        if not failed_by_error:
             continue
         query_text = (item.query_text_snapshot or "").strip()
         if query_text:
@@ -63,4 +57,3 @@ def build_query_suggestions(db: Session, test_set_id: str, *, limit: int = 5) ->
         "suggestedQueries": suggestions,
         "reason": "Generated from recent failed run items.",
     }
-

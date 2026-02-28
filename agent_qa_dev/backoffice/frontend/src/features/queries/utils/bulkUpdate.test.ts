@@ -11,10 +11,6 @@ function buildQuery(overrides?: Partial<ValidationQuery>): ValidationQuery {
     category: 'Happy path',
     groupId: 'g-1',
     groupName: '그룹A',
-    logicFieldPath: 'assistantMessage',
-    logicExpectedValue: '채용',
-    contextJson: '{"foo":"bar"}',
-    targetAssistant: 'ORCHESTRATOR_WORKER_V3',
     createdBy: 'tester',
     createdAt: '2026-02-18T00:00:00Z',
     updatedAt: '2026-02-19T00:00:00Z',
@@ -35,7 +31,6 @@ describe('bulk update csv utils', () => {
     const csv = buildBulkUpdateCsvContent([
       buildQuery({
         queryText: 'hello, "world"',
-        contextJson: '{"line":"a\\nb"}',
       }),
     ]);
     const lines = csv.replace('\uFEFF', '').split('\n');
@@ -45,7 +40,7 @@ describe('bulk update csv utils', () => {
   });
 
   it('maps changed fields into Korean labels', () => {
-    expect(toChangedFieldLabels(['queryText', 'logicFieldPath'])).toEqual(['질의', 'Logic 검증 필드']);
+    expect(toChangedFieldLabels(['queryText', 'expectedResult'])).toEqual(['질의', '기대 결과']);
   });
 
   it('maps preview rows for table rendering', () => {
@@ -55,13 +50,13 @@ describe('bulk update csv utils', () => {
         queryId: 'q-1',
         queryText: 'hello',
         status: 'planned-update',
-        changedFields: ['category', 'logicExpectedValue'],
+        changedFields: ['category', 'expectedResult'],
       },
     ]);
     expect(rows[0]).toMatchObject({
       key: '1:q-1',
       queryId: 'q-1',
-      changedFields: ['카테고리', 'Logic 기대값'],
+      changedFields: ['카테고리', '기대 결과'],
     });
   });
 });

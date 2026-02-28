@@ -5,7 +5,7 @@ import datetime as dt
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -224,6 +224,8 @@ def _normalize_test_set_config(
 
 
 class ValidationTestSetConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     agentId: Optional[str] = None
     testModel: Optional[str] = None
     evalModel: Optional[str] = None
@@ -235,12 +237,16 @@ class ValidationTestSetConfig(BaseModel):
 
 
 class ValidationTestSetQuerySelectionFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     q: str = ""
     category: list[str] = Field(default_factory=list)
     groupId: list[str] = Field(default_factory=list)
 
 
 class ValidationTestSetQuerySelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     mode: Literal["ids", "filtered"]
     queryIds: list[str] = Field(default_factory=list)
     filter: Optional[ValidationTestSetQuerySelectionFilter] = None
@@ -248,6 +254,8 @@ class ValidationTestSetQuerySelection(BaseModel):
 
 
 class ValidationTestSetCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1)
     description: str = ""
     queryIds: list[str] = Field(default_factory=list)
@@ -256,6 +264,8 @@ class ValidationTestSetCreateRequest(BaseModel):
 
 
 class ValidationTestSetUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
     description: Optional[str] = None
     queryIds: Optional[list[str]] = None
@@ -263,15 +273,21 @@ class ValidationTestSetUpdateRequest(BaseModel):
 
 
 class ValidationTestSetCloneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: Optional[str] = None
 
 
 class ValidationTestSetAppendQueriesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     queryIds: list[str] = Field(default_factory=list)
     querySelection: Optional[ValidationTestSetQuerySelection] = None
 
 
 class ValidationTestSetRunCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     environment: Environment
     name: Optional[str] = None
     context: Optional[dict[str, Any]] = None
@@ -394,7 +410,6 @@ def get_validation_test_set(
                 if item.query_id in query_map and query_map[item.query_id].group_id in group_map
                 else ""
             ),
-            "targetAssistant": query_map[item.query_id].target_assistant if item.query_id in query_map else "",
         }
         for item in items
     ]
@@ -575,7 +590,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
     for room_index in range(1, int(conversation_room_count) + 1):
         for repeat_index in range(1, int(repeat_in_conversation) + 1):
             for query in ordered_queries:
-                target_assistant = (query.target_assistant or "").strip() or agent_id
                 items_payload.append(
                     {
                         "ordinal": ordinal,
@@ -583,10 +597,6 @@ def create_run_from_validation_test_set(test_set_id: str, body: ValidationTestSe
                         "query_text_snapshot": query.query_text,
                         "expected_result_snapshot": query.expected_result,
                         "category_snapshot": query.category,
-                        "logic_field_path_snapshot": query.logic_field_path,
-                        "logic_expected_value_snapshot": query.logic_expected_value,
-                        "context_json_snapshot": query.context_json,
-                        "target_assistant_snapshot": target_assistant,
                         "conversation_room_index": room_index,
                         "repeat_index": repeat_index,
                     },

@@ -1,4 +1,7 @@
 erDiagram
+  %% Legacy note (2026-02): validation query/run-item logic/context/target columns,
+  %% validation_logic_evaluations, and validation_score_snapshots.logic_* are
+  %% DB-resident but unused in the current LLM-only validation pipeline.
   GENERIC_RUNS {
     varchar_36 id PK
     environment_enum environment
@@ -208,7 +211,7 @@ erDiagram
   VALIDATION_QUERIES ||--o{ VALIDATION_RUN_ITEMS : "source query"
 
   VALIDATION_RUN_ITEMS ||--|| VALIDATION_LLM_EVALUATIONS : "llm eval (run_item_id unique)"
-  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval (run_item_id unique)"
+  VALIDATION_RUN_ITEMS ||--|| VALIDATION_LOGIC_EVALUATIONS : "logic eval (legacy-unused)"
   VALIDATION_RUNS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "score snapshots"
   VALIDATION_TEST_SETS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "dashboard axis"
   VALIDATION_QUERY_GROUPS ||--o{ VALIDATION_SCORE_SNAPSHOTS : "group snapshot"

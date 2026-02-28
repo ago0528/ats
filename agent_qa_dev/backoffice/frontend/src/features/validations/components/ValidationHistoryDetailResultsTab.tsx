@@ -488,9 +488,6 @@ export function ValidationHistoryDetailResultsTab({
                 <Descriptions.Item label="응답시간 p95">
                   {kpi.runMeta.responseTimeP95Text}
                 </Descriptions.Item>
-                <Descriptions.Item label="Logic PASS율">
-                  {kpi.runMeta.logicPassRateText}
-                </Descriptions.Item>
                 <Descriptions.Item label="LLM 평가율">
                   {kpi.runMeta.llmDoneRateText}
                 </Descriptions.Item>

@@ -135,8 +135,8 @@ def test_execute_validation_run_processes_room_repeat_batches_sequentially(monke
     async def fake_orchestrator_sync(
         self, session, query, conversation_id=None, context=None, target_assistant=None
     ):
-        assert isinstance(context, dict)
-        batch_key = (int(context.get("room", 0)), int(context.get("repeat", 0)))
+        _prefix, room_str, repeat_str, _query_str = str(query).split("-")
+        batch_key = (int(room_str), int(repeat_str))
         if batch_key not in batch_started_at:
             batch_started_at[batch_key] = time.monotonic()
         await asyncio.sleep(0.015)

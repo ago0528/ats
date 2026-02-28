@@ -18,8 +18,6 @@ const baseItem = (partial?: Partial<ValidationRunItem>): ValidationRunItem =>
     queryText: 'query',
     expectedResult: '',
     category: 'Happy path',
-    logicFieldPath: '',
-    logicExpectedValue: '',
     conversationRoomIndex: 1,
     repeatIndex: 1,
     conversationId: 'conv-1',

@@ -24,8 +24,6 @@ def test_validation_score_snapshot_created_after_evaluation(monkeypatch):
             "expectedResult": "결과 score",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -86,5 +84,5 @@ def test_validation_score_snapshot_created_after_evaluation(monkeypatch):
     assert snapshots
     overall = [row for row in snapshots if row.query_group_id is None][0]
     assert overall.total_items == 1
-    assert overall.logic_pass_items == 1
+    assert overall.logic_pass_items == 0
     assert overall.llm_done_items == 1

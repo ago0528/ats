@@ -9,7 +9,7 @@ export function hasExecutionResult(item: ValidationRunItem): boolean {
 }
 
 export function hasEvaluationResult(item: ValidationRunItem): boolean {
-  return Boolean(item.logicEvaluation) || Boolean(item.llmEvaluation);
+  return Boolean(item.llmEvaluation);
 }
 
 export function buildRunItemIdsByQueryId(

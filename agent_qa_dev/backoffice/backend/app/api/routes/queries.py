@@ -6,7 +6,7 @@ from typing import Any, Optional
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -21,18 +21,7 @@ QUERY_ID_COLUMN_CANDIDATES = ["쿼리 ID", "query_id", "queryId", "id"]
 QUERY_TEXT_COLUMN_CANDIDATES = ["query_text", "query", "질의"]
 CATEGORY_COLUMN_CANDIDATES = ["category", "카테고리"]
 GROUP_COLUMN_CANDIDATES = ["group_id", "groupId", "group", "group_name", "그룹"]
-TARGET_ASSISTANT_COLUMN_CANDIDATES = ["target_assistant", "targetAssistant", "대상어시스턴트"]
-CONTEXT_JSON_COLUMN_CANDIDATES = ["context_json", "contextJson", "context", "컨텍스트"]
 EXPECTED_RESULT_COLUMN_CANDIDATES = ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"]
-LOGIC_FIELD_PATH_COLUMN_CANDIDATES = ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"]
-LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES = [
-    "logic_expected_value",
-    "logicExpectedValue",
-    "검증 기대값",
-    "Logic 기대값",
-    "logic_expected",
-    "expected_value",
-]
 LATENCY_CLASS_COLUMN_CANDIDATES = ["latencyClass", "latency_class", "응답속도유형", "응답속도 유형"]
 
 
@@ -110,13 +99,6 @@ def _parse_bulk_upload_rows(
         expected_result = _extract_cell(series, ["expected_result", "expectedResult", "expected", "기대 결과", "기대결과", "기대값"])
         category = _normalize_category(_extract_cell(series, ["category", "카테고리"], default="Happy path"))
         group_value = _extract_cell(series, ["group_id", "groupId", "group", "group_name", "그룹"]).strip()
-        logic_field_path = _extract_cell(series, ["logic_field_path", "logicFieldPath", "검증 필드", "Logic 검증 필드", "field_path"])
-        logic_expected_value = _extract_cell(
-            series,
-            ["logic_expected_value", "logicExpectedValue", "검증 기대값", "Logic 기대값", "logic_expected", "expected_value"],
-        )
-        target_assistant = _extract_cell(series, ["target_assistant", "targetAssistant", "대상어시스턴트"])
-        context_json = _extract_cell(series, ["context_json", "contextJson", "context", "컨텍스트"])
         latency_class_raw = _extract_cell(series, LATENCY_CLASS_COLUMN_CANDIDATES)
         latency_class = normalize_latency_class(latency_class_raw)
         if latency_class_raw and latency_class is None:
@@ -136,10 +118,6 @@ def _parse_bulk_upload_rows(
                 "category": category,
                 "group_value": group_value,
                 "llm_eval_meta": eval_meta,
-                "logic_field_path": logic_field_path,
-                "logic_expected_value": logic_expected_value,
-                "target_assistant": target_assistant,
-                "context_json": context_json,
             }
         )
 
@@ -189,11 +167,7 @@ def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
     has_query_text = _has_any_column(headers, QUERY_TEXT_COLUMN_CANDIDATES)
     has_category = _has_any_column(headers, CATEGORY_COLUMN_CANDIDATES)
     has_group = _has_any_column(headers, GROUP_COLUMN_CANDIDATES)
-    has_target_assistant = _has_any_column(headers, TARGET_ASSISTANT_COLUMN_CANDIDATES)
-    has_context_json = _has_any_column(headers, CONTEXT_JSON_COLUMN_CANDIDATES)
     has_expected_result = _has_any_column(headers, EXPECTED_RESULT_COLUMN_CANDIDATES)
-    has_logic_field_path = _has_any_column(headers, LOGIC_FIELD_PATH_COLUMN_CANDIDATES)
-    has_logic_expected_value = _has_any_column(headers, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES)
 
     rows: list[dict[str, Any]] = []
     missing_query_id_rows: list[int] = []
@@ -220,19 +194,11 @@ def _parse_bulk_update_rows(df: pd.DataFrame) -> dict[str, Any]:
                     else None
                 ),
                 "groupValue": _extract_cell(series, GROUP_COLUMN_CANDIDATES).strip() if has_group else None,
-                "targetAssistant": _extract_cell(series, TARGET_ASSISTANT_COLUMN_CANDIDATES) if has_target_assistant else None,
-                "contextJson": _extract_cell(series, CONTEXT_JSON_COLUMN_CANDIDATES) if has_context_json else None,
                 "expectedResult": _extract_cell(series, EXPECTED_RESULT_COLUMN_CANDIDATES) if has_expected_result else None,
-                "logicFieldPath": _extract_cell(series, LOGIC_FIELD_PATH_COLUMN_CANDIDATES) if has_logic_field_path else None,
-                "logicExpectedValue": _extract_cell(series, LOGIC_EXPECTED_VALUE_COLUMN_CANDIDATES) if has_logic_expected_value else None,
                 "hasQueryText": has_query_text,
                 "hasCategory": has_category,
                 "hasGroup": has_group,
-                "hasTargetAssistant": has_target_assistant,
-                "hasContextJson": has_context_json,
                 "hasExpectedResult": has_expected_result,
-                "hasLogicFieldPath": has_logic_field_path,
-                "hasLogicExpectedValue": has_logic_expected_value,
                 "missingQueryId": row_no in missing_query_id_rows,
                 "duplicateQueryId": row_no in duplicate_query_id_rows,
             }
@@ -315,10 +281,6 @@ def _analyze_bulk_update_rows(
             "groupValue": None,
             "updateGroupId": bool(row.get("hasGroup")),
             "expectedResult": None,
-            "logicFieldPath": None,
-            "logicExpectedValue": None,
-            "targetAssistant": None,
-            "contextJson": None,
         }
 
         if row.get("hasQueryText"):
@@ -358,30 +320,6 @@ def _analyze_bulk_update_rows(
                 changed_fields.append("expectedResult")
                 plan_payload["expectedResult"] = next_expected_result
 
-        if row.get("hasLogicFieldPath"):
-            next_logic_field_path = str(row.get("logicFieldPath") or "")
-            if next_logic_field_path != str(existing.logic_field_path or ""):
-                changed_fields.append("logicFieldPath")
-                plan_payload["logicFieldPath"] = next_logic_field_path
-
-        if row.get("hasLogicExpectedValue"):
-            next_logic_expected_value = str(row.get("logicExpectedValue") or "")
-            if next_logic_expected_value != str(existing.logic_expected_value or ""):
-                changed_fields.append("logicExpectedValue")
-                plan_payload["logicExpectedValue"] = next_logic_expected_value
-
-        if row.get("hasTargetAssistant"):
-            next_target_assistant = str(row.get("targetAssistant") or "")
-            if next_target_assistant != str(existing.target_assistant or ""):
-                changed_fields.append("targetAssistant")
-                plan_payload["targetAssistant"] = next_target_assistant
-
-        if row.get("hasContextJson"):
-            next_context_json = str(row.get("contextJson") or "")
-            if next_context_json != str(existing.context_json or ""):
-                changed_fields.append("contextJson")
-                plan_payload["contextJson"] = next_context_json
-
         if changed_fields:
             planned_updates.append(plan_payload)
             status = "planned-update"
@@ -418,26 +356,22 @@ def _analyze_bulk_update_rows(
 
 
 class QueryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     queryText: str = Field(min_length=1)
     expectedResult: str = ""
     category: str = "Happy path"
     groupId: Optional[str] = None
-    logicFieldPath: str = ""
-    logicExpectedValue: str = ""
-    contextJson: str = ""
-    targetAssistant: str = ""
     createdBy: str = "unknown"
 
 
 class QueryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     queryText: Optional[str] = None
     expectedResult: Optional[str] = None
     category: Optional[str] = None
     groupId: Optional[str] = None
-    logicFieldPath: Optional[str] = None
-    logicExpectedValue: Optional[str] = None
-    contextJson: Optional[str] = None
-    targetAssistant: Optional[str] = None
 
 
 @router.get("/queries")
@@ -481,10 +415,6 @@ def list_queries(
                 "category": row.category,
                 "groupId": _present_group_id(row.group_id),
                 "groupName": group_map[row.group_id].group_name if row.group_id and row.group_id in group_map else "",
-                "logicFieldPath": row.logic_field_path,
-                "logicExpectedValue": row.logic_expected_value,
-                "contextJson": row.context_json,
-                "targetAssistant": row.target_assistant,
                 "createdBy": row.created_by,
                 "createdAt": row.created_at,
                 "updatedAt": row.updated_at,
@@ -509,10 +439,6 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
         expected_result=body.expectedResult,
         category=_normalize_category(body.category),
         group_id=body.groupId,
-        logic_field_path=body.logicFieldPath,
-        logic_expected_value=body.logicExpectedValue,
-        context_json=body.contextJson,
-        target_assistant=body.targetAssistant,
         created_by=body.createdBy,
     )
     db.commit()
@@ -522,10 +448,6 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "logicFieldPath": row.logic_field_path,
-        "logicExpectedValue": row.logic_expected_value,
-        "contextJson": row.context_json,
-        "targetAssistant": row.target_assistant,
         "createdBy": row.created_by,
         "createdAt": row.created_at,
         "updatedAt": row.updated_at,
@@ -535,9 +457,9 @@ def create_query(body: QueryCreateRequest, db: Session = Depends(get_db)):
 @router.get("/queries/template")
 def download_query_template():
     csv_text = (
-        "질의,카테고리,그룹,targetAssistant,contextJson,기대 결과,Logic 검증 필드,Logic 기대값,latencyClass\n"
-        "리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,RECRUIT_PLAN_CREATE_ASSISTANT,,채용 플랜이 단계별로 제시됨,assistantMessage,역량검사,MULTI\n"
-        "미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,RECRUIT_PLAN_ASSISTANT,,독려 메일 작업으로 연결됨,assistantMessage,지원자,SINGLE\n"
+        "질의,카테고리,그룹,기대 결과,latencyClass\n"
+        "리드타임 3개월 정도의 수시 채용을 설계해줘. 전형은 역량검사 -> 서류 -> 1차 면접(일정조율) -> 2차 면접으로 진행할래,Happy path,,채용 플랜이 단계별로 제시됨,MULTI\n"
+        "미응시 지원자에게 독려 메일 보내고 싶어,Happy path,,독려 메일 작업으로 연결됨,SINGLE\n"
     )
     csv_bytes = ("\ufeff" + csv_text).encode("utf-8")
     return StreamingResponse(
@@ -562,10 +484,6 @@ def get_query(query_id: str, db: Session = Depends(get_db)):
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "logicFieldPath": row.logic_field_path,
-        "logicExpectedValue": row.logic_expected_value,
-        "contextJson": row.context_json,
-        "targetAssistant": row.target_assistant,
         "createdBy": row.created_by,
         "createdAt": row.created_at,
         "updatedAt": row.updated_at,
@@ -588,10 +506,6 @@ def update_query(query_id: str, body: QueryUpdateRequest, db: Session = Depends(
         category=_normalize_category(body.category) if body.category is not None else None,
         group_id=(str(payload.get("groupId")) if payload.get("groupId") is not None else None),
         update_group_id=("groupId" in payload),
-        logic_field_path=body.logicFieldPath,
-        logic_expected_value=body.logicExpectedValue,
-        context_json=body.contextJson,
-        target_assistant=body.targetAssistant,
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Query not found")
@@ -602,10 +516,6 @@ def update_query(query_id: str, body: QueryUpdateRequest, db: Session = Depends(
         "expectedResult": row.expected_result,
         "category": row.category,
         "groupId": _present_group_id(row.group_id),
-        "logicFieldPath": row.logic_field_path,
-        "logicExpectedValue": row.logic_expected_value,
-        "contextJson": row.context_json,
-        "targetAssistant": row.target_assistant,
         "createdBy": row.created_by,
         "createdAt": row.created_at,
         "updatedAt": row.updated_at,
@@ -728,10 +638,6 @@ async def bulk_upload_queries(
                 "category": row["category"],
                 "group_id": resolved_group_id,
                 "llm_eval_meta": row["llm_eval_meta"],
-                "logic_field_path": row["logic_field_path"],
-                "logic_expected_value": row["logic_expected_value"],
-                "target_assistant": row["target_assistant"],
-                "context_json": row["context_json"],
             }
         )
 
@@ -887,10 +793,6 @@ async def bulk_update_queries(
             category=plan.get("category"),
             group_id=resolved_group_id,
             update_group_id=update_group_id,
-            logic_field_path=plan.get("logicFieldPath"),
-            logic_expected_value=plan.get("logicExpectedValue"),
-            context_json=plan.get("contextJson"),
-            target_assistant=plan.get("targetAssistant"),
         )
         if updated is not None:
             updated_count += 1

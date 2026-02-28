@@ -31,8 +31,6 @@ def _create_group_and_query(
             "expectedResult": "ok",
             "category": category,
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "ok",
         },
     )
     assert query_resp.status_code == 200
@@ -52,10 +50,6 @@ def _bulk_create_queries(*, group_name: str, query_prefix: str, count: int) -> t
                 "category": "Happy path",
                 "group_id": group.id,
                 "llm_eval_meta": "",
-                "logic_field_path": "",
-                "logic_expected_value": "",
-                "context_json": "",
-                "target_assistant": "",
             }
             for index in range(count)
         ]

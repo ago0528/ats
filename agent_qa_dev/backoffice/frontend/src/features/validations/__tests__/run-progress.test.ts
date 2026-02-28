@@ -34,8 +34,6 @@ const item = (partial?: Partial<ValidationRunItem>): ValidationRunItem =>
     queryText: 'q',
     expectedResult: '',
     category: 'Happy path',
-    logicFieldPath: '',
-    logicExpectedValue: '',
     conversationRoomIndex: 1,
     repeatIndex: 1,
     conversationId: '',

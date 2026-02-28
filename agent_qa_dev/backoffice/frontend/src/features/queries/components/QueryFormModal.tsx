@@ -58,22 +58,6 @@ export function QueryFormModal({
         <Form.Item name="expectedResult" label="기대 결과">
           <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
         </Form.Item>
-        <Space style={{ width: '100%' }} size={12}>
-          <Form.Item name="logicFieldPath" label="Logic 검증 필드" style={{ minWidth: 220 }}>
-            <Input placeholder="assistantMessage" />
-          </Form.Item>
-          <Form.Item name="logicExpectedValue" label="Logic 기대값" style={{ minWidth: 220 }}>
-            <Input />
-          </Form.Item>
-        </Space>
-        <Space style={{ width: '100%' }} size={12}>
-          <Form.Item name="targetAssistant" label="targetAssistant" style={{ minWidth: 220 }}>
-            <Input placeholder="ORCHESTRATOR_WORKER_V3" />
-          </Form.Item>
-          <Form.Item name="contextJson" label="contextJson" style={{ minWidth: 220 }}>
-            <Input placeholder='{"recruitPlanId":"..."}' />
-          </Form.Item>
-        </Space>
       </Form>
     </StandardModal>
   );

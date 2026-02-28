@@ -28,9 +28,7 @@ def compare_validation_runs(repo: ValidationRunRepository, run_id: str, base_run
 
     run_items = repo.list_items(run.id, limit=100000)
     base_items = repo.list_items(base_run.id, limit=100000)
-    run_logic = repo.get_logic_eval_map([x.id for x in run_items])
     run_llm = repo.get_llm_eval_map([x.id for x in run_items])
-    base_logic = repo.get_logic_eval_map([x.id for x in base_items])
     base_llm = repo.get_llm_eval_map([x.id for x in base_items])
 
     current_by_key = {_build_key(item): item for item in run_items}
@@ -43,12 +41,8 @@ def compare_validation_runs(repo: ValidationRunRepository, run_id: str, base_run
             changed_rows.append({"key": key, "type": "NEW"})
             continue
 
-        logic_cur = run_logic.get(item.id)
-        logic_base = base_logic.get(base_item.id)
         llm_cur = run_llm.get(item.id)
         llm_base = base_llm.get(base_item.id)
-        current_logic = logic_cur.result if logic_cur else ""
-        base_logic_result = logic_base.result if logic_base else ""
         current_llm_status = llm_cur.status if llm_cur else ""
         base_llm_status = llm_base.status if llm_base else ""
         current_llm_score = llm_cur.total_score if llm_cur else None
@@ -57,8 +51,7 @@ def compare_validation_runs(repo: ValidationRunRepository, run_id: str, base_run
         base_error = base_item.error or ""
 
         if (
-            current_logic != base_logic_result
-            or current_llm_status != base_llm_status
+            current_llm_status != base_llm_status
             or current_llm_score != base_llm_score
             or current_error != base_error
         ):
@@ -67,13 +60,11 @@ def compare_validation_runs(repo: ValidationRunRepository, run_id: str, base_run
                     "key": key,
                     "queryText": item.query_text_snapshot,
                     "current": {
-                        "logicResult": current_logic,
                         "llmStatus": current_llm_status,
                         "llmScore": current_llm_score,
                         "error": current_error,
                     },
                     "base": {
-                        "logicResult": base_logic_result,
                         "llmStatus": base_llm_status,
                         "llmScore": base_llm_score,
                         "error": base_error,

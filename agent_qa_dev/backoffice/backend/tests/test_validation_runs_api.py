@@ -26,8 +26,6 @@ def test_validation_runs_flow(monkeypatch):
             "expectedResult": "결과 A",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -47,7 +45,6 @@ def test_validation_runs_flow(monkeypatch):
 
     items_resp = client.get(f"/api/v1/validation-runs/{run_id}/items")
     assert items_resp.status_code == 200
-    assert items_resp.json()["items"][0]["targetAssistant"] == "ORCHESTRATOR_ASSISTANT"
     item_id = items_resp.json()["items"][0]["id"]
 
     def fake_runner_run(job_id, job_coro_factory):
@@ -125,8 +122,6 @@ def test_validation_run_evaluate_gate(monkeypatch):
             "expectedResult": "결과 A",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -242,8 +237,6 @@ def test_execute_run_with_item_ids_resets_target_items(monkeypatch):
             "expectedResult": "결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -344,8 +337,6 @@ def test_execute_run_with_item_ids_recovers_stale_running_run(monkeypatch):
             "expectedResult": "결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -402,8 +393,6 @@ def test_get_validation_run_reconciles_stale_running_status():
             "expectedResult": "결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -447,8 +436,6 @@ def test_evaluate_run_with_item_ids_scope_validation():
             "expectedResult": "결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -521,8 +508,6 @@ def test_update_run_item_latency_class_snapshot():
             "expectedResult": "결과",
             "category": "Happy path",
             "groupId": group_id,
-            "logicFieldPath": "assistantMessage",
-            "logicExpectedValue": "결과",
         },
     )
     query_id = query_resp.json()["id"]
@@ -564,3 +549,19 @@ def test_update_run_item_latency_class_snapshot():
         json={"latencyClass": "FAST"},
     )
     assert invalid_resp.status_code == 400
+
+
+def test_validation_run_create_rejects_removed_ad_hoc_logic_fields():
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "adHocQuery": {
+                "queryText": "단일 질의",
+                "logicFieldPath": "assistantMessage",
+            },
+        },
+    )
+    assert resp.status_code == 422

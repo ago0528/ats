@@ -46,7 +46,6 @@ export const HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS = {
   rawResponse: 260,
   responseTimeSec: 140,
   error: 220,
-  logic: 90,
   llm: 110,
 };
 

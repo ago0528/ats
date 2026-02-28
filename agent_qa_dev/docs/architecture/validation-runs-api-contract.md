@@ -70,8 +70,6 @@
         "totalItems": 10,
         "executedItems": 10,
         "errorItems": 0,
-        "logicPassItems": 9,
-        "logicPassRate": 90,
         "llmDoneItems": 8,
         "llmMetricAverages": {},
         "llmTotalScoreAvg": 4.11
@@ -229,7 +227,7 @@
   - `validation_llm_evaluations` (해당 run item 전부) 삭제
   - `validation_score_snapshots` (해당 run) 삭제
   - run `eval_status = PENDING`, `eval_started_at/eval_finished_at = NULL`
-- `validation_logic_evaluations`는 유지한다.
+- `validation_logic_evaluations`는 DB에 물리적으로 남아 있으나, 현재 파이프라인에서는 생성/갱신하지 않는다(미사용 상태 유지).
 
 ---
 

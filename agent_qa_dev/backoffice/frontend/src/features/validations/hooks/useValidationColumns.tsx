@@ -79,23 +79,6 @@ const getRunItemEvaluationStateLabel = (row: ValidationRunItem) => {
   return '평가대기';
 };
 
-const getLogicResultTag = (value?: string) => {
-  const status = normalizeStatus(value);
-  if (!status) {
-    return <span>-</span>;
-  }
-  if (status === 'PASS') {
-    return renderStateTag(status, 'success');
-  }
-  if (status.startsWith('FAIL')) {
-    return renderStateTag(status, 'error');
-  }
-  if (status.startsWith('SKIPPED')) {
-    return renderStateTag(status, 'default');
-  }
-  return renderStateTag(status, 'default');
-};
-
 const getLlmEvaluationTag = (value?: string) => {
   const status = normalizeStatus(value);
   if (!status) {
@@ -288,12 +271,6 @@ export function useValidationColumns(options: UseValidationColumnsOptions = {}) 
         width: HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS.error,
         ellipsis: true,
         render: (value: string) => renderEllipsisCell(value, 'danger'),
-      },
-      {
-        key: 'logic',
-        title: 'Logic',
-        width: HISTORY_DETAIL_ITEM_INITIAL_COLUMN_WIDTHS.logic,
-        render: (_, row: ValidationRunItem) => getLogicResultTag(row.logicEvaluation?.result),
       },
       {
         key: 'llm',

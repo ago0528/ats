@@ -63,7 +63,6 @@ def build_group_dashboard(db: Session, group_id: str) -> dict[str, Any]:
         return {
             "groupId": group_id,
             "totalItems": 0,
-            "logicPassRate": 0.0,
             "llmMetricAverages": {},
             "failurePatterns": [],
         }
@@ -71,7 +70,6 @@ def build_group_dashboard(db: Session, group_id: str) -> dict[str, Any]:
     repo = ValidationRunRepository(db)
     items = list(db.query(ValidationRunItem).filter(ValidationRunItem.query_id.in_(query_ids)).all())
     item_ids = [item.id for item in items]
-    logic_map = repo.get_logic_eval_map(item_ids)
     llm_map = repo.get_llm_eval_map(item_ids)
 
     total_items = len(items)
@@ -79,23 +77,16 @@ def build_group_dashboard(db: Session, group_id: str) -> dict[str, Any]:
         return {
             "groupId": group_id,
             "totalItems": 0,
-            "logicPassRate": 0.0,
             "llmMetricAverages": {},
             "failurePatterns": [],
         }
 
-    logic_pass_count = 0
     metric_sums: dict[str, float] = defaultdict(float)
     metric_counts: dict[str, int] = defaultdict(int)
     failure_counts: dict[str, int] = defaultdict(int)
 
     for item in items:
-        logic = logic_map.get(item.id)
-        if logic and logic.result == "PASS":
-            logic_pass_count += 1
         if (item.error or "").strip():
-            failure_counts[item.category_snapshot or "Unknown"] += 1
-        elif logic and logic.result == "FAIL":
             failure_counts[item.category_snapshot or "Unknown"] += 1
 
         llm = llm_map.get(item.id)
@@ -115,7 +106,6 @@ def build_group_dashboard(db: Session, group_id: str) -> dict[str, Any]:
     return {
         "groupId": group_id,
         "totalItems": total_items,
-        "logicPassRate": round((logic_pass_count / total_items) * 100, 2) if total_items else 0.0,
         "llmMetricAverages": metric_avg,
         "failurePatterns": failure_patterns,
     }
@@ -157,7 +147,6 @@ def build_test_set_dashboard(
             "totalItems": 0,
             "executedItems": 0,
             "errorItems": 0,
-            "logicPassRate": 0.0,
             "llmMetricAverages": {},
             "llmTotalScoreAverage": None,
             "failurePatterns": [],
@@ -184,13 +173,11 @@ def build_test_set_dashboard(
 
     repo = ValidationRunRepository(db)
     item_ids = [item.id for item in items]
-    logic_map = repo.get_logic_eval_map(item_ids)
     llm_map = repo.get_llm_eval_map(item_ids)
 
     total_items = len(items)
     executed_items = 0
     error_items = 0
-    logic_pass_items = 0
     metric_sums: dict[str, float] = defaultdict(float)
     metric_counts: dict[str, int] = defaultdict(int)
     total_score_sum = 0.0
@@ -215,7 +202,6 @@ def build_test_set_dashboard(
             "totalItems": 0,
             "executedItems": 0,
             "errorItems": 0,
-            "logicPassItems": 0,
             "llmDoneItems": 0,
         }
         for run in runs
@@ -235,13 +221,6 @@ def build_test_set_dashboard(
         if (item.error or "").strip():
             error_items += 1
             summary["errorItems"] += 1
-            failure_counts[item.category_snapshot or "Unknown"] += 1
-
-        logic = logic_map.get(item.id)
-        if logic and logic.result == "PASS":
-            logic_pass_items += 1
-            summary["logicPassItems"] += 1
-        elif logic and logic.result == "FAIL":
             failure_counts[item.category_snapshot or "Unknown"] += 1
 
         raw_payload, raw_parse_ok = parse_raw_payload(item.raw_json or "")
@@ -383,7 +362,6 @@ def build_test_set_dashboard(
         "totalItems": total_items,
         "executedItems": executed_items,
         "errorItems": error_items,
-        "logicPassRate": round((logic_pass_items / total_items) * 100, 2) if total_items else 0.0,
         "llmMetricAverages": metric_avg,
         "llmTotalScoreAverage": llm_total_score_avg,
         "failurePatterns": failure_patterns,

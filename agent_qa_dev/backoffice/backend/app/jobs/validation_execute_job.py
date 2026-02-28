@@ -14,19 +14,6 @@ from app.core.enums import EvalStatus, RunStatus
 from app.repositories.validation_runs import ValidationRunRepository
 
 
-def _parse_context_json(raw: str) -> Optional[dict]:
-    text = (raw or "").strip()
-    if not text:
-        return None
-    try:
-        payload = json.loads(text)
-    except Exception:
-        return None
-    if isinstance(payload, dict):
-        return payload
-    return None
-
-
 async def execute_validation_run(
     run_id: str,
     base_url: str,
@@ -68,8 +55,6 @@ async def execute_validation_run(
                     "id": item.id,
                     "ordinal": int(item.ordinal or 0),
                     "query_text_snapshot": str(item.query_text_snapshot or ""),
-                    "context_json_snapshot": str(item.context_json_snapshot or ""),
-                    "target_assistant_snapshot": str(item.target_assistant_snapshot or ""),
                 }
             )
         for room_map in grouped_items.values():
@@ -95,9 +80,8 @@ async def execute_validation_run(
             async def _execute_item(item: dict[str, Any]) -> None:
                 error = ""
                 result: dict[str, Any] = {}
-                item_context = _parse_context_json(str(item.get("context_json_snapshot") or "")) or default_context
-                default_target = (run_default_target_assistant or "").strip()
-                item_target_assistant = default_target or str(item.get("target_assistant_snapshot") or "").strip()
+                item_context = default_context
+                item_target_assistant = (run_default_target_assistant or "").strip()
                 try:
                     async with sem:
                         result = await asyncio.wait_for(

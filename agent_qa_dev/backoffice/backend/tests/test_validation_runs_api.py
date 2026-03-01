@@ -6,6 +6,7 @@ from app.api.routes import validation_runs as validation_runs_route
 from app.core.db import SessionLocal
 from app.core.enums import Environment, EvalStatus, RunStatus
 from app.main import app
+from app.repositories.validation_queries import ValidationQueryRepository
 from app.repositories.validation_runs import ValidationRunRepository
 
 
@@ -105,6 +106,46 @@ def test_validation_runs_flow(monkeypatch):
     assert missing_export_resp.status_code == 404
 
 
+def test_run_item_inherits_latency_class_from_query_criteria():
+    client = TestClient(app)
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-latency-snapshot", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    db = SessionLocal()
+    query_repo = ValidationQueryRepository(db)
+    query = query_repo.create(
+        query_text="질의 latency snapshot",
+        expected_result="결과",
+        category="Happy path",
+        group_id=group_id,
+        llm_eval_meta={"meta": {"latencyClass": "MULTI"}},
+        created_by="tester",
+    )
+    db.commit()
+    query_id = query.id
+    db.close()
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    assert run_resp.status_code == 200
+    run_id = run_resp.json()["id"]
+
+    items_resp = client.get(f"/api/v1/validation-runs/{run_id}/items")
+    assert items_resp.status_code == 200
+    items = items_resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["latencyClass"] == "MULTI"
+
+
 def test_validation_run_evaluate_gate(monkeypatch):
     client = TestClient(app)
     monkeypatch.setenv("BACKOFFICE_OPENAI_API_KEY", "test-openai-key")
@@ -152,6 +193,71 @@ def test_validation_run_evaluate_gate(monkeypatch):
         json={"openaiModel": "gpt-5.2"},
     )
     assert no_result_eval_resp.status_code == 409
+
+
+def test_evaluate_route_resets_eval_status_when_runner_schedule_fails(monkeypatch):
+    client = TestClient(app)
+    monkeypatch.setenv("BACKOFFICE_OPENAI_API_KEY", "test-openai-key")
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-스케줄오류", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 schedule fail",
+            "expectedResult": "결과",
+            "category": "Happy path",
+            "groupId": group_id,
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    item = repo.list_items(run_id, limit=1)[0]
+    repo.update_item_execution(
+        item.id,
+        conversation_id="conv-1",
+        raw_response="ok",
+        latency_ms=120,
+        error="",
+        raw_json='{"assistantMessage":"ok"}',
+    )
+    repo.set_status(run_id, RunStatus.DONE)
+    db.commit()
+    db.close()
+
+    def _raise_on_run(job_id, job_coro_factory, **kwargs):
+        raise RuntimeError("schedule failed")
+
+    monkeypatch.setattr(validation_runs_route.runner, "run", _raise_on_run)
+
+    resp = client.post(
+        f"/api/v1/validation-runs/{run_id}/evaluate",
+        json={"openaiModel": "gpt-5.2"},
+    )
+    assert resp.status_code == 500
+    assert "Failed to schedule evaluation job" in str(resp.json().get("detail", ""))
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    assert run is not None
+    assert run.eval_status == EvalStatus.PENDING
+    db.close()
 
 
 def test_list_validation_runs_with_evaluation_status_filter(monkeypatch):

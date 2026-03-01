@@ -185,6 +185,9 @@ export type ValidationRunItem = {
     metricScores: Record<string, unknown> | string;
     totalScore?: number | null;
     comment: string;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    llmLatencyMs?: number | null;
     evaluatedAt?: string;
   } | null;
 };
@@ -199,6 +202,21 @@ export type ValidationSettings = {
   evalModelDefault: string;
   paginationPageSizeLimitDefault: number;
   updatedAt?: string;
+};
+
+export type EvalPromptSnapshot = {
+  promptKey: string;
+  currentPrompt: string;
+  previousPrompt: string;
+  currentVersionLabel: string;
+  previousVersionLabel: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
+export type EvalPromptUpdatePayload = {
+  prompt: string;
+  versionLabel: string;
 };
 
 export type ValidationDashboardScoringMetric = {

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizePromptSnapshot, normalizePromptText } from './promptSnapshot';
+import {
+  normalizeEvalPromptSnapshot,
+  normalizePromptSnapshot,
+  normalizePromptText,
+} from './promptSnapshot';
 
 describe('prompt snapshot utils', () => {
   it('uses new response fields first', () => {
@@ -48,5 +52,24 @@ describe('prompt snapshot utils', () => {
     expect(snapshot.after).toBe('three\nfour');
     expect(snapshot.currentPrompt).toBe('x\ny');
     expect(snapshot.previousPrompt).toBe('p\nq');
+  });
+
+  it('normalizes evaluation prompt snapshot fields', () => {
+    const snapshot = normalizeEvalPromptSnapshot({
+      promptKey: 'validation_scoring',
+      currentPrompt: 'line1\r\nline2',
+      previousPrompt: 'old\u2028prompt',
+      currentVersionLabel: 'v3.0.0',
+      previousVersionLabel: 'v2.9.0',
+      updatedAt: '2026-03-01T00:00:00',
+      updatedBy: 'qa_admin',
+    });
+
+    expect(snapshot.promptKey).toBe('validation_scoring');
+    expect(snapshot.currentPrompt).toBe('line1\nline2');
+    expect(snapshot.previousPrompt).toBe('old\nprompt');
+    expect(snapshot.currentVersionLabel).toBe('v3.0.0');
+    expect(snapshot.previousVersionLabel).toBe('v2.9.0');
+    expect(snapshot.updatedBy).toBe('qa_admin');
   });
 });

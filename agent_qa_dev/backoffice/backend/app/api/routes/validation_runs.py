@@ -616,6 +616,7 @@ def create_validation_run(body: ValidationRunCreateRequest, db: Session = Depend
                             "query_text_snapshot": query.query_text,
                             "expected_result_snapshot": query.expected_result,
                             "category_snapshot": query.category,
+                            "applied_criteria_json": query.llm_eval_criteria_json,
                             "conversation_room_index": room_index,
                             "repeat_index": repeat_index,
                         },
@@ -745,6 +746,9 @@ def list_validation_run_items(run_id: str, offset: int = 0, limit: int = 1000, d
                         "metricScores": _serialize_json(llm_map[row.id].metric_scores_json),
                         "totalScore": llm_map[row.id].total_score,
                         "comment": llm_map[row.id].llm_comment,
+                        "inputTokens": llm_map[row.id].input_tokens,
+                        "outputTokens": llm_map[row.id].output_tokens,
+                        "llmLatencyMs": llm_map[row.id].llm_latency_ms,
                         "evaluatedAt": llm_map[row.id].evaluated_at,
                     }
                     if row.id in llm_map
@@ -889,7 +893,12 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
     repo.clear_eval_cancel_request(run.id)
     repo.set_eval_status(run.id, EvalStatus.RUNNING)
     db.commit()
-    runner.run(job_id, _job, job_key=_evaluation_job_key(run.id))
+    try:
+        runner.run(job_id, _job, job_key=_evaluation_job_key(run.id))
+    except Exception as exc:
+        repo.reset_eval_state_to_pending(run.id)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to schedule evaluation job: {exc}") from exc
     return {"jobId": job_id, "status": runner.jobs[job_id]}
 
 

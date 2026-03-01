@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.adapters.prompt_api_adapter import PromptApiAdapter
@@ -13,6 +13,10 @@ from app.core.environment import get_env_config, to_ats_environment
 from app.core.enums import Environment
 from app.models.prompt_audit_log import PromptAuditLog
 from app.models.prompt_snapshot import PromptSnapshot
+from app.repositories.validation_eval_prompt_configs import (
+    EvaluationPromptSnapshot,
+    ValidationEvalPromptConfigRepository,
+)
 
 router = APIRouter(tags=["prompts"])
 logger = logging.getLogger(__name__)
@@ -20,6 +24,21 @@ logger = logging.getLogger(__name__)
 
 class PromptUpdateRequest(BaseModel):
     prompt: str
+
+
+class EvalPromptUpdateRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    versionLabel: str = Field(
+        min_length=1,
+        max_length=80,
+    )
+
+
+class EvalPromptActionRequest(BaseModel):
+    versionLabel: str = Field(
+        min_length=1,
+        max_length=80,
+    )
 
 
 def _add_audit_log(
@@ -111,9 +130,114 @@ def _upsert_snapshot_for_mutation(
     return snapshot
 
 
+def _serialize_eval_prompt_snapshot(entity: EvaluationPromptSnapshot, *, updated_at, updated_by: str) -> dict:
+    return {
+        "promptKey": entity.prompt_key,
+        "currentPrompt": entity.current_prompt,
+        "previousPrompt": entity.previous_prompt,
+        "currentVersionLabel": entity.current_version_label,
+        "previousVersionLabel": entity.previous_version_label,
+        "updatedAt": updated_at,
+        "updatedBy": updated_by or "system",
+    }
+
+
 @router.get("/prompts/workers")
 def list_workers():
     return {"workers": PromptApiAdapter.workers()}
+
+
+@router.get("/prompts/evaluation/scoring")
+def get_evaluation_scoring_prompt(
+    x_actor: Optional[str] = Header(default="system"),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationEvalPromptConfigRepository(db)
+    actor = x_actor or "system"
+    entity = repo.get_or_create_scoring_prompt(actor=actor)
+    db.commit()
+    snapshot = repo.to_snapshot(entity)
+    return _serialize_eval_prompt_snapshot(
+        snapshot,
+        updated_at=entity.updated_at,
+        updated_by=entity.updated_by,
+    )
+
+
+@router.patch("/prompts/evaluation/scoring")
+def update_evaluation_scoring_prompt(
+    body: EvalPromptUpdateRequest,
+    x_actor: Optional[str] = Header(default="system"),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationEvalPromptConfigRepository(db)
+    actor = x_actor or "system"
+    normalized_prompt = str(body.prompt or "").strip()
+    if not normalized_prompt:
+        raise HTTPException(status_code=400, detail="prompt must not be empty")
+    try:
+        entity = repo.update_scoring_prompt(
+            prompt=normalized_prompt,
+            version_label=body.versionLabel,
+            actor=actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    snapshot = repo.to_snapshot(entity)
+    return _serialize_eval_prompt_snapshot(
+        snapshot,
+        updated_at=entity.updated_at,
+        updated_by=entity.updated_by,
+    )
+
+
+@router.post("/prompts/evaluation/scoring/revert-previous")
+def revert_evaluation_scoring_prompt_previous(
+    body: EvalPromptActionRequest,
+    x_actor: Optional[str] = Header(default="system"),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationEvalPromptConfigRepository(db)
+    actor = x_actor or "system"
+    try:
+        entity = repo.revert_scoring_prompt_previous(
+            version_label=body.versionLabel,
+            actor=actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    snapshot = repo.to_snapshot(entity)
+    return _serialize_eval_prompt_snapshot(
+        snapshot,
+        updated_at=entity.updated_at,
+        updated_by=entity.updated_by,
+    )
+
+
+@router.post("/prompts/evaluation/scoring/reset-default")
+def reset_evaluation_scoring_prompt_default(
+    body: EvalPromptActionRequest,
+    x_actor: Optional[str] = Header(default="system"),
+    db: Session = Depends(get_db),
+):
+    repo = ValidationEvalPromptConfigRepository(db)
+    actor = x_actor or "system"
+    try:
+        entity = repo.reset_scoring_prompt_to_default(
+            version_label=body.versionLabel,
+            actor=actor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    snapshot = repo.to_snapshot(entity)
+    return _serialize_eval_prompt_snapshot(
+        snapshot,
+        updated_at=entity.updated_at,
+        updated_by=entity.updated_by,
+    )
 
 
 @router.get("/prompts/{environment}/{worker_type}")
@@ -276,3 +400,4 @@ def reset_prompt(
         "currentPrompt": ats_current,
         "previousPrompt": snapshot.previous_prompt or "",
     }
+

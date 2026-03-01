@@ -45,6 +45,30 @@ erDiagram
     datetime updated_at
   }
 
+  VALIDATION_EVAL_PROMPT_CONFIGS {
+    text id PK
+    varchar_80 prompt_key UK
+    text current_prompt
+    text previous_prompt
+    varchar_80 current_version_label
+    varchar_80 previous_version_label
+    text updated_by
+    datetime created_at
+    datetime updated_at
+  }
+
+  VALIDATION_EVAL_PROMPT_AUDIT_LOGS {
+    text id PK
+    varchar_80 prompt_key
+    varchar_40 action
+    varchar_80 before_version_label
+    varchar_80 after_version_label
+    integer before_len
+    integer after_len
+    text actor
+    datetime created_at
+  }
+
   VALIDATION_QUERY_GROUPS {
     varchar_36 id PK
     varchar_140 group_name UK
@@ -157,6 +181,9 @@ erDiagram
     text llm_output_json
     varchar_80 prompt_version
     varchar_128 input_hash
+    integer input_tokens
+    integer output_tokens
+    integer llm_latency_ms
     datetime evaluated_at
   }
 
@@ -199,6 +226,7 @@ erDiagram
 
   GENERIC_RUNS ||--o{ GENERIC_RUN_ROWS : "has rows"
   GENERIC_RUNS ||--o{ GENERIC_RUNS : "base_run_id"
+  VALIDATION_EVAL_PROMPT_CONFIGS ||--o{ VALIDATION_EVAL_PROMPT_AUDIT_LOGS : "prompt_key (logical, no FK)"
 
   VALIDATION_QUERY_GROUPS ||--o{ VALIDATION_QUERIES : "contains"
 

@@ -4,7 +4,7 @@ import datetime as dt
 import uuid
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -22,5 +22,8 @@ class ValidationLlmEvaluation(Base):
     llm_output_json: Mapped[str] = mapped_column(Text, nullable=False, default="")
     prompt_version: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     input_hash: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    llm_latency_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="PENDING", index=True)
     evaluated_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=dt.datetime.utcnow)

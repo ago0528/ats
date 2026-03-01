@@ -26,6 +26,8 @@ sqlite3 backoffice/backend/backoffice.db
 - 자동화 잡: `automation_jobs`
 - 프롬프트 감사 로그: `prompt_audit_logs`
 - 프롬프트 스냅샷: `prompt_snapshots`
+- 평가 프롬프트 설정: `validation_eval_prompt_configs`
+- 평가 프롬프트 감사 로그: `validation_eval_prompt_audit_logs`
 
 ---
 
@@ -61,6 +63,10 @@ UNION ALL
 SELECT 'prompt_audit_logs', COUNT(*) FROM prompt_audit_logs
 UNION ALL
 SELECT 'prompt_snapshots', COUNT(*) FROM prompt_snapshots
+UNION ALL
+SELECT 'validation_eval_prompt_configs', COUNT(*) FROM validation_eval_prompt_configs
+UNION ALL
+SELECT 'validation_eval_prompt_audit_logs', COUNT(*) FROM validation_eval_prompt_audit_logs
 ORDER BY row_count DESC;
 ```
 
@@ -505,6 +511,77 @@ SELECT
 FROM validation_run_activity_reads r
 GROUP BY r.actor_key
 ORDER BY last_read_at DESC
+LIMIT (SELECT row_limit FROM params);
+```
+
+## Q21. 글로벌 평가 프롬프트 현재/직전 상태
+
+- 무엇을 보는가: 글로벌 평가 프롬프트 현재/직전 버전, 길이, 수정자
+- 파라미터: 없음
+- 주의사항: `prompt_key='validation_scoring'` 단일 row 기준
+
+```sql
+SELECT
+  c.prompt_key,
+  c.current_version_label,
+  c.previous_version_label,
+  LENGTH(c.current_prompt) AS current_len,
+  LENGTH(c.previous_prompt) AS previous_len,
+  c.updated_by,
+  c.updated_at,
+  c.created_at
+FROM validation_eval_prompt_configs c
+ORDER BY c.updated_at DESC;
+```
+
+## Q22. 글로벌 평가 프롬프트 변경 이력
+
+- 무엇을 보는가: 초기화/수정/되돌리기/기본초기화 이벤트 이력
+- 파라미터: `row_limit`
+- 주의사항: append-only 로그이며 `before_len/after_len`로 변경량 추적 가능
+
+```sql
+WITH params AS (
+  SELECT 100 AS row_limit
+)
+SELECT
+  a.created_at,
+  a.prompt_key,
+  a.action,
+  a.before_version_label,
+  a.after_version_label,
+  a.before_len,
+  a.after_len,
+  (a.after_len - a.before_len) AS diff_len,
+  a.actor
+FROM validation_eval_prompt_audit_logs a
+ORDER BY a.created_at DESC
+LIMIT (SELECT row_limit FROM params);
+```
+
+## Q23. Run별 LLM 토큰/지연시간 사용량 요약
+
+- 무엇을 보는가: run 단위 LLM 입력/출력 토큰 합계와 평균/최대 지연시간
+- 파라미터: `date_from`, `row_limit`
+- 주의사항: usage가 비어 있는 row(`NULL`)는 0으로 집계됨
+
+```sql
+WITH params AS (
+  SELECT '2026-02-01' AS date_from, 50 AS row_limit
+)
+SELECT
+  r.id AS run_id,
+  COUNT(le.id) AS llm_rows,
+  SUM(COALESCE(le.input_tokens, 0)) AS input_tokens_sum,
+  SUM(COALESCE(le.output_tokens, 0)) AS output_tokens_sum,
+  ROUND(AVG(COALESCE(le.llm_latency_ms, 0)), 2) AS avg_llm_latency_ms,
+  MAX(COALESCE(le.llm_latency_ms, 0)) AS max_llm_latency_ms
+FROM validation_runs r
+JOIN validation_run_items ri ON ri.run_id = r.id
+JOIN validation_llm_evaluations le ON le.run_item_id = ri.id
+WHERE date(r.created_at) >= (SELECT date_from FROM params)
+GROUP BY r.id
+ORDER BY r.created_at DESC
 LIMIT (SELECT row_limit FROM params);
 ```
 

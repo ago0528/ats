@@ -14,12 +14,25 @@ import { CopyOutlined } from '@ant-design/icons';
 import { DiffEditor } from '@monaco-editor/react';
 
 import { api } from '../../api/client';
+import {
+  getEvaluationScoringPrompt,
+  resetEvaluationScoringPromptDefault,
+  revertEvaluationScoringPromptPrevious,
+  updateEvaluationScoringPrompt,
+} from '../../api/validation';
 import { RuntimeSecrets } from '../../app/types';
 import type { Environment } from '../../app/EnvironmentScope';
 import { StandardDataTable } from '../../components/common/StandardDataTable';
 import { StandardModal, StandardModalMetaBlock } from '../../components/common/StandardModal';
 import { calculateLineDiff, getLengthDelta } from './utils/promptDiff';
-import { normalizePromptSnapshot, normalizePromptText, type PromptSnapshotData } from './utils/promptSnapshot';
+import {
+  normalizeEvalPromptSnapshot,
+  normalizePromptSnapshot,
+  normalizePromptText,
+  type EvalPromptSnapshotData,
+  type PromptSnapshotData,
+} from './utils/promptSnapshot';
+import { getEvalPromptVersionValidationMessage } from './utils/evalPromptVersion';
 
 type Worker = {
   workerType: string;
@@ -29,6 +42,7 @@ type Worker = {
 type WorkerPromptData = PromptSnapshotData;
 
 type ModalMode = 'view' | 'edit';
+export type PromptManagementSection = 'recruit-agent' | 'response-eval';
 
 const MODAL_TITLES: Record<ModalMode, string> = {
   view: '프롬프트 조회',
@@ -111,7 +125,15 @@ function createPromptTableColumns(
   ];
 }
 
-export function PromptManagementPage({ environment, tokens }: { environment: Environment; tokens: RuntimeSecrets }) {
+export function PromptManagementPage({
+  environment,
+  tokens,
+  section = 'recruit-agent',
+}: {
+  environment: Environment;
+  tokens: RuntimeSecrets;
+  section?: PromptManagementSection;
+}) {
   const { message } = App.useApp();
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [activeModal, setActiveModal] = useState<ModalMode | null>(null);
@@ -126,6 +148,19 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   const [search, setSearch] = useState('');
   const [isFetchingList, setIsFetchingList] = useState(false);
   const [isPromptSaving, setIsPromptSaving] = useState(false);
+  const [isEvalPromptLoading, setIsEvalPromptLoading] = useState(false);
+  const [isEvalPromptSaving, setIsEvalPromptSaving] = useState(false);
+  const [evalPromptData, setEvalPromptData] = useState<EvalPromptSnapshotData>({
+    promptKey: '',
+    currentPrompt: '',
+    previousPrompt: '',
+    currentVersionLabel: '',
+    previousVersionLabel: '',
+    updatedAt: '',
+    updatedBy: 'system',
+  });
+  const [evalPromptDraft, setEvalPromptDraft] = useState('');
+  const [evalPromptVersionLabel, setEvalPromptVersionLabel] = useState('');
   const [editorSessionKey, setEditorSessionKey] = useState(0);
   const [fetchingWorkerTypes, setFetchingWorkerTypes] = useState<string[]>([]);
   const closeModeRef = useRef<ModalMode | null>(null);
@@ -141,10 +176,24 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
   } | null>(null);
   const diffWrapperRef = useRef<HTMLDivElement | null>(null);
 
+  const isRecruitAgentSection = section === 'recruit-agent';
+  const isResponseEvalSection = section === 'response-eval';
   const hasTokens = Boolean(tokens.bearer && tokens.cms && tokens.mrs);
   const hasUnsavedChanges = useMemo(
     () => normalizePromptText(draft) !== normalizePromptText(promptData.currentPrompt),
     [draft, promptData.currentPrompt],
+  );
+  const hasEvalPromptUnsavedChanges = useMemo(
+    () => normalizePromptText(evalPromptDraft) !== normalizePromptText(evalPromptData.currentPrompt),
+    [evalPromptDraft, evalPromptData.currentPrompt],
+  );
+  const evalPromptDiffSummary = useMemo(
+    () => calculateLineDiff(evalPromptData.currentPrompt, evalPromptDraft),
+    [evalPromptData.currentPrompt, evalPromptDraft],
+  );
+  const evalPromptVersionMessage = useMemo(
+    () => getEvalPromptVersionValidationMessage(evalPromptVersionLabel),
+    [evalPromptVersionLabel],
   );
   const viewDiffSummary = useMemo(
     () => calculateLineDiff(promptData.previousPrompt, promptData.currentPrompt),
@@ -170,13 +219,40 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
     }
   };
 
+  const loadEvalPrompt = useCallback(async () => {
+    setIsEvalPromptLoading(true);
+    try {
+      const response = await getEvaluationScoringPrompt();
+      const normalized = normalizeEvalPromptSnapshot(response);
+      setEvalPromptData(normalized);
+      setEvalPromptDraft(normalized.currentPrompt);
+      setEvalPromptVersionLabel('');
+    } catch (error) {
+      console.error(error);
+      message.error('평가 프롬프트를 불러오지 못했습니다.');
+    } finally {
+      setIsEvalPromptLoading(false);
+    }
+  }, [message]);
+
   useEffect(() => {
+    if (!isRecruitAgentSection) {
+      setWorkers([]);
+      return;
+    }
     if (!hasTokens) {
       setWorkers([]);
       return;
     }
     void loadWorkers();
-  }, [hasTokens, tokens.bearer, tokens.cms, tokens.mrs]);
+  }, [hasTokens, isRecruitAgentSection, tokens.bearer, tokens.cms, tokens.mrs]);
+
+  useEffect(() => {
+    if (!isResponseEvalSection) {
+      return;
+    }
+    void loadEvalPrompt();
+  }, [environment, isResponseEvalSection, loadEvalPrompt]);
 
   const selectedWorkerLabel = useMemo(
     () => workers.find((w) => w.workerType === selectedWorker)?.description || '',
@@ -300,6 +376,86 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
       console.error(e);
     } finally {
       setIsPromptSaving(false);
+    }
+  };
+
+  const updateEvalPrompt = async () => {
+    const normalizedDraft = normalizePromptText(evalPromptDraft);
+    if (!normalizedDraft) {
+      message.warning('평가 프롬프트 본문을 입력해 주세요.');
+      return;
+    }
+    if (normalizePromptText(evalPromptData.currentPrompt) === normalizedDraft) {
+      message.warning('평가 프롬프트 수정사항이 없습니다.');
+      return;
+    }
+    if (evalPromptVersionMessage) {
+      message.warning(evalPromptVersionMessage);
+      return;
+    }
+
+    setIsEvalPromptSaving(true);
+    try {
+      const response = await updateEvaluationScoringPrompt({
+        prompt: normalizedDraft,
+        versionLabel: evalPromptVersionLabel.trim(),
+      });
+      const normalized = normalizeEvalPromptSnapshot(response);
+      setEvalPromptData(normalized);
+      setEvalPromptDraft(normalized.currentPrompt);
+      setEvalPromptVersionLabel('');
+      message.success('평가 프롬프트가 저장되었습니다.');
+    } catch (error) {
+      console.error(error);
+      message.error('평가 프롬프트 저장에 실패했습니다.');
+    } finally {
+      setIsEvalPromptSaving(false);
+    }
+  };
+
+  const revertEvalPromptPrevious = async () => {
+    if (evalPromptVersionMessage) {
+      message.warning(evalPromptVersionMessage);
+      return;
+    }
+    setIsEvalPromptSaving(true);
+    try {
+      const response = await revertEvaluationScoringPromptPrevious({
+        versionLabel: evalPromptVersionLabel.trim(),
+      });
+      const normalized = normalizeEvalPromptSnapshot(response);
+      setEvalPromptData(normalized);
+      setEvalPromptDraft(normalized.currentPrompt);
+      setEvalPromptVersionLabel('');
+      message.success('직전 평가 프롬프트로 되돌렸습니다.');
+    } catch (error) {
+      console.error(error);
+      message.error('직전 프롬프트 되돌리기에 실패했습니다.');
+    } finally {
+      setIsEvalPromptSaving(false);
+    }
+  };
+
+  const resetEvalPromptDefault = async () => {
+    if (evalPromptVersionMessage) {
+      message.warning(evalPromptVersionMessage);
+      return;
+    }
+    setIsEvalPromptSaving(true);
+    try {
+      const response = await resetEvaluationScoringPromptDefault({
+        versionLabel: evalPromptVersionLabel.trim(),
+      });
+      const normalized = normalizeEvalPromptSnapshot(response);
+      setEvalPromptData(normalized);
+      setEvalPromptDraft(normalized.currentPrompt);
+      setEvalPromptVersionLabel('');
+      message.success('기본 평가 프롬프트로 초기화했습니다.');
+    } catch (error) {
+      console.error(error);
+      message.error('기본 프롬프트 초기화에 실패했습니다.');
+    } finally {
+      setIsEvalPromptSaving(false);
     }
   };
 
@@ -483,74 +639,182 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
 
   return (
     <Space direction="vertical" style={{ width: '100%' }} size={16}>
-      {!hasTokens ? (
+      {isRecruitAgentSection && !hasTokens ? (
       <Alert
       type="warning"
       showIcon
       message="GNB의 로그인을 통해 Bearer/CMS/MRS를 먼저 입력해 주세요."
       />
       ) : null}
-      <Card className="backoffice-content-card">
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Alert
-            message="메뉴에서 선택한 워커의 최신 프롬프트를 조회하고 즉시 수정/초기화할 수 있습니다."
-            type="info"
-            showIcon
-          />
-          <Input.Search
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            allowClear
-            placeholder="워커 혹은 워커 설명으로 검색해 주세요."
-          />
-        </Space>
-      </Card>
-
-      <StandardDataTable
-        tableId="prompt-workers"
-        initialColumnWidths={{ workerType: 260, description: 440, actions: 280 }}
-        minColumnWidth={120}
-        className="prompt-table"
-        size="small"
-        rowKey="workerType"
-        dataSource={filteredWorkers}
-        loading={isFetchingList}
-        columns={createPromptTableColumns(
-          (workerType) => void openPromptModal(workerType, 'view'),
-          (workerType) => void openPromptModal(workerType, 'edit'),
-          (workerType) => void resetPrompt(workerType),
-          isWorkerFetching,
-        )}
-        bordered
-        rowClassName="prompt-table-row"
-        onRow={(row) => ({
-          onDoubleClick: () => {
-            void openPromptModal(row.workerType, 'view');
-          },
-        })}
-      />
-
-      <StandardModal
-        title={MODAL_TITLES.view}
-        open={activeModal === 'view'}
-        width={MODAL_WIDTH.view}
-        onCancel={requestCloseViewModal}
-        bodyPadding={0}
-        afterClose={() => closeModalStateIfNeeded('view')}
-        footer={
-          <Space>
-            <Button onClick={requestCloseViewModal}>닫기</Button>
-          </Space>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}>
-          <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
-            <div style={{ color: 'var(--ant-color-text-secondary)' }}>
-              선택된 프롬프트: {selectedWorker}
-              {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
+      {isResponseEvalSection ? (
+        <Card className="backoffice-content-card">
+          <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Alert
+              message="LLM 평가 프롬프트(글로벌): 6개 지표 채점용 프롬프트를 시스템 내에서 직접 관리합니다."
+              type="info"
+              showIcon
+            />
+            <Space size={8} wrap>
+              <Tag color="blue">Prompt Key: {evalPromptData.promptKey || 'validation_scoring'}</Tag>
+              <Tag color="geekblue">현재 버전: {evalPromptData.currentVersionLabel || '-'}</Tag>
+              <Tag color="default">직전 버전: {evalPromptData.previousVersionLabel || '-'}</Tag>
+              <Tag color="purple">수정자: {evalPromptData.updatedBy || 'system'}</Tag>
+            </Space>
+            <Input
+              value={evalPromptVersionLabel}
+              onChange={(event) => setEvalPromptVersionLabel(event.target.value)}
+              placeholder="변경 버전 라벨 (예: v3.0.0)"
+              maxLength={80}
+              disabled={isEvalPromptLoading || isEvalPromptSaving}
+            />
+            {evalPromptVersionLabel && evalPromptVersionMessage ? (
+              <Typography.Text type="danger">{evalPromptVersionMessage}</Typography.Text>
+            ) : null}
+            <Space size={8} wrap>
+              <Button
+                type="primary"
+                onClick={() => void updateEvalPrompt()}
+                disabled={!hasEvalPromptUnsavedChanges || Boolean(evalPromptVersionMessage)}
+                loading={isEvalPromptSaving}
+              >
+                저장
+              </Button>
+              <Button
+                onClick={() => {
+                  Modal.confirm({
+                    title: '직전 평가 프롬프트로 되돌리기',
+                    content: '현재 평가 프롬프트를 직전 버전으로 교체합니다.',
+                    okText: '되돌리기',
+                    cancelText: '취소',
+                    onOk: () => void revertEvalPromptPrevious(),
+                  });
+                }}
+                disabled={isEvalPromptLoading || isEvalPromptSaving || !evalPromptData.previousPrompt || Boolean(evalPromptVersionMessage)}
+              >
+                직전 버전 되돌리기
+              </Button>
+              <Button
+                danger
+                onClick={() => {
+                  Modal.confirm({
+                    title: '기본 평가 프롬프트로 초기화',
+                    content: '현재 프롬프트를 백엔드 기본 템플릿으로 초기화합니다.',
+                    okText: '초기화',
+                    cancelText: '취소',
+                    okType: 'danger',
+                    onOk: () => void resetEvalPromptDefault(),
+                  });
+                }}
+                disabled={isEvalPromptLoading || isEvalPromptSaving || Boolean(evalPromptVersionMessage)}
+              >
+                기본 템플릿 초기화
+              </Button>
+              <Button
+                onClick={() => void loadEvalPrompt()}
+                disabled={isEvalPromptSaving}
+                loading={isEvalPromptLoading}
+              >
+                새로고침
+              </Button>
+            </Space>
+            <Space size={8} wrap>
+              <Tag color="success">+Added {evalPromptDiffSummary.added}</Tag>
+              <Tag color="error">-Removed {evalPromptDiffSummary.removed}</Tag>
+              <Tag color="warning">~Modified {evalPromptDiffSummary.modified}</Tag>
+              <Tag color="blue">길이 차이: {getLengthDelta(evalPromptData.currentPrompt, evalPromptDraft)}</Tag>
+            </Space>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+              <div>
+                <Typography.Text strong>AS-IS (현재 저장본)</Typography.Text>
+                <Input.TextArea
+                  value={evalPromptData.currentPrompt}
+                  readOnly
+                  autoSize={{ minRows: 16, maxRows: 24 }}
+                  style={{ marginTop: 8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+                />
+              </div>
+              <div>
+                <Typography.Text strong>TO-BE (수정본)</Typography.Text>
+                <Input.TextArea
+                  value={evalPromptDraft}
+                  onChange={(event) => setEvalPromptDraft(event.target.value)}
+                  autoSize={{ minRows: 16, maxRows: 24 }}
+                  disabled={isEvalPromptLoading || isEvalPromptSaving}
+                  style={{ marginTop: 8, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+                />
+              </div>
             </div>
-          </StandardModalMetaBlock>
-          <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '520px', minHeight: 0, gap: 8 }}>
+          </Space>
+        </Card>
+      ) : null}
+
+      {isRecruitAgentSection ? (
+        <>
+          <Card className="backoffice-content-card">
+            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <Alert
+                message="메뉴에서 선택한 워커의 최신 프롬프트를 조회하고 즉시 수정/초기화할 수 있습니다."
+                type="info"
+                showIcon
+              />
+              <Input.Search
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                allowClear
+                placeholder="워커 혹은 워커 설명으로 검색해 주세요."
+              />
+            </Space>
+          </Card>
+
+          <StandardDataTable
+            tableId="prompt-workers"
+            initialColumnWidths={{ workerType: 260, description: 440, actions: 280 }}
+            minColumnWidth={120}
+            className="prompt-table"
+            size="small"
+            rowKey="workerType"
+            dataSource={filteredWorkers}
+            loading={isFetchingList}
+            columns={createPromptTableColumns(
+              (workerType) => void openPromptModal(workerType, 'view'),
+              (workerType) => void openPromptModal(workerType, 'edit'),
+              (workerType) => void resetPrompt(workerType),
+              isWorkerFetching,
+            )}
+            bordered
+            rowClassName="prompt-table-row"
+            onRow={(row) => ({
+              onDoubleClick: () => {
+                void openPromptModal(row.workerType, 'view');
+              },
+            })}
+          />
+        </>
+      ) : null}
+
+      {isRecruitAgentSection ? (
+        <>
+          <StandardModal
+            title={MODAL_TITLES.view}
+            open={activeModal === 'view'}
+            width={MODAL_WIDTH.view}
+            onCancel={requestCloseViewModal}
+            bodyPadding={0}
+            afterClose={() => closeModalStateIfNeeded('view')}
+            footer={
+              <Space>
+                <Button onClick={requestCloseViewModal}>닫기</Button>
+              </Space>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 }}>
+              <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
+                <div style={{ color: 'var(--ant-color-text-secondary)' }}>
+                  선택된 프롬프트: {selectedWorker}
+                  {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''}
+                </div>
+              </StandardModalMetaBlock>
+              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '520px', minHeight: 0, gap: 8 }}>
             <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <Space size={8}>
                 <Tag color="blue">길이 차이: {getLengthDelta(promptData.previousPrompt, promptData.currentPrompt)}</Tag>
@@ -622,131 +886,133 @@ export function PromptManagementPage({ environment, tokens }: { environment: Env
               />
             </div>
           </div>
-        </div>
-      </StandardModal>
+            </div>
+          </StandardModal>
 
-      <StandardModal
-        title={MODAL_TITLES.edit}
-        open={activeModal === 'edit'}
-        width={MODAL_WIDTH.edit}
-        onCancel={requestCloseEditModal}
-        afterOpenChange={(open) => {
-          if (open) {
-            requestAnimationFrame(layoutDiffEditor);
-          }
-        }}
-        destroyOnHidden={true}
-        afterClose={() => closeModalStateIfNeeded('edit')}
-        footer={
-          <Space>
-            <Button onClick={requestCloseEditModal}>취소</Button>
-            <Button type="primary" loading={isPromptSaving} onClick={updatePrompt}>
-              저장
-            </Button>
-          </Space>
-        }
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '520px', minHeight: 0, gap: 12 }}>
-          <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
-            <div style={{ color: 'var(--ant-color-text-secondary)' }}>
-              선택된 프롬프트: {selectedWorker} {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''} <br/>
-              프롬프트 수정 후, 우측 하단의 '저장' 버튼을 눌러 변경사항을 저장하세요.
-            </div>
-          </StandardModalMetaBlock>
-          <Space direction="vertical" style={{ width: '100%' }} size={6}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <Typography.Text strong>AS-IS</Typography.Text>
-              <Typography.Text strong>
-                TO-BE
-              </Typography.Text>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Space size={8}>
-                <Tag color="blue">길이 차이: {getLengthDelta(promptData.currentPrompt, draft)}</Tag>
-                <Tag color="success">+Added {diffSummary.added}</Tag>
-                <Tag color="error">-Removed {diffSummary.removed}</Tag>
-                <Tag color="warning">~Modified {diffSummary.modified}</Tag>
+          <StandardModal
+            title={MODAL_TITLES.edit}
+            open={activeModal === 'edit'}
+            width={MODAL_WIDTH.edit}
+            onCancel={requestCloseEditModal}
+            afterOpenChange={(open) => {
+              if (open) {
+                requestAnimationFrame(layoutDiffEditor);
+              }
+            }}
+            destroyOnHidden={true}
+            afterClose={() => closeModalStateIfNeeded('edit')}
+            footer={
+              <Space>
+                <Button onClick={requestCloseEditModal}>취소</Button>
+                <Button type="primary" loading={isPromptSaving} onClick={updatePrompt}>
+                  저장
+                </Button>
               </Space>
-              <Space size={8} wrap>
-                <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('AS-IS', promptData.currentPrompt)}>
-                  Copy AS-IS
-                </Button>
-                <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('TO-BE', draft)}>
-                  Copy TO-BE
-                </Button>
-                <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('DIFF', diffSummary.diffText)}>
-                  Copy DIFF
-                </Button>
-                <Button
-                  danger
-                  onClick={() => {
-                    Modal.confirm({
-                      title: 'TO-BE를 AS-IS로 되돌리기',
-                      content: '현재 TO-BE 편집 내용을 AS-IS 내용으로 초기화합니다.',
-                      okText: '초기화',
-                      cancelText: '취소',
-                      okType: 'danger',
-                      onOk: () => setDraft(promptData.currentPrompt),
-                    });
-                  }}
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '520px', minHeight: 0, gap: 12 }}>
+              <StandardModalMetaBlock padding={0} gap={8} marginBottom={12}>
+                <div style={{ color: 'var(--ant-color-text-secondary)' }}>
+                  선택된 프롬프트: {selectedWorker} {selectedWorkerLabel ? ` (${selectedWorkerLabel})` : ''} <br/>
+                  프롬프트 수정 후, 우측 하단의 '저장' 버튼을 눌러 변경사항을 저장하세요.
+                </div>
+              </StandardModalMetaBlock>
+              <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <Typography.Text strong>AS-IS</Typography.Text>
+                  <Typography.Text strong>
+                    TO-BE
+                  </Typography.Text>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Space size={8}>
+                    <Tag color="blue">길이 차이: {getLengthDelta(promptData.currentPrompt, draft)}</Tag>
+                    <Tag color="success">+Added {diffSummary.added}</Tag>
+                    <Tag color="error">-Removed {diffSummary.removed}</Tag>
+                    <Tag color="warning">~Modified {diffSummary.modified}</Tag>
+                  </Space>
+                  <Space size={8} wrap>
+                    <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('AS-IS', promptData.currentPrompt)}>
+                      Copy AS-IS
+                    </Button>
+                    <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('TO-BE', draft)}>
+                      Copy TO-BE
+                    </Button>
+                    <Button icon={<CopyOutlined />} onClick={() => copyTextToClipboard('DIFF', diffSummary.diffText)}>
+                      Copy DIFF
+                    </Button>
+                    <Button
+                      danger
+                      onClick={() => {
+                        Modal.confirm({
+                          title: 'TO-BE를 AS-IS로 되돌리기',
+                          content: '현재 TO-BE 편집 내용을 AS-IS 내용으로 초기화합니다.',
+                          okText: '초기화',
+                          cancelText: '취소',
+                          okType: 'danger',
+                          onOk: () => setDraft(promptData.currentPrompt),
+                        });
+                      }}
+                    >
+                      Reset TO-BE to AS-IS
+                    </Button>
+                  </Space>
+                </div>
+              </Space>
+                <div
+                  ref={diffWrapperRef}
+                  style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column' }}
                 >
-                  Reset TO-BE to AS-IS
-                </Button>
-              </Space>
-            </div>
-          </Space>
-            <div
-              ref={diffWrapperRef}
-              style={{ flex: 1, minHeight: 0, height: '100%', display: 'flex', flexDirection: 'column' }}
-            >
-              <DiffEditor
-                key={`prompt-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
-                language="markdown"
-                original={promptData.currentPrompt}
-                modified={draft}
-                keepCurrentOriginalModel={true}
-                keepCurrentModifiedModel={true}
-                originalModelPath={diffModelPaths.originalModelPath}
-                modifiedModelPath={diffModelPaths.modifiedModelPath}
-                onMount={(editor) => {
-                  diffEditorRef.current = editor;
-                  const originalEditor = editor.getOriginalEditor?.();
-                  const modifiedEditor = editor.getModifiedEditor?.();
-                  originalEditor?.updateOptions({
-                    readOnly: true,
-                    renderLineHighlight: 'none',
-                  });
-                  modifiedEditor?.updateOptions({ readOnly: false });
-                  diffModifiedChangeRef.current?.dispose();
-                  const typedModifiedEditor = modifiedEditor as
-                    | {
-                        onDidChangeModelContent?: (listener: () => void) => { dispose: () => void };
-                        getValue?: () => string;
+                  <DiffEditor
+                    key={`prompt-diff-${environment}-${selectedWorker || 'unspecified'}-${editorSessionKey}`}
+                    language="markdown"
+                    original={promptData.currentPrompt}
+                    modified={draft}
+                    keepCurrentOriginalModel={true}
+                    keepCurrentModifiedModel={true}
+                    originalModelPath={diffModelPaths.originalModelPath}
+                    modifiedModelPath={diffModelPaths.modifiedModelPath}
+                    onMount={(editor) => {
+                      diffEditorRef.current = editor;
+                      const originalEditor = editor.getOriginalEditor?.();
+                      const modifiedEditor = editor.getModifiedEditor?.();
+                      originalEditor?.updateOptions({
+                        readOnly: true,
+                        renderLineHighlight: 'none',
+                      });
+                      modifiedEditor?.updateOptions({ readOnly: false });
+                      diffModifiedChangeRef.current?.dispose();
+                      const typedModifiedEditor = modifiedEditor as
+                        | {
+                            onDidChangeModelContent?: (listener: () => void) => { dispose: () => void };
+                            getValue?: () => string;
+                          }
+                        | null
+                        | undefined;
+                      if (typedModifiedEditor?.onDidChangeModelContent) {
+                        const listener = typedModifiedEditor.onDidChangeModelContent(() => {
+                          if (activeModalRef.current !== 'edit') return;
+                          try {
+                            const nextValue = typeof typedModifiedEditor.getValue === 'function' ? typedModifiedEditor.getValue() : '';
+                            setDraft(nextValue || '');
+                          } catch (error) {
+                            console.error('DIFF editor content sync error:', error);
+                          }
+                        });
+                        diffModifiedChangeRef.current = listener as { dispose: () => void };
                       }
-                    | null
-                    | undefined;
-                  if (typedModifiedEditor?.onDidChangeModelContent) {
-                    const listener = typedModifiedEditor.onDidChangeModelContent(() => {
-                      if (activeModalRef.current !== 'edit') return;
-                      try {
-                        const nextValue = typeof typedModifiedEditor.getValue === 'function' ? typedModifiedEditor.getValue() : '';
-                        setDraft(nextValue || '');
-                      } catch (error) {
-                        console.error('DIFF editor content sync error:', error);
-                      }
-                    });
-                    diffModifiedChangeRef.current = listener as { dispose: () => void };
-                  }
-                  originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
-                  layoutDiffEditor();
-                }}
-                options={DIFF_EDITOR_OPTIONS}
-                height="100%"
-                theme="light"
-              />
-            </div>
-          </div>
-      </StandardModal>
+                      originalEditor?.getDomNode()?.classList.add('prompt-monaco-readonly');
+                      layoutDiffEditor();
+                    }}
+                    options={DIFF_EDITOR_OPTIONS}
+                    height="100%"
+                    theme="light"
+                  />
+                </div>
+              </div>
+          </StandardModal>
+        </>
+      ) : null}
     </Space>
   );
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,16 +14,13 @@ import aiohttp
 from app.adapters.openai_judge_adapter import OpenAIJudgeAdapter
 from app.core.db import SessionLocal
 from app.core.enums import EvalStatus
+from app.repositories.validation_eval_prompt_configs import ValidationEvalPromptConfigRepository
 from app.repositories.validation_runs import ValidationRunRepository
-from app.services.validation_scoring import average, extract_response_time_sec, parse_raw_payload, score_stability
+from app.services.validation_scoring import average, extract_response_time_sec, parse_raw_payload
 
-PROMPT_VERSION = "single-prompt-v2.0.0"
 METRIC_KEYS = ("intent", "accuracy", "consistency", "latencySingle", "latencyMulti", "stability")
-CONSISTENCY_KEY = "consistency"
 
-_DOCS_ROOT = Path(__file__).resolve().parents[4] / "docs" / "evaluating"
-_PROMPT_PATH = _DOCS_ROOT / "prompt_for_scoring.txt"
-_SCHEMA_PATH = _DOCS_ROOT / "prompt_for_scoring_output_schema.json"
+_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "evaluation" / "validation_scoring_output_schema.json"
 
 
 def _safe_text(value: Any) -> str:
@@ -43,6 +41,18 @@ def _clamp_score(value: Any) -> float | None:
     return parsed
 
 
+def _to_optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        try:
+            return int(float(value))
+        except Exception:
+            return None
+
+
 def _parse_metric_scores(metric_scores_json: str) -> dict[str, float]:
     if not metric_scores_json:
         return {}
@@ -61,22 +71,21 @@ def _parse_metric_scores(metric_scores_json: str) -> dict[str, float]:
     return out
 
 
-def _normalize_prompt_text(text: str) -> str:
+def _normalize_prompt_text(text: str, *, source_name: str) -> str:
     normalized = str(text or "").replace("\r\n", "\n").strip()
     if not normalized:
-        raise ValueError("prompt_for_scoring.txt is empty")
+        raise ValueError(f"{source_name} is empty")
     return normalized
 
 
-def _load_prompt_and_schema() -> tuple[str, dict[str, Any], str, bool]:
-    prompt_text = _normalize_prompt_text(_PROMPT_PATH.read_text(encoding="utf-8"))
+def _load_schema() -> tuple[dict[str, Any], str, bool]:
     schema_payload = json.loads(_SCHEMA_PATH.read_text(encoding="utf-8"))
     schema = schema_payload.get("schema")
     if not isinstance(schema, dict):
-        raise ValueError("prompt_for_scoring_output_schema.json must contain object field `schema`")
+        raise ValueError("validation_scoring_output_schema.json must contain object field `schema`")
     schema_name = str(schema_payload.get("name") or "score_eval")
     strict = bool(schema_payload.get("strict", True))
-    return prompt_text, schema, schema_name, strict
+    return schema, schema_name, strict
 
 
 def _canonicalize_json_value(value: Any, *, max_text: int) -> Any:
@@ -114,6 +123,9 @@ class ItemEvalDraft:
     llm_output_json: str
     prompt_version: str
     input_hash: str
+    input_tokens: int | None
+    output_tokens: int | None
+    llm_latency_ms: int | None
 
 
 def _build_total_score(metric_scores: dict[str, Any]) -> float | None:
@@ -130,30 +142,6 @@ def _build_total_score(metric_scores: dict[str, Any]) -> float | None:
     if total is None:
         return None
     return round(float(total), 4)
-
-
-def _sync_consistency_by_query_id(drafts: list[ItemEvalDraft]) -> None:
-    grouped: dict[str, list[ItemEvalDraft]] = defaultdict(list)
-    for draft in drafts:
-        if draft.query_id:
-            grouped[draft.query_id].append(draft)
-
-    for query_id, rows in grouped.items():
-        if not query_id:
-            continue
-        if len(rows) < 2:
-            for draft in rows:
-                draft.metric_scores[CONSISTENCY_KEY] = None
-            continue
-
-        shared_value: float | None = None
-        for draft in rows:
-            parsed = _clamp_score(draft.metric_scores.get(CONSISTENCY_KEY))
-            if parsed is not None:
-                shared_value = parsed
-                break
-        for draft in rows:
-            draft.metric_scores[CONSISTENCY_KEY] = shared_value
 
 
 def _build_score_snapshots(repo: ValidationRunRepository, run_id: str, run_items: list[Any]) -> None:
@@ -273,7 +261,17 @@ async def evaluate_validation_run(
                 f"expected_result_missing|missingCount={len(missing_expected)}|sampleQueryIds={sample_text}"
             )
 
-        prompt_template, response_schema, schema_name, strict_schema = _load_prompt_and_schema()
+        prompt_repo = ValidationEvalPromptConfigRepository(db)
+        prompt_entity = prompt_repo.get_or_create_scoring_prompt(actor="system")
+        prompt_template = _normalize_prompt_text(
+            str(prompt_entity.current_prompt or ""),
+            source_name="validation_eval_prompt_configs.current_prompt",
+        )
+        prompt_version = str(prompt_entity.current_version_label or "").strip()
+        if not prompt_version:
+            raise ValueError("validation_eval_prompt_configs.current_version_label is empty")
+        response_schema, schema_name, strict_schema = _load_schema()
+        db.commit()
 
         parsed_raw_map: dict[str, tuple[dict[str, Any], bool]] = {}
         response_sec_map: dict[str, float | None] = {}
@@ -289,147 +287,162 @@ async def evaluate_validation_run(
         adapter = OpenAIJudgeAdapter()
         sem = asyncio.Semaphore(max(1, int(max_parallel or 1)))
         timeout = aiohttp.ClientTimeout(total=120)
-        eval_drafts: list[ItemEvalDraft] = []
-
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async def _evaluate_item(item) -> None:
-                raw_payload, raw_parse_ok = parsed_raw_map[item.id]
-                response_time_sec = response_sec_map.get(item.id)
-                stability_fallback = score_stability(
-                    error_text=item.error or "",
-                    raw_payload=raw_payload,
-                    raw_parse_ok=raw_parse_ok,
-                )
-
-                peer_rows: list[dict[str, Any]] = []
-                if item.query_id:
-                    for peer in query_group_map.get(str(item.query_id), []):
-                        peer_payload, _ = parsed_raw_map[peer.id]
-                        peer_rows.append(
-                            {
-                                "itemId": peer.id,
-                                "repeatIndex": int(peer.repeat_index or 1),
-                                "conversationRoomIndex": int(peer.conversation_room_index or 1),
-                                "responseTimeSec": response_sec_map.get(peer.id),
-                                "error": _safe_text(peer.error),
-                                "assistantMessage": _safe_text(peer_payload.get("assistantMessage"))[: max_chars // 4],
-                                "dataUIList": _canonicalize_json_value(peer_payload.get("dataUIList"), max_text=1000),
-                            }
-                        )
-
-                evaluation_input = {
-                    "runId": run_id,
-                    "itemId": item.id,
-                    "queryId": str(item.query_id or ""),
-                    "queryText": _safe_text(item.query_text_snapshot)[:max_chars],
-                    "expectedResult": _safe_text(item.expected_result_snapshot)[:max_chars],
-                    "error": _safe_text(item.error),
-                    "responseTimeSec": response_time_sec,
-                    "rawPayload": _build_row_raw_payload(raw_payload, max_text=max(500, max_chars // 4)),
-                    "peerExecutions": peer_rows,
-                }
-
-                input_json_text = json.dumps(
-                    evaluation_input,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    default=str,
-                )
-                if len(input_json_text) > max_chars:
-                    input_json_text = input_json_text[:max_chars]
-
-                prompt = (
-                    f"{prompt_template}\n\n"
-                    "<evaluation_input_json>\n"
-                    f"{input_json_text}\n"
-                    "</evaluation_input_json>\n"
-                )
-                input_hash = hashlib.sha256(input_json_text.encode("utf-8")).hexdigest()
-
-                result_payload: dict[str, Any] | None = None
-                llm_error = ""
-                if not openai_key:
-                    llm_error = "OpenAI API key is missing."
-                else:
-                    try:
-                        async with sem:
-                            result_payload, _usage, llm_error = await adapter.judge(
-                                session,
-                                openai_key,
-                                openai_model,
-                                prompt,
-                                response_schema=response_schema,
-                                schema_name=schema_name,
-                                strict_schema=strict_schema,
-                            )
-                    except Exception as exc:
-                        llm_error = str(exc)
-
+            async def _evaluate_item(item) -> ItemEvalDraft:
                 metric_scores: dict[str, Any] = {
-                    "intent": 0.0,
-                    "accuracy": 0.0,
+                    "intent": None,
+                    "accuracy": None,
                     "consistency": None,
                     "latencySingle": None,
                     "latencyMulti": None,
-                    "stability": float(stability_fallback),
+                    "stability": None,
                 }
-                llm_comment = ""
-                llm_output_json = ""
-                status = "DONE_WITH_LLM_ERROR"
+                query_id_text = str(item.query_id or "")
+                input_hash = hashlib.sha256(f"{run_id}:{item.id}".encode("utf-8")).hexdigest()
 
-                if result_payload is not None and not llm_error:
-                    for key in METRIC_KEYS:
-                        if key == CONSISTENCY_KEY:
-                            metric_scores[key] = _clamp_score(result_payload.get(key))
-                        else:
-                            metric_scores[key] = _clamp_score(result_payload.get(key))
-                    if metric_scores.get("intent") is None:
-                        metric_scores["intent"] = 0.0
-                    if metric_scores.get("accuracy") is None:
-                        metric_scores["accuracy"] = 0.0
-                    if metric_scores.get("stability") is None:
-                        metric_scores["stability"] = float(stability_fallback)
+                try:
+                    raw_payload, raw_parse_ok = parsed_raw_map[item.id]
+                    response_time_sec = response_sec_map.get(item.id)
 
-                    llm_comment = _safe_text(result_payload.get("reasoning")) or "OK"
-                    llm_output_json = json.dumps(result_payload, ensure_ascii=False)
-                    status = "DONE_WITH_EXEC_ERROR" if _safe_text(item.error) else "DONE"
-                else:
-                    llm_comment = f"LLM_ERROR: {llm_error or 'unknown'}"
-                    llm_output_json = json.dumps({"error": llm_error or "unknown"}, ensure_ascii=False)
+                    peer_rows: list[dict[str, Any]] = []
+                    if item.query_id:
+                        for peer in query_group_map.get(str(item.query_id), []):
+                            peer_payload, _ = parsed_raw_map[peer.id]
+                            peer_rows.append(
+                                {
+                                    "itemId": peer.id,
+                                    "repeatIndex": int(peer.repeat_index or 1),
+                                    "conversationRoomIndex": int(peer.conversation_room_index or 1),
+                                    "responseTimeSec": response_sec_map.get(peer.id),
+                                    "error": _safe_text(peer.error),
+                                    "assistantMessage": _safe_text(peer_payload.get("assistantMessage"))[: max_chars // 4],
+                                    "dataUIList": _canonicalize_json_value(peer_payload.get("dataUIList"), max_text=1000),
+                                }
+                            )
+
+                    evaluation_input = {
+                        "runId": run_id,
+                        "itemId": item.id,
+                        "queryId": query_id_text,
+                        "queryText": _safe_text(item.query_text_snapshot)[:max_chars],
+                        "expectedResult": _safe_text(item.expected_result_snapshot)[:max_chars],
+                        "error": _safe_text(item.error),
+                        "responseTimeSec": response_time_sec,
+                        "latencyMs": item.latency_ms,
+                        "rawPayloadParseOk": bool(raw_parse_ok),
+                        "rawPayload": _build_row_raw_payload(raw_payload, max_text=max(500, max_chars // 4)),
+                        "peerExecutions": peer_rows,
+                    }
+
+                    input_json_text = json.dumps(
+                        evaluation_input,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=str,
+                    )
+                    if len(input_json_text) > max_chars:
+                        input_json_text = input_json_text[:max_chars]
+
+                    prompt = (
+                        f"{prompt_template}\n\n"
+                        "<evaluation_input_json>\n"
+                        f"{input_json_text}\n"
+                        "</evaluation_input_json>\n"
+                    )
+                    input_hash = hashlib.sha256(input_json_text.encode("utf-8")).hexdigest()
+
+                    result_payload: dict[str, Any] | None = None
+                    usage: dict[str, Any] = {}
+                    llm_error = ""
+                    llm_latency_ms: int | None = None
+
+                    if not openai_key:
+                        llm_error = "OpenAI API key is missing."
+                    else:
+                        try:
+                            async with sem:
+                                started_at = time.perf_counter()
+                                result_payload, usage, llm_error = await adapter.judge(
+                                    session,
+                                    openai_key,
+                                    openai_model,
+                                    prompt,
+                                    response_schema=response_schema,
+                                    schema_name=schema_name,
+                                    strict_schema=strict_schema,
+                                )
+                                llm_latency_ms = max(
+                                    0,
+                                    int(round((time.perf_counter() - started_at) * 1000)),
+                                )
+                        except Exception as exc:
+                            llm_error = str(exc)
+
+                    llm_comment = ""
+                    llm_output_json = ""
                     status = "DONE_WITH_LLM_ERROR"
 
-                eval_drafts.append(
-                    ItemEvalDraft(
+                    if result_payload is not None and not llm_error:
+                        for key in METRIC_KEYS:
+                            metric_scores[key] = _clamp_score(result_payload.get(key))
+
+                        llm_comment = _safe_text(result_payload.get("reasoning")) or "OK"
+                        llm_output_json = json.dumps(result_payload, ensure_ascii=False)
+                        status = "DONE_WITH_EXEC_ERROR" if _safe_text(item.error) else "DONE"
+                    else:
+                        llm_comment = f"LLM_ERROR: {llm_error or 'unknown'}"
+                        llm_output_json = json.dumps({"error": llm_error or "unknown"}, ensure_ascii=False)
+                        status = "DONE_WITH_LLM_ERROR"
+
+                    return ItemEvalDraft(
                         item_id=item.id,
-                        query_id=str(item.query_id or ""),
+                        query_id=query_id_text,
                         metric_scores=metric_scores,
                         llm_comment=llm_comment,
                         status=status,
                         llm_output_json=llm_output_json,
-                        prompt_version=PROMPT_VERSION,
+                        prompt_version=prompt_version,
                         input_hash=input_hash,
+                        input_tokens=_to_optional_int(usage.get("input_tokens")),
+                        output_tokens=_to_optional_int(usage.get("output_tokens")),
+                        llm_latency_ms=llm_latency_ms,
                     )
+                except Exception as exc:
+                    error_text = f"internal_exception:{type(exc).__name__}:{str(exc)[:200]}"
+                    return ItemEvalDraft(
+                        item_id=item.id,
+                        query_id=query_id_text,
+                        metric_scores=metric_scores,
+                        llm_comment=f"LLM_ERROR: {error_text}",
+                        status="DONE_WITH_LLM_ERROR",
+                        llm_output_json=json.dumps({"error": error_text}, ensure_ascii=False),
+                        prompt_version=prompt_version,
+                        input_hash=input_hash,
+                        input_tokens=None,
+                        output_tokens=None,
+                        llm_latency_ms=None,
+                    )
+
+            tasks = [asyncio.create_task(_evaluate_item(item)) for item in run_items]
+            for task in asyncio.as_completed(tasks):
+                draft = await task
+                total_score = _build_total_score(draft.metric_scores)
+                repo.upsert_llm_eval(
+                    draft.item_id,
+                    eval_model=openai_model,
+                    metric_scores=draft.metric_scores,
+                    total_score=total_score,
+                    llm_comment=draft.llm_comment,
+                    status=draft.status,
+                    llm_output=draft.llm_output_json,
+                    prompt_version=draft.prompt_version,
+                    input_hash=draft.input_hash,
+                    input_tokens=draft.input_tokens,
+                    output_tokens=draft.output_tokens,
+                    llm_latency_ms=draft.llm_latency_ms,
                 )
-
-            await asyncio.gather(*[_evaluate_item(item) for item in run_items])
-
-        _sync_consistency_by_query_id(eval_drafts)
-
-        for draft in eval_drafts:
-            total_score = _build_total_score(draft.metric_scores)
-            repo.upsert_llm_eval(
-                draft.item_id,
-                eval_model=openai_model,
-                metric_scores=draft.metric_scores,
-                total_score=total_score,
-                llm_comment=draft.llm_comment,
-                status=draft.status,
-                llm_output=draft.llm_output_json,
-                prompt_version=draft.prompt_version,
-                input_hash=draft.input_hash,
-            )
-        db.commit()
+                db.commit()
 
         _build_score_snapshots(repo, run_id, all_run_items)
         db.commit()

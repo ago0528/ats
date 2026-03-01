@@ -706,8 +706,11 @@ export function AppLayout() {
     if (menu === 'validation-settings') {
       return [{ title: '환경설정' }];
     }
-    if (menu === 'prompt') {
-      return [{ title: '프롬프트 관리' }];
+    if (menu === 'prompt-recruit-agent') {
+      return [{ title: '프롬프트 관리' }, { title: '채용에이전트' }];
+    }
+    if (menu === 'prompt-evaluation') {
+      return [{ title: '프롬프트 관리' }, { title: '응답 평가' }];
     }
     if (menu === 'generic-legacy') {
       return [{ title: '레거시 검증' }];
@@ -771,11 +774,21 @@ export function AppLayout() {
         />
       );
     }
-    if (menu === 'prompt') {
+    if (menu === 'prompt-recruit-agent') {
       return (
         <PromptManagementPage
           environment={environment}
           tokens={runtimeSecrets}
+          section="recruit-agent"
+        />
+      );
+    }
+    if (menu === 'prompt-evaluation') {
+      return (
+        <PromptManagementPage
+          environment={environment}
+          tokens={runtimeSecrets}
+          section="response-eval"
         />
       );
     }
@@ -1029,7 +1042,7 @@ export function AppLayout() {
             <Menu
               mode="inline"
               selectedKeys={[menu]}
-              defaultOpenKeys={['validation-root', 'validation-data-root']}
+              defaultOpenKeys={['validation-root', 'validation-data-root', 'prompt-root']}
               onClick={(e) => {
                 const nextMenu = e.key as MenuKey;
                 if (!MENU_KEYS.includes(nextMenu)) return;
@@ -1094,13 +1107,23 @@ export function AppLayout() {
                   ),
                 },
                 {
-                  key: 'prompt',
+                  key: 'prompt-root',
                   icon: <FileTextOutlined />,
                   label: (
                     <Space size={8} align="center">
                       프롬프트 관리
                     </Space>
                   ),
+                  children: [
+                    {
+                      key: 'prompt-recruit-agent',
+                      label: '채용에이전트',
+                    },
+                    {
+                      key: 'prompt-evaluation',
+                      label: '응답 평가',
+                    },
+                  ],
                 },
                 {
                   key: 'generic-legacy',

@@ -12,6 +12,13 @@ Enum run_status_enum {
   FAILED
 }
 
+Enum eval_status_enum {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
 Table generic_runs {
   id varchar(36) [pk, not null]
   environment environment_enum [not null]
@@ -137,10 +144,10 @@ Table validation_test_set_items {
 
 Table validation_runs {
   id varchar(36) [pk, not null]
-  mode varchar(20) [not null]
   environment environment_enum [not null]
   status run_status_enum [not null]
   base_run_id varchar(36)
+  name varchar(120) [not null]
   test_set_id varchar(36)
   agent_id varchar(120) [not null]
   test_model varchar(120) [not null]
@@ -153,11 +160,17 @@ Table validation_runs {
   created_at datetime [not null]
   started_at datetime
   finished_at datetime
+  eval_status eval_status_enum [not null]
+  eval_started_at datetime
+  eval_finished_at datetime
+  eval_cancel_requested integer [not null, default: 0]
+  eval_cancel_requested_at datetime
 
   Indexes {
     test_set_id [name: "ix_validation_runs_test_set_id"]
     status [name: "ix_validation_runs_status"]
     environment [name: "ix_validation_runs_environment"]
+    eval_status [name: "ix_validation_runs_eval_status"]
   }
 }
 

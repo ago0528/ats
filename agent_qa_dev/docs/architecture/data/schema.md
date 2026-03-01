@@ -1,6 +1,6 @@
 # Backoffice 데이터 테이블 정의서 (PM Friendly)
 
-- 최신 갱신일: 2026-02-28
+- 최신 갱신일: 2026-03-01
 - 대상: PM, PO, QA, 운영 담당자
 - 스키마 기준: `backoffice/backend/app/models/*.py` + `backoffice/backend/app/main.py` startup 보정 + `backoffice/backend/backoffice.db`
 
@@ -398,6 +398,8 @@
 | `eval_status`             | `enum`         | No       | `PENDING` (app)                | 평가 상태                    | `RUNNING`                                      | index, 값: `PENDING/RUNNING/DONE/FAILED` |
 | `eval_started_at`         | `datetime`     | Yes      | `NULL`                         | 평가 시작 시각               | `2026-02-20 09:10:05`                          |                                          |
 | `eval_finished_at`        | `datetime`     | Yes      | `NULL`                         | 평가 종료 시각               | `2026-02-20 09:12:12`                          |                                          |
+| `eval_cancel_requested`   | `integer`      | No       | `0` (app)                      | 평가 중단 요청 여부          | `1`                                            | 값: `0/1`                               |
+| `eval_cancel_requested_at`| `datetime`     | Yes      | `NULL`                         | 평가 중단 요청 시각          | `2026-03-01 12:40:18`                          |                                          |
 
 ### 인덱스/제약조건
 

@@ -20,9 +20,12 @@ export function getEvaluationStateLabel(
   runItems: ValidationRunItem[] = [],
 ) {
   if (!currentRun) return '평가대기';
+  const evalStatus = toUpperState(currentRun.evalStatus);
+  if (evalStatus === 'RUNNING' && Boolean(currentRun.evalCancelRequested)) {
+    return '중단요청중';
+  }
   if (runItems.length === 0) {
     const status = toUpperState(currentRun.status);
-    const evalStatus = toUpperState(currentRun.evalStatus);
     if (evalStatus === 'RUNNING') return '평가중';
     if (status !== 'DONE') return '평가대기';
     const totalItems = currentRun.totalItems || 0;

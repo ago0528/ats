@@ -115,6 +115,8 @@ export type ValidationRun = {
   environment: Environment;
   status: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
   evalStatus?: 'PENDING' | 'RUNNING' | 'DONE' | 'FAILED' | string;
+  evalCancelRequested?: boolean;
+  evalCancelRequestedAt?: string | null;
   baseRunId?: string | null;
   testSetId?: string | null;
   agentId: string;

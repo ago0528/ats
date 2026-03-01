@@ -179,6 +179,19 @@ def _reconcile_stuck_execution_run(repo: ValidationRunRepository, run) -> bool:
     return True
 
 
+def _evaluation_job_key(run_id: str) -> str:
+    return f"validation-evaluate:{str(run_id or '').strip()}"
+
+
+def _reconcile_stuck_evaluation_run(repo: ValidationRunRepository, run) -> bool:
+    if run.eval_status != EvalStatus.RUNNING:
+        return False
+    if runner.has_active_job(_evaluation_job_key(run.id)):
+        return False
+    repo.reset_eval_state_to_pending(run.id)
+    return True
+
+
 def _metric_scores(value: str) -> dict[str, float]:
     text = (value or "").strip()
     if not text:
@@ -510,6 +523,8 @@ def list_validation_runs(
     for row in rows:
         if _reconcile_stuck_execution_run(repo, row):
             rows_changed = True
+        if _reconcile_stuck_evaluation_run(repo, row):
+            rows_changed = True
         cached_setting = settings_by_env.get(row.environment)
         if cached_setting is None:
             cached_setting = setting_repo.get_or_create(row.environment)
@@ -637,6 +652,8 @@ def get_validation_run(run_id: str, db: Session = Depends(get_db)):
 
     setting = setting_repo.get_or_create(run.environment)
     run_changed = _reconcile_stuck_execution_run(repo, run)
+    if _reconcile_stuck_evaluation_run(repo, run):
+        run_changed = True
     if _normalize_run_defaults(
         run,
         test_model_default=setting.test_model_default,
@@ -754,6 +771,9 @@ async def execute_run(run_id: str, body: RunSecretPayload, db: Session = Depends
             run = repo.get_run(run_id) or run
         if run.status == RunStatus.RUNNING:
             raise HTTPException(status_code=409, detail="Run is still executing")
+        if run.eval_status == EvalStatus.RUNNING and _reconcile_stuck_evaluation_run(repo, run):
+            db.commit()
+            run = repo.get_run(run_id) or run
         if run.eval_status == EvalStatus.RUNNING:
             raise HTTPException(status_code=409, detail="Evaluation is already running")
         target_items = repo.list_items_by_ids(run.id, target_item_ids)
@@ -807,6 +827,9 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
         raise HTTPException(status_code=409, detail="Run must be executed before evaluation")
     if run.status == RunStatus.RUNNING:
         raise HTTPException(status_code=409, detail="Run is still executing")
+    if run.eval_status == EvalStatus.RUNNING and _reconcile_stuck_evaluation_run(repo, run):
+        db.commit()
+        run = repo.get_run(run_id) or run
     if run.eval_status == EvalStatus.RUNNING:
         raise HTTPException(status_code=409, detail="Evaluation is already running")
 
@@ -863,10 +886,55 @@ async def evaluate_run(run_id: str, body: EvaluatePayload, db: Session = Depends
             target_item_ids or None,
         )
 
+    repo.clear_eval_cancel_request(run.id)
     repo.set_eval_status(run.id, EvalStatus.RUNNING)
     db.commit()
-    runner.run(job_id, _job)
+    runner.run(job_id, _job, job_key=_evaluation_job_key(run.id))
     return {"jobId": job_id, "status": runner.jobs[job_id]}
+
+
+@router.post("/validation-runs/{run_id}/evaluate/cancel")
+def cancel_evaluate_run(run_id: str, db: Session = Depends(get_db)):
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if run.eval_status != EvalStatus.RUNNING:
+        raise HTTPException(status_code=409, detail="Evaluation is not running")
+
+    eval_key = _evaluation_job_key(run.id)
+    has_active_job = runner.has_active_job(eval_key)
+    already_requested = bool(getattr(run, "eval_cancel_requested", 0))
+
+    if already_requested and has_active_job:
+        return {
+            "ok": True,
+            "action": "ALREADY_REQUESTED",
+            "evalStatus": run.eval_status.value if isinstance(run.eval_status, EvalStatus) else str(run.eval_status),
+            "evalCancelRequested": True,
+        }
+
+    if not has_active_job:
+        repo.reset_eval_state_to_pending(run.id)
+        db.commit()
+        recovered = repo.get_run(run.id) or run
+        return {
+            "ok": True,
+            "action": "RECOVERED_STALE",
+            "evalStatus": recovered.eval_status.value if isinstance(recovered.eval_status, EvalStatus) else str(recovered.eval_status),
+            "evalCancelRequested": bool(getattr(recovered, "eval_cancel_requested", 0)),
+        }
+
+    repo.request_eval_cancel(run.id)
+    runner.cancel_by_key(eval_key)
+    db.commit()
+    refreshed = repo.get_run(run.id) or run
+    return {
+        "ok": True,
+        "action": "CANCEL_REQUESTED",
+        "evalStatus": refreshed.eval_status.value if isinstance(refreshed.eval_status, EvalStatus) else str(refreshed.eval_status),
+        "evalCancelRequested": bool(getattr(refreshed, "eval_cancel_requested", 0)),
+    }
 
 
 @router.post("/validation-runs/{run_id}/rerun")

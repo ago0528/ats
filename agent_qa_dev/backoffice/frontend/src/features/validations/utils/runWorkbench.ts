@@ -20,6 +20,11 @@ export function canEvaluateRun(currentRun: ValidationRun | null) {
   return currentRun.doneItems + currentRun.errorItems > 0;
 }
 
+export function canCancelEvaluationRun(currentRun: ValidationRun | null) {
+  if (!currentRun) return false;
+  return String(currentRun.evalStatus || '').toUpperCase() === 'RUNNING';
+}
+
 export function canUpdateRun(currentRun: ValidationRun | null) {
   return currentRun?.status === 'PENDING';
 }

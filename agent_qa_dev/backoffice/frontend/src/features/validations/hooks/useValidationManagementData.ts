@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MessageInstance } from 'antd/es/message/interface';
 
 import {
+  cancelValidationRunEvaluation,
   createRunFromValidationTestSet,
   deleteValidationRun,
   evaluateValidationRun,
@@ -464,6 +465,65 @@ export function useValidationManagementData({
     }
   }, [currentRun, loadRunDetail, loadRuns, message]);
 
+  const handleCancelEvaluate = useCallback(async () => {
+    if (!currentRun) return;
+
+    const readErrorMessage = (error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        const typed = error as {
+          response?: {
+            data?: {
+              detail?: string;
+              message?: string;
+            } | string;
+          };
+          message?: string;
+        };
+        const responseData = typed.response?.data;
+        if (typeof responseData === 'string' && responseData) {
+          return responseData;
+        }
+        if (responseData && typeof responseData === 'object') {
+          if (typeof responseData.detail === 'string' && responseData.detail) {
+            return responseData.detail;
+          }
+          if (typeof responseData.message === 'string' && responseData.message) {
+            return responseData.message;
+          }
+        }
+        if (typed.message) {
+          return typed.message;
+        }
+      }
+      return '';
+    };
+
+    try {
+      setLoading(true);
+      const result = await cancelValidationRunEvaluation(currentRun.id);
+      if (result.action === 'RECOVERED_STALE') {
+        message.success('고착된 평가 상태를 해제했습니다.');
+      } else if (result.action === 'ALREADY_REQUESTED') {
+        message.info('이미 평가 중단이 요청된 상태입니다.');
+      } else {
+        message.success('평가 중단을 요청했습니다.');
+      }
+      triggerForceRunRefresh();
+      await loadRunDetail(currentRun.id);
+      await loadRuns({ forceAll: true });
+    } catch (error) {
+      console.error(error);
+      const detail = readErrorMessage(error);
+      message.error(
+        detail
+          ? `평가 중단 요청에 실패했습니다. (${detail})`
+          : '평가 중단 요청에 실패했습니다.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [currentRun, loadRunDetail, loadRuns, message]);
+
   const handleUpdateRun = useCallback(async (
     runId: string,
     payload: ValidationRunUpdateRequest,
@@ -636,6 +696,7 @@ export function useValidationManagementData({
     handleCreateRunFromTestSet,
     handleExecute,
     handleEvaluate,
+    handleCancelEvaluate,
     handleUpdateRun,
     handleDeleteRun,
     handlePreviewExpectedResultsBulkUpdate,

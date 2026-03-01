@@ -385,8 +385,41 @@ class ValidationRunRepository:
         if status == EvalStatus.RUNNING:
             run.eval_started_at = dt.datetime.utcnow()
             run.eval_finished_at = None
+            run.eval_cancel_requested = 0
+            run.eval_cancel_requested_at = None
         if status in (EvalStatus.DONE, EvalStatus.FAILED):
             run.eval_finished_at = dt.datetime.utcnow()
+            run.eval_cancel_requested = 0
+            run.eval_cancel_requested_at = None
+
+    def request_eval_cancel(self, run_id: str) -> bool:
+        run = self.get_run(run_id)
+        if run is None:
+            return False
+        if bool(getattr(run, "eval_cancel_requested", 0)):
+            return False
+        run.eval_cancel_requested = 1
+        run.eval_cancel_requested_at = dt.datetime.utcnow()
+        self.db.flush()
+        return True
+
+    def clear_eval_cancel_request(self, run_id: str) -> bool:
+        run = self.get_run(run_id)
+        if run is None:
+            return False
+        was_requested = bool(getattr(run, "eval_cancel_requested", 0))
+        run.eval_cancel_requested = 0
+        run.eval_cancel_requested_at = None
+        self.db.flush()
+        return was_requested
+
+    def is_eval_cancel_requested(self, run_id: str) -> bool:
+        value = (
+            self.db.query(ValidationRun.eval_cancel_requested)
+            .filter(ValidationRun.id == run_id)
+            .scalar()
+        )
+        return bool(value)
 
     def add_items(self, run_id: str, items: list[dict[str, Any]]) -> list[str]:
         row_ids: list[str] = []
@@ -524,6 +557,8 @@ class ValidationRunRepository:
         run.eval_status = EvalStatus.PENDING
         run.eval_started_at = None
         run.eval_finished_at = None
+        run.eval_cancel_requested = 0
+        run.eval_cancel_requested_at = None
         self.db.flush()
 
     def update_item_execution(
@@ -965,6 +1000,8 @@ class ValidationRunRepository:
             "evalStatus": run.eval_status.value if isinstance(run.eval_status, EvalStatus) else str(run.eval_status),
             "evalStartedAt": run.eval_started_at,
             "evalFinishedAt": run.eval_finished_at,
+            "evalCancelRequested": bool(getattr(run, "eval_cancel_requested", 0)),
+            "evalCancelRequestedAt": getattr(run, "eval_cancel_requested_at", None),
             "averageResponseTimeSec": self.get_run_average_response_time_sec(run.id),
             "scoreSummary": score_summary,
             "totalItems": self.count_items(run.id),

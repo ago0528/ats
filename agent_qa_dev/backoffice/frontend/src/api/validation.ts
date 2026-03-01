@@ -231,6 +231,16 @@ export async function evaluateValidationRun(
   return data;
 }
 
+export async function cancelValidationRunEvaluation(runId: string) {
+  const { data } = await api.post<{
+    ok: boolean;
+    action: 'CANCEL_REQUESTED' | 'ALREADY_REQUESTED' | 'RECOVERED_STALE' | string;
+    evalStatus: 'RUNNING' | 'PENDING' | string;
+    evalCancelRequested: boolean;
+  }>(`/validation-runs/${runId}/evaluate/cancel`);
+  return data;
+}
+
 export async function rerunValidationRun(runId: string) {
   const { data } = await api.post<ValidationRun>(`/validation-runs/${runId}/rerun`);
   return data;

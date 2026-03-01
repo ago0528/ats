@@ -47,7 +47,7 @@ def test_validation_runs_flow(monkeypatch):
     assert items_resp.status_code == 200
     item_id = items_resp.json()["items"][0]["id"]
 
-    def fake_runner_run(job_id, job_coro_factory):
+    def fake_runner_run(job_id, job_coro_factory, **kwargs):
         validation_runs_route.runner.jobs[job_id] = "DONE"
 
     monkeypatch.setattr(validation_runs_route.runner, "run", fake_runner_run)
@@ -154,8 +154,9 @@ def test_validation_run_evaluate_gate(monkeypatch):
     assert no_result_eval_resp.status_code == 409
 
 
-def test_list_validation_runs_with_evaluation_status_filter():
+def test_list_validation_runs_with_evaluation_status_filter(monkeypatch):
     client = TestClient(app)
+    monkeypatch.setattr(validation_runs_route.runner, "has_active_job", lambda job_key: True)
     db = SessionLocal()
     repo = ValidationRunRepository(db)
 
@@ -287,7 +288,7 @@ def test_execute_run_with_item_ids_resets_target_items(monkeypatch):
     db.commit()
     db.close()
 
-    def fake_runner_run(job_id, job_coro_factory):
+    def fake_runner_run(job_id, job_coro_factory, **kwargs):
         validation_runs_route.runner.jobs[job_id] = "DONE"
 
     monkeypatch.setattr(validation_runs_route.runner, "run", fake_runner_run)
@@ -360,7 +361,7 @@ def test_execute_run_with_item_ids_recovers_stale_running_run(monkeypatch):
     target_item_id = repo.list_items(run_id, limit=1)[0].id
     db.close()
 
-    def fake_runner_run(job_id, job_coro_factory):
+    def fake_runner_run(job_id, job_coro_factory, **kwargs):
         validation_runs_route.runner.jobs[job_id] = "DONE"
 
     monkeypatch.setattr(validation_runs_route.runner, "run", fake_runner_run)
@@ -418,6 +419,186 @@ def test_get_validation_run_reconciles_stale_running_status():
     get_resp = client.get(f"/api/v1/validation-runs/{run_id}")
     assert get_resp.status_code == 200
     assert get_resp.json()["status"] == "FAILED"
+
+
+def test_cancel_evaluate_run_requires_running_state():
+    client = TestClient(app)
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-평가중단가드", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 평가중단 가드",
+            "expectedResult": "결과",
+            "category": "Happy path",
+            "groupId": group_id,
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    cancel_resp = client.post(f"/api/v1/validation-runs/{run_id}/evaluate/cancel")
+    assert cancel_resp.status_code == 409
+    assert cancel_resp.json()["detail"] == "Evaluation is not running"
+
+
+def test_cancel_evaluate_run_requests_cancel_when_active_job(monkeypatch):
+    client = TestClient(app)
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-평가중단활성", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 평가중단 활성",
+            "expectedResult": "결과",
+            "category": "Happy path",
+            "groupId": group_id,
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    repo.set_status(run_id, RunStatus.DONE)
+    repo.set_eval_status(run_id, EvalStatus.RUNNING)
+    db.commit()
+    db.close()
+
+    monkeypatch.setattr(validation_runs_route.runner, "has_active_job", lambda job_key: True)
+    monkeypatch.setattr(validation_runs_route.runner, "cancel_by_key", lambda job_key: True)
+
+    cancel_resp = client.post(f"/api/v1/validation-runs/{run_id}/evaluate/cancel")
+    assert cancel_resp.status_code == 200
+    payload = cancel_resp.json()
+    assert payload["ok"] is True
+    assert payload["action"] == "CANCEL_REQUESTED"
+    assert payload["evalStatus"] == "RUNNING"
+    assert payload["evalCancelRequested"] is True
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    run = repo.get_run(run_id)
+    assert run is not None
+    assert bool(run.eval_cancel_requested) is True
+    assert run.eval_cancel_requested_at is not None
+    db.close()
+
+
+def test_cancel_evaluate_run_recovers_stale_running_state(monkeypatch):
+    client = TestClient(app)
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-평가중단고착", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 평가중단 고착",
+            "expectedResult": "결과",
+            "category": "Happy path",
+            "groupId": group_id,
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    repo.set_status(run_id, RunStatus.DONE)
+    repo.set_eval_status(run_id, EvalStatus.RUNNING)
+    db.commit()
+    db.close()
+
+    monkeypatch.setattr(validation_runs_route.runner, "has_active_job", lambda job_key: False)
+
+    cancel_resp = client.post(f"/api/v1/validation-runs/{run_id}/evaluate/cancel")
+    assert cancel_resp.status_code == 200
+    payload = cancel_resp.json()
+    assert payload["ok"] is True
+    assert payload["action"] == "RECOVERED_STALE"
+    assert payload["evalStatus"] == "PENDING"
+    assert payload["evalCancelRequested"] is False
+
+
+def test_get_validation_run_reconciles_stale_running_evaluation(monkeypatch):
+    client = TestClient(app)
+
+    group_resp = client.post(
+        "/api/v1/query-groups",
+        json={"groupName": "검증그룹-평가고착조회", "description": "desc"},
+    )
+    group_id = group_resp.json()["id"]
+
+    query_resp = client.post(
+        "/api/v1/queries",
+        json={
+            "queryText": "질의 평가 고착 조회",
+            "expectedResult": "결과",
+            "category": "Happy path",
+            "groupId": group_id,
+        },
+    )
+    query_id = query_resp.json()["id"]
+
+    run_resp = client.post(
+        "/api/v1/validation-runs",
+        json={
+            "environment": "dev",
+            "queryIds": [query_id],
+        },
+    )
+    run_id = run_resp.json()["id"]
+
+    db = SessionLocal()
+    repo = ValidationRunRepository(db)
+    repo.set_status(run_id, RunStatus.DONE)
+    repo.set_eval_status(run_id, EvalStatus.RUNNING)
+    db.commit()
+    db.close()
+
+    monkeypatch.setattr(validation_runs_route.runner, "has_active_job", lambda job_key: False)
+
+    get_resp = client.get(f"/api/v1/validation-runs/{run_id}")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["evalStatus"] == "PENDING"
 
 
 def test_evaluate_run_with_item_ids_scope_validation():

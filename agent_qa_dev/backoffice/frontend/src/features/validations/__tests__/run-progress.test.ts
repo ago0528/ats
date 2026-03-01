@@ -72,6 +72,16 @@ describe('run progress helpers', () => {
 
   it('calculates evaluation labels and progress', () => {
     expect(getEvaluationStateLabel(run('DONE'), [])).toBe('평가대기');
+    expect(
+      getEvaluationStateLabel(
+        {
+          ...run('DONE'),
+          evalStatus: 'RUNNING',
+          evalCancelRequested: true,
+        } as ValidationRun,
+        [],
+      ),
+    ).toBe('중단요청중');
     expect(getEvaluationStateLabel(run('DONE'), [item(), item({ llmEvaluation: { status: 'DONE' } as ValidationRunItem['llmEvaluation'] })])).toBe('평가중');
     expect(
       getEvaluationStateLabel(run('DONE'), [

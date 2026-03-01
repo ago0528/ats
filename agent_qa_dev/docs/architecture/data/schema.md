@@ -15,6 +15,8 @@
 2. `generic_run_rows`
 3. `prompt_audit_logs`
 4. `prompt_snapshots`
+4-1. `validation_eval_prompt_configs`
+4-2. `validation_eval_prompt_audit_logs`
 5. `validation_query_groups`
 6. `validation_queries`
 7. `validation_settings`
@@ -169,6 +171,73 @@
 
 - PK: `id`
 - Unique constraint: `uq_prompt_snapshots_environment_worker_type(environment, worker_type)`
+
+---
+
+## 4-1) `validation_eval_prompt_configs`
+
+### 테이블 개요
+
+- Table name: `validation_eval_prompt_configs`
+- Business purpose: LLM 평가(6개 지표)용 글로벌 프롬프트의 현재/직전 버전과 버전 라벨을 저장
+- Primary key: `id`
+- Important relationships: 별도 FK 없음
+- Data lifecycle:
+  - 생성: 최초 조회/평가 시 기본 템플릿으로 bootstrap(`prompt_key=validation_scoring`)
+  - 수정: 운영자가 `/prompt`에서 저장/되돌리기/초기화를 수행할 때 갱신
+  - 삭제/보존: 운영 정책에 따라 관리(현재 soft delete 없음)
+
+### 컬럼 정의
+
+| Column name              | Type          | Nullable | Default                | Description                        | Example value                     | Notes                        |
+| ------------------------ | ------------- | -------- | ---------------------- | ---------------------------------- | --------------------------------- | ---------------------------- |
+| `id`                     | `text`        | No       | UUID (app)             | 프롬프트 설정 ID                   | `8a4cb4be-3f9d-4978-93f9-815e...` | PK                           |
+| `prompt_key`             | `varchar(80)` | No       | 없음                   | 프롬프트 식별 키                   | `validation_scoring`              | unique + index               |
+| `current_prompt`         | `text`        | No       | `""` (app)             | 현재 평가 프롬프트 본문            | `<채용에이전트_채점_프롬프트_v1>` |                              |
+| `previous_prompt`        | `text`        | No       | `""` (app)             | 직전 평가 프롬프트 본문            | `...v2...`                        |                              |
+| `current_version_label`  | `varchar(80)` | No       | `""` (app)             | 현재 버전 라벨                     | `v1.0.0`                          |                              |
+| `previous_version_label` | `varchar(80)` | No       | `""` (app)             | 직전 버전 라벨                     | `v0.9.0`                          |                              |
+| `updated_by`             | `text`        | No       | `system` (app)         | 마지막 변경 주체                   | `qa_admin`                        |                              |
+| `created_at`             | `datetime`    | No       | UTC now (app)          | 생성 시각                          | `2026-03-01 10:15:12`             |                              |
+| `updated_at`             | `datetime`    | No       | UTC now/onupdate (app) | 마지막 갱신 시각                   | `2026-03-01 11:00:03`             |                              |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- Unique index: `ix_validation_eval_prompt_configs_prompt_key(prompt_key)`
+
+---
+
+## 4-2) `validation_eval_prompt_audit_logs`
+
+### 테이블 개요
+
+- Table name: `validation_eval_prompt_audit_logs`
+- Business purpose: 글로벌 평가 프롬프트 변경 이력(버전/길이/행위자)을 append-only로 기록
+- Primary key: `id`
+- Important relationships: 별도 FK 없음
+- Data lifecycle:
+  - 생성: `INIT`, `UPDATE`, `REVERT_PREVIOUS`, `RESET_DEFAULT` 이벤트마다 append
+  - 수정/삭제: 없음(감사 로그)
+
+### 컬럼 정의
+
+| Column name            | Type          | Nullable | Default        | Description                   | Example value        | Notes          |
+| ---------------------- | ------------- | -------- | -------------- | ----------------------------- | -------------------- | -------------- |
+| `id`                   | `text`        | No       | UUID (app)     | 감사 로그 ID                  | `0b8b...`            | PK             |
+| `prompt_key`           | `varchar(80)` | No       | 없음           | 프롬프트 식별 키              | `validation_scoring` | index          |
+| `action`               | `varchar(40)` | No       | 없음           | 변경 액션                     | `UPDATE`             |                |
+| `before_version_label` | `varchar(80)` | No       | `""` (app)     | 변경 전 버전 라벨             | `v0.9.0`             |                |
+| `after_version_label`  | `varchar(80)` | No       | `""` (app)     | 변경 후 버전 라벨             | `v1.0.0`             |                |
+| `before_len`           | `integer`     | No       | `0` (app)      | 변경 전 프롬프트 길이         | `1820`               |                |
+| `after_len`            | `integer`     | No       | `0` (app)      | 변경 후 프롬프트 길이         | `1912`               |                |
+| `actor`                | `text`        | No       | `system` (app) | 변경 주체                     | `qa_admin`           |                |
+| `created_at`           | `datetime`    | No       | UTC now (app)  | 로그 생성 시각                | `2026-03-01 11:00:03`|                |
+
+### 인덱스/제약조건
+
+- PK: `id`
+- Index: `ix_validation_eval_prompt_audit_logs_prompt_key(prompt_key)`
 
 ---
 
@@ -522,12 +591,15 @@
 | `id`                 | `varchar(36)`  | No       | UUID (app)      | LLM 평가 ID              | `54e0cbcf-d32d-4640-9d1e-1d1656f7473a` | PK               |
 | `run_item_id`        | `varchar(36)`  | No       | 없음            | 대상 run item ID         | `1e8a924b-a6ac-44ec-8f57-c93ece2c53f7` | FK, unique index |
 | `eval_model`         | `varchar(120)` | No       | `gpt-5.2` (app) | 평가에 사용된 모델       | `gpt-5.2`                              |                  |
-| `metric_scores_json` | `text`         | No       | `""` (app)      | 메트릭 점수(JSON 문자열) | `{"intent":4.0,"accuracy":3.0,"consistency":null,"latencySingle":5.0,"latencyMulti":0.0,"stability":5.0}` | JSON string (v2 keys) |
+| `metric_scores_json` | `text`         | No       | `""` (app)      | 메트릭 점수(JSON 문자열) | `{"intent":4.0,"accuracy":3.0,"consistency":null,"latencySingle":5.0,"latencyMulti":0.0,"stability":5.0}` | JSON string |
 | `total_score`        | `float`        | Yes      | `NULL`          | 총점(`intent`,`accuracy`,`stability` + `consistency`(존재 시) 평균) | `4.0`                                 |                  |
 | `llm_comment`        | `text`         | No       | `""` (app)      | reasoning 또는 LLM 오류 요약 | `동일 질의 반복 1건으로 consistency는 null`       |                  |
 | `llm_output_json`    | `text`         | No       | `""` (app)      | LLM 원본 구조화 응답(JSON 문자열) | `{"intent":4,"accuracy":3,...}`       | JSON string      |
-| `prompt_version`     | `varchar(80)`  | No       | `""` (app)      | 평가 프롬프트 버전       | `single-prompt-v2.0.0`                 |                  |
+| `prompt_version`     | `varchar(80)`  | No       | `""` (app)      | 평가 Job 시작 시점에 고정된 프롬프트 버전 라벨 | `v1.0.0` | `validation_eval_prompt_configs.current_version_label` 스냅샷 |
 | `input_hash`         | `varchar(128)` | No       | `""` (app)      | 평가 입력 canonical hash(SHA-256) | `f7a4...`                           |                  |
+| `input_tokens`       | `integer`      | Yes      | `NULL`          | LLM 입력 토큰 수         | `1234`                                 | OpenAI usage 기반 |
+| `output_tokens`      | `integer`      | Yes      | `NULL`          | LLM 출력 토큰 수         | `321`                                  | OpenAI usage 기반 |
+| `llm_latency_ms`     | `integer`      | Yes      | `NULL`          | LLM 평가 호출 왕복 지연(ms) | `842`                               | judge 호출 측정값 |
 | `status`             | `varchar(40)`  | No       | `PENDING` (app) | 평가 상태                | `DONE`                                 | index            |
 | `evaluated_at`       | `datetime`     | No       | UTC now (app)   | 평가 시각                | `2026-02-18 10:45:15`                  |                  |
 

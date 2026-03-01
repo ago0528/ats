@@ -11,7 +11,8 @@ export type MenuKey =
   | 'validation-data-test-sets'
   | 'validation-settings'
   | 'generic-legacy'
-  | 'prompt';
+  | 'prompt-recruit-agent'
+  | 'prompt-evaluation';
 
 export const MENU_KEYS: MenuKey[] = [
   'validation-run',
@@ -22,7 +23,8 @@ export const MENU_KEYS: MenuKey[] = [
   'validation-data-test-sets',
   'validation-settings',
   'generic-legacy',
-  'prompt',
+  'prompt-recruit-agent',
+  'prompt-evaluation',
 ];
 
 export const MENU_PATHS: Record<MenuKey, string> = {
@@ -34,7 +36,8 @@ export const MENU_PATHS: Record<MenuKey, string> = {
   'validation-data-test-sets': '/validation-data/test-sets',
   'validation-settings': '/validation-settings',
   'generic-legacy': '/generic-legacy',
-  prompt: '/prompt',
+  'prompt-recruit-agent': '/prompt/recruit-agent',
+  'prompt-evaluation': '/prompt/response-eval',
 };
 
 export function normalizePathname(pathname: string) {
@@ -47,7 +50,8 @@ export function resolveMenu(pathname: string): MenuKey {
   if (pathname === '/validation-data/query-groups' || pathname === '/query-groups') return 'validation-data-query-groups';
   if (pathname === '/validation-data/test-sets') return 'validation-data-test-sets';
   if (pathname === '/validation-settings') return 'validation-settings';
-  if (pathname === '/prompt') return 'prompt';
+  if (pathname === '/prompt' || pathname === '/prompt/recruit-agent') return 'prompt-recruit-agent';
+  if (pathname === '/prompt/response-eval') return 'prompt-evaluation';
   if (pathname === '/generic-legacy') return 'generic-legacy';
   if (pathname === '/validation/dashboard') return 'validation-dashboard';
   if (pathname === '/validation/history' || pathname.startsWith('/validation/history/')) return 'validation-history';
@@ -97,6 +101,8 @@ export function isKnownPath(pathname: string) {
     || pathname === '/query-groups'
     || pathname === '/validation-settings'
     || pathname === '/prompt'
+    || pathname === '/prompt/recruit-agent'
+    || pathname === '/prompt/response-eval'
     || pathname === '/generic-legacy'
   );
 }

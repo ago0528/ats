@@ -90,6 +90,8 @@ from app.api.routes.validation_runs import router as validation_runs_router
 from app.api.routes.validation_settings import router as validation_settings_router
 from app.api.routes.validation_test_sets import router as validation_test_sets_router
 from app.core.db import Base, _ENGINE, get_db_path
+from app.models.validation_eval_prompt_audit_log import ValidationEvalPromptAuditLog
+from app.models.validation_eval_prompt_config import ValidationEvalPromptConfig
 
 app = FastAPI(title="AQB Backoffice API", version="0.2.0")
 APP_VERSION = os.getenv("BACKOFFICE_VERSION", "0.2.0")
@@ -162,6 +164,8 @@ def _ensure_sqlite_column(table_name: str, column_name: str, column_definition: 
 def startup() -> None:
     logger.info("Resolved BACKOFFICE_DB_PATH=%s", get_db_path())
     _log_openai_key_status()
+    # Ensure SQLAlchemy metadata includes evaluation prompt config tables.
+    _ = (ValidationEvalPromptConfig, ValidationEvalPromptAuditLog)
     Base.metadata.create_all(_ENGINE)
     _ensure_sqlite_column("validation_queries", "context_json", "context_json TEXT NOT NULL DEFAULT ''")
     _ensure_sqlite_column("validation_queries", "target_assistant", "target_assistant TEXT NOT NULL DEFAULT ''")
@@ -198,6 +202,21 @@ def startup() -> None:
         "validation_llm_evaluations",
         "input_hash",
         "input_hash TEXT NOT NULL DEFAULT ''",
+    )
+    _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "input_tokens",
+        "input_tokens INTEGER",
+    )
+    _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "output_tokens",
+        "output_tokens INTEGER",
+    )
+    _ensure_sqlite_column(
+        "validation_llm_evaluations",
+        "llm_latency_ms",
+        "llm_latency_ms INTEGER",
     )
     _ensure_sqlite_column(
         "validation_settings",

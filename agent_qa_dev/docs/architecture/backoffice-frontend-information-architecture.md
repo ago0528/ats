@@ -3,7 +3,7 @@
 - 문서 목적: AQB Backoffice의 화면 구조, 도메인 객체, 핵심 운영 흐름을 PM/운영 관점에서 빠르게 파악
 - 대상 독자: PM, PO, 운영 리드, QA 리드
 - 기준 코드: `backoffice/frontend/src`
-- 최신 갱신일: 2026-02-28
+- 최신 갱신일: 2026-03-01
 
 ## 1. 제품 구조 한눈에 보기
 
@@ -36,7 +36,9 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 - `질의 그룹` (`/validation-data/query-groups`)
 - `테스트 세트` (`/validation-data/test-sets`)
 - `환경설정` (`/validation-settings`)
-- `프롬프트 관리` (`/prompt`)
+- `프롬프트 관리`
+- `채용에이전트` (`/prompt/recruit-agent`)
+- `응답 평가` (`/prompt/response-eval`)
 - `레거시 검증` (`/generic-legacy`)
 - `Login` (`/login`, 인증 필요 경로 진입 전)
 
@@ -57,7 +59,8 @@ AQB Backoffice는 다음 6개 도메인으로 구성됩니다.
 | 질의 그룹 | `/validation-data/query-groups` | `QueryGroupManagementPage` | 질의 그룹 CRUD(질의 묶기) |
 | 테스트 세트 | `/validation-data/test-sets` | `TestSetManagementPage` | 테스트 세트 CRUD, 질의 구성, 기본 파라미터 관리 |
 | 환경설정 | `/validation-settings` | `ValidationSettingsPage` | 환경별 실행 기본값/페이지네이션 기본 제한값 관리 |
-| 프롬프트 관리 | `/prompt` | `PromptManagementPage` | 워커 프롬프트 현재값(ATS) 조회 + 직전값(내부 DB) 조회/수정/초기화 |
+| 채용에이전트 | `/prompt/recruit-agent` | `PromptManagementPage` | 워커 프롬프트(ATS) 조회/수정/초기화 |
+| 응답 평가 | `/prompt/response-eval` | `PromptManagementPage` | LLM 평가 프롬프트(글로벌) 버전 관리(조회/수정/되돌리기/기본초기화) |
 | 레거시 검증 | `/generic-legacy` | `GenericRunPage` | 레거시 검증 플로우 운영 |
 
 ### 2.3 공통 페이지 헤더 포맷

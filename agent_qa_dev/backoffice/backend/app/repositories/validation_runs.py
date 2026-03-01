@@ -616,6 +616,9 @@ class ValidationRunRepository:
         llm_output: str = "",
         prompt_version: str = "",
         input_hash: str = "",
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None,
+        llm_latency_ms: Optional[int] = None,
     ) -> ValidationLlmEvaluation:
         entity = self.db.query(ValidationLlmEvaluation).filter(ValidationLlmEvaluation.run_item_id == run_item_id).first()
         if entity is None:
@@ -628,6 +631,9 @@ class ValidationRunRepository:
         entity.llm_output_json = llm_output or ""
         entity.prompt_version = prompt_version or ""
         entity.input_hash = input_hash or ""
+        entity.input_tokens = input_tokens
+        entity.output_tokens = output_tokens
+        entity.llm_latency_ms = llm_latency_ms
         entity.status = status
         entity.evaluated_at = dt.datetime.utcnow()
         self.db.flush()
@@ -747,6 +753,7 @@ class ValidationRunRepository:
                     "query_text_snapshot": item.query_text_snapshot,
                     "expected_result_snapshot": item.expected_result_snapshot,
                     "category_snapshot": item.category_snapshot,
+                    "applied_criteria_json": item.applied_criteria_json,
                     "conversation_room_index": item.conversation_room_index,
                     "repeat_index": item.repeat_index,
                 }

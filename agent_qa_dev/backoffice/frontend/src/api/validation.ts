@@ -19,6 +19,8 @@ import type {
   ValidationSettings,
   ValidationDashboardScoring,
   ValidationDashboardDistributions,
+  EvalPromptSnapshot,
+  EvalPromptUpdatePayload,
 } from './types/validation';
 import type { Environment } from '../app/EnvironmentScope';
 
@@ -449,5 +451,25 @@ export async function updateValidationSettings(
   }>,
 ) {
   const { data } = await api.patch<ValidationSettings>(`/validation-settings/${environment}`, payload);
+  return data;
+}
+
+export async function getEvaluationScoringPrompt() {
+  const { data } = await api.get<EvalPromptSnapshot>('/prompts/evaluation/scoring');
+  return data;
+}
+
+export async function updateEvaluationScoringPrompt(payload: EvalPromptUpdatePayload) {
+  const { data } = await api.patch<EvalPromptSnapshot>('/prompts/evaluation/scoring', payload);
+  return data;
+}
+
+export async function revertEvaluationScoringPromptPrevious(payload: { versionLabel: string }) {
+  const { data } = await api.post<EvalPromptSnapshot>('/prompts/evaluation/scoring/revert-previous', payload);
+  return data;
+}
+
+export async function resetEvaluationScoringPromptDefault(payload: { versionLabel: string }) {
+  const { data } = await api.post<EvalPromptSnapshot>('/prompts/evaluation/scoring/reset-default', payload);
   return data;
 }

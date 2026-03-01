@@ -182,6 +182,8 @@ def startup() -> None:
     _ensure_sqlite_column("validation_runs", "eval_status", "eval_status TEXT NOT NULL DEFAULT 'PENDING'")
     _ensure_sqlite_column("validation_runs", "eval_started_at", "eval_started_at DATETIME")
     _ensure_sqlite_column("validation_runs", "eval_finished_at", "eval_finished_at DATETIME")
+    _ensure_sqlite_column("validation_runs", "eval_cancel_requested", "eval_cancel_requested INTEGER NOT NULL DEFAULT 0")
+    _ensure_sqlite_column("validation_runs", "eval_cancel_requested_at", "eval_cancel_requested_at DATETIME")
     _ensure_sqlite_column(
         "validation_llm_evaluations",
         "llm_output_json",

@@ -95,6 +95,7 @@ export function AgentValidationManagementPage({
     handleCreateRunFromTestSet,
     handleExecute,
     handleEvaluate,
+    handleCancelEvaluate,
     handleUpdateRun,
     handleDeleteRun,
     handlePreviewExpectedResultsBulkUpdate,
@@ -241,6 +242,7 @@ export function AgentValidationManagementPage({
           handleCreateRun={handleCreateRunFromTestSet}
           handleExecute={handleExecute}
           handleEvaluate={handleEvaluate}
+          handleCancelEvaluate={handleCancelEvaluate}
           handleUpdateRun={handleUpdateRun}
           handleDeleteRun={handleDeleteRun}
           runItemsCurrentPage={runItemsCurrentPage}

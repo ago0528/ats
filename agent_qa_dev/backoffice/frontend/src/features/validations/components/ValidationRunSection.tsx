@@ -20,6 +20,7 @@ import type { MenuProps } from 'antd';
 import {
   CheckCircleOutlined,
   EllipsisOutlined,
+  PauseCircleOutlined,
   PlayCircleOutlined,
   PlusOutlined,
 } from '@ant-design/icons';
@@ -52,6 +53,7 @@ import {
 } from '../utils/runProgress';
 import {
   canEvaluateRun,
+  canCancelEvaluationRun,
   canExecuteRun,
   canDeleteRun,
   canUpdateRun,
@@ -108,6 +110,7 @@ export function ValidationRunSection({
   handleCreateRun,
   handleExecute,
   handleEvaluate,
+  handleCancelEvaluate,
   handleUpdateRun,
   handleDeleteRun,
   runItemsCurrentPage,
@@ -135,6 +138,7 @@ export function ValidationRunSection({
   ) => Promise<void>;
   handleExecute: (itemIds?: string[]) => Promise<void>;
   handleEvaluate: (itemIds?: string[]) => Promise<void>;
+  handleCancelEvaluate: () => Promise<void>;
   handleDeleteRun: (runId: string) => Promise<void>;
   runItemsCurrentPage: number;
   runItemsPageSize: number;
@@ -171,6 +175,7 @@ export function ValidationRunSection({
   const runCreateEnabled = testSets.length > 0;
   const runExecuteEnabled = canExecuteRun(currentRun);
   const runEvaluateEnabled = canEvaluateRun(currentRun);
+  const runCancelEvaluateEnabled = canCancelEvaluationRun(currentRun);
   const runUpdateEnabled = canUpdateRun(currentRun);
   const runDeleteEnabled = canDeleteRun(currentRun);
 
@@ -414,6 +419,24 @@ export function ValidationRunSection({
               disabled={!runEvaluateEnabled}
             >
               평가 시작
+            </Button>
+            <Button
+              icon={<PauseCircleOutlined />}
+              loading={loading}
+              onClick={() => {
+                modal.confirm({
+                  title: '평가 중단',
+                  content: '현재 진행 중인 LLM 평가를 중단 요청하시겠습니까?',
+                  okText: '중단 요청',
+                  cancelText: '취소',
+                  onOk: async () => {
+                    await handleCancelEvaluate();
+                  },
+                });
+              }}
+              disabled={!runCancelEvaluateEnabled}
+            >
+              평가 중단
             </Button>
             <Button
               type="primary"

@@ -65,6 +65,8 @@
       "finishedAt": "2026-02-20T10:00:10",
       "evalStartedAt": "2026-02-20T10:00:11",
       "evalFinishedAt": "2026-02-20T10:00:13",
+      "evalCancelRequested": false,
+      "evalCancelRequestedAt": null,
       "averageResponseTimeSec": 1.234,
       "scoreSummary": {
         "totalItems": 10,
@@ -131,6 +133,7 @@
 
 동작:
 - `itemIds` 미지정: 기존과 동일한 전체 평가
+- `run.eval_status == RUNNING`이면 active 평가 job 존재 여부를 확인하고, active job이 없으면 stale로 간주해 `PENDING`으로 자동 복구 후 평가를 시작
 - `itemIds` 지정:
   - 대상 item 유효성 검증 (모두 해당 run 소속이어야 함)
   - 대상 item에 실행 결과가 있어야 함 (`executedAt`/`error`/`rawResponse` 중 하나)
@@ -138,6 +141,33 @@
   - 평가 완료 후 run 전체 스냅샷을 재집계
 
 ---
+
+### 5-3) 평가 중단 요청
+
+- Method: `POST`
+- Path: `/api/v1/validation-runs/{run_id}/evaluate/cancel`
+
+동작:
+- `run.eval_status != RUNNING`이면 `409` (`Evaluation is not running`)
+- active 평가 job이 있으면 취소 요청 플래그를 기록하고 `CANCEL_REQUESTED` 반환
+- 이미 취소 요청된 상태에서 active job이 남아 있으면 `ALREADY_REQUESTED` 반환
+- active job이 없는 RUNNING은 stale로 간주해 `PENDING`으로 복구하고 `RECOVERED_STALE` 반환
+
+Response:
+
+```json
+{
+  "ok": true,
+  "action": "CANCEL_REQUESTED",
+  "evalStatus": "RUNNING",
+  "evalCancelRequested": true
+}
+```
+
+`action` 값:
+- `CANCEL_REQUESTED`
+- `ALREADY_REQUESTED`
+- `RECOVERED_STALE`
 
 ## 6) 기대결과 일괄 업데이트 API
 

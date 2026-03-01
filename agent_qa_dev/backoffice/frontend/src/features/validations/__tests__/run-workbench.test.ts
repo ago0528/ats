@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ValidationRun } from '../../../api/types/validation';
-import { canCompareRun, canCreateRun, canEvaluateRun, canExecuteRun } from '../utils/runWorkbench';
+import {
+  canCancelEvaluationRun,
+  canCompareRun,
+  canCreateRun,
+  canEvaluateRun,
+  canExecuteRun,
+} from '../utils/runWorkbench';
 
 const run = (partial?: Partial<ValidationRun>): ValidationRun =>
   ({
@@ -35,6 +41,8 @@ describe('run workbench gates', () => {
     expect(canEvaluateRun(run({ status: 'DONE', doneItems: 0, errorItems: 1 }))).toBe(true);
     expect(canEvaluateRun(run({ status: 'RUNNING', doneItems: 10, errorItems: 0 }))).toBe(false);
     expect(canEvaluateRun(run({ status: 'PENDING', doneItems: 10, errorItems: 0 }))).toBe(false);
+    expect(canCancelEvaluationRun(run({ status: 'DONE', evalStatus: 'RUNNING' }))).toBe(true);
+    expect(canCancelEvaluationRun(run({ status: 'DONE', evalStatus: 'PENDING' }))).toBe(false);
 
     expect(canCompareRun(run(), '')).toBe(false);
     expect(canCompareRun(run(), 'base-run-1')).toBe(true);

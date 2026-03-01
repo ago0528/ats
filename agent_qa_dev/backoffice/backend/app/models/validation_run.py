@@ -34,3 +34,5 @@ class ValidationRun(Base):
     eval_status: Mapped[EvalStatus] = mapped_column(Enum(EvalStatus), nullable=False, default=EvalStatus.PENDING, index=True)
     eval_started_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     eval_finished_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    eval_cancel_requested: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    eval_cancel_requested_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)

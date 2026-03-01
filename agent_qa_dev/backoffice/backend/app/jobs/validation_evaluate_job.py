@@ -239,6 +239,7 @@ async def evaluate_validation_run(
 ):
     db = SessionLocal()
     repo = ValidationRunRepository(db)
+    repo.clear_eval_cancel_request(run_id)
     repo.set_eval_status(run_id, EvalStatus.RUNNING)
     db.commit()
 
@@ -435,6 +436,11 @@ async def evaluate_validation_run(
 
         repo.set_eval_status(run_id, EvalStatus.DONE)
         db.commit()
+    except asyncio.CancelledError:
+        repo.reset_eval_state_to_pending(run_id)
+        repo.clear_eval_cancel_request(run_id)
+        db.commit()
+        raise
     except Exception:
         repo.set_eval_status(run_id, EvalStatus.FAILED)
         db.commit()

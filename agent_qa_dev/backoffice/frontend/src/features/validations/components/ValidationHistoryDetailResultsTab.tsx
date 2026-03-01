@@ -11,7 +11,7 @@ import {
   Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { InfoCircleOutlined, WarningOutlined } from '@ant-design/icons';
 
 import { StandardDataTable } from '../../../components/common/StandardDataTable';
@@ -37,6 +37,7 @@ import type {
   ValidationRun,
   ValidationRunItem,
 } from '../../../api/types/validation';
+import { LLMScoringCriteriaModal } from './LLMScoringCriteriaModal';
 
 type FocusMetric = ResultsFilters['focusMetric'];
 
@@ -44,7 +45,10 @@ const PRESET_OPTIONS: Array<{ label: string; value: ResultsTablePreset }> = [
   { label: '기본 보기', value: 'default' },
   { label: `총 점수 ${RESULT_LOW_SCORE_THRESHOLD}점 이하`, value: 'low' },
   { label: '오류/비정상', value: 'abnormal' },
-  { label: `응답 ${HISTORY_SLOW_THRESHOLD_SEC.toFixed(0)}초 이상`, value: 'slow' },
+  {
+    label: `응답 ${HISTORY_SLOW_THRESHOLD_SEC.toFixed(0)}초 이상`,
+    value: 'slow',
+  },
 ];
 
 const FOCUS_METRIC_LABELS: Record<NonNullable<FocusMetric>, string> = {
@@ -116,11 +120,11 @@ function MetricTile({
         </Typography.Text>
         {infoTooltipLines.length > 0 ? (
           <Tooltip
-            title={(
+            title={
               <span style={{ whiteSpace: 'pre-line' }}>
                 {infoTooltipLines.join('\n')}
               </span>
-            )}
+            }
           >
             <InfoCircleOutlined className="validation-kpi-tile-info" />
           </Tooltip>
@@ -154,6 +158,7 @@ export function ValidationHistoryDetailResultsTab({
   setPageSize: (value: number) => void;
   onOpenRow: (row: ResultsRowView) => void;
 }) {
+  const [criteriaModalOpen, setCriteriaModalOpen] = useState(false);
   const kpi = useMemo(
     () => buildResultsKpi(currentRun, runItems),
     [currentRun, runItems],
@@ -303,7 +308,9 @@ export function ValidationHistoryDetailResultsTab({
   const activeFilterTags = useMemo(() => {
     const tags: Array<{ key: string; label: string; clear: () => void }> = [];
     if (filters.tablePreset !== 'default') {
-      const presetLabel = PRESET_OPTIONS.find((option) => option.value === filters.tablePreset)?.label || filters.tablePreset;
+      const presetLabel =
+        PRESET_OPTIONS.find((option) => option.value === filters.tablePreset)
+          ?.label || filters.tablePreset;
       tags.push({
         key: 'preset',
         label: `프리셋: ${presetLabel}`,
@@ -314,7 +321,8 @@ export function ValidationHistoryDetailResultsTab({
       tags.push({
         key: 'latencyUnclassified',
         label: '미분류 응답 속도만',
-        clear: () => onChangeFilters({ ...filters, onlyLatencyUnclassified: false }),
+        clear: () =>
+          onChangeFilters({ ...filters, onlyLatencyUnclassified: false }),
       });
     }
     if (filters.focusMetric) {
@@ -519,7 +527,18 @@ export function ValidationHistoryDetailResultsTab({
               </Tooltip>
             ) : null}
           </Space>
-          <Space direction="vertical" size={8} style={{ alignItems: 'flex-end' }}>
+          <Space
+            direction="horizontal"
+            size={8}
+            style={{ alignItems: 'flex-end' }}
+          >
+            <Button
+              type="text"
+              icon={<InfoCircleOutlined />}
+              onClick={() => setCriteriaModalOpen(true)}
+            >
+              LLM 평가 기준표
+            </Button>
             <Space wrap>
               <Select
                 value={filters.tablePreset}
@@ -586,6 +605,10 @@ export function ValidationHistoryDetailResultsTab({
           }}
         />
       </div>
+      <LLMScoringCriteriaModal
+        open={criteriaModalOpen}
+        onClose={() => setCriteriaModalOpen(false)}
+      />
     </Space>
   );
 }

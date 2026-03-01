@@ -70,6 +70,7 @@ import {
   type HistoryRowView,
 } from '../utils/historyDetailRows';
 import { ValidationHistoryDetailRowDrawer } from './ValidationHistoryDetailRowDrawer';
+import { LLMScoringCriteriaModal } from './LLMScoringCriteriaModal';
 
 export type RunCreateOverrides = {
   name?: string;
@@ -150,6 +151,7 @@ export function ValidationRunSection({
   const [overrideContextSnapshot, setOverrideContextSnapshot] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedHistoryRowId, setSelectedHistoryRowId] = useState('');
+  const [criteriaModalOpen, setCriteriaModalOpen] = useState(false);
   const [form] = Form.useForm<OverrideFormValues>();
 
   const executionStateLabel = useMemo(
@@ -178,7 +180,9 @@ export function ValidationRunSection({
   }));
   const historyRows = useMemo(() => buildHistoryRows(runItems), [runItems]);
   const selectedHistoryRow = useMemo(
-    () => historyRows.find((entry) => entry.item.id === selectedHistoryRowId) || null,
+    () =>
+      historyRows.find((entry) => entry.item.id === selectedHistoryRowId) ||
+      null,
     [historyRows, selectedHistoryRowId],
   );
 
@@ -210,7 +214,10 @@ export function ValidationRunSection({
       return parsed;
     };
     form.setFieldsValue({
-      agentId: normalizeAgentModeValue(config?.agentId, DEFAULT_AGENT_MODE_VALUE),
+      agentId: normalizeAgentModeValue(
+        config?.agentId,
+        DEFAULT_AGENT_MODE_VALUE,
+      ),
       contextJson: stringifyContext(config?.context),
       evalModel: config?.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: toNumber(config?.repeatInConversation),
@@ -244,7 +251,10 @@ export function ValidationRunSection({
     form.resetFields();
     form.setFieldsValue({
       name: currentRun.name || '',
-      agentId: normalizeAgentModeValue(currentRun.agentId, DEFAULT_AGENT_MODE_VALUE),
+      agentId: normalizeAgentModeValue(
+        currentRun.agentId,
+        DEFAULT_AGENT_MODE_VALUE,
+      ),
       evalModel: currentRun.evalModel || DEFAULT_EVAL_MODEL_VALUE,
       repeatInConversation: currentRun.repeatInConversation,
       conversationRoomCount: currentRun.conversationRoomCount,
@@ -335,6 +345,14 @@ export function ValidationRunSection({
   const runStatusColor = getRunStatusColor(currentRun?.status);
   const menuItems: MenuProps['items'] = [
     {
+      key: 'llm-scoring-criteria',
+      label: 'LLM 평가 기준표',
+      disabled: !currentRun,
+    },
+    {
+      type: 'divider',
+    },
+    {
       key: 'update-run',
       label: 'Run 수정',
       disabled: !runUpdateEnabled,
@@ -348,6 +366,10 @@ export function ValidationRunSection({
   ];
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'llm-scoring-criteria') {
+      setCriteriaModalOpen(true);
+      return;
+    }
     if (key === 'update-run') {
       void openEditRunModal();
       return;
@@ -411,10 +433,15 @@ export function ValidationRunSection({
               options={runOptions}
               onChange={(value) => setSelectedRunId(value)}
               filterOption={(input, option) =>
-                String(option?.label || '').toLowerCase().includes(input.toLowerCase())
+                String(option?.label || '')
+                  .toLowerCase()
+                  .includes(input.toLowerCase())
               }
             />
-            <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
+            <Dropdown
+              menu={{ items: menuItems, onClick: handleMenuClick }}
+              trigger={['click']}
+            >
               <Button icon={<EllipsisOutlined />} disabled={!currentRun} />
             </Dropdown>
           </Space>
@@ -514,6 +541,10 @@ export function ValidationRunSection({
           setDrawerOpen(false);
           setSelectedHistoryRowId('');
         }}
+      />
+      <LLMScoringCriteriaModal
+        open={criteriaModalOpen}
+        onClose={() => setCriteriaModalOpen(false)}
       />
 
       <StandardModal
